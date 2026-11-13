@@ -8720,6 +8720,31 @@ ESSAY
       };
     }
 
+    // Check real-time Super Admin user overrides (disabled / deleted / role)
+    const overrides = await window.fetchSystemUserOverrides();
+    const uOverride = overrides[user.id] || overrides[user.email] || null;
+    if (uOverride) {
+      if (uOverride.deleted) {
+        window.authSession = { accessToken: null, refreshToken: null, user: null, profile: null, permissions: null };
+        localStorage.removeItem('supabase_auth_session');
+        updateNavbarAuthUI();
+        throw new Error('تم حذف هذا الحساب من قِبل إدارة المنصة.');
+      }
+      if (uOverride.is_active === false) {
+        profile.is_active = false;
+      }
+      if (uOverride.role) {
+        profile.role = uOverride.role;
+      }
+    }
+
+    if (profile && profile.is_active === false) {
+      window.authSession = { accessToken: null, refreshToken: null, user: null, profile: null, permissions: null };
+      localStorage.removeItem('supabase_auth_session');
+      updateNavbarAuthUI();
+      throw new Error('⛔ تم تعطيل هذا الحساب من قِبل إدارة المنصة. تواصل مع المسؤول.');
+    }
+
     window.authSession.profile = profile;
 
     // Load role_permissions if admin / content_manager / super_admin
@@ -8764,7 +8789,7 @@ ESSAY
     toast('تم تسجيل الخروج بنجاح');
   };
 
-  function restoreSavedAuthSession() {
+  async function restoreSavedAuthSession() {
     try {
       const raw = localStorage.getItem('supabase_auth_session');
       if (!raw) return;
@@ -8772,6 +8797,38 @@ ESSAY
       if (saved && saved.user) {
         window.authSession = saved;
         updateNavbarAuthUI();
+        // Verify from database in real-time that the account has not been disabled or deleted by Super Admin
+        const [pRes, overrides] = await Promise.all([
+          api(`profiles?select=*&id=eq.${saved.user.id}`),
+          window.fetchSystemUserOverrides()
+        ]);
+        const uOv = overrides[saved.user.id] || overrides[saved.user.email] || null;
+        if (uOv && (uOv.deleted || uOv.is_active === false)) {
+          window.authSession = { accessToken: null, refreshToken: null, user: null, profile: null, permissions: null };
+          localStorage.removeItem('supabase_auth_session');
+          updateNavbarAuthUI();
+          showGradeSelection();
+          toast('⛔ تم إيقاف أو تعطيل هذا الحساب من قِبل إدارة المنصة', 'error');
+          return;
+        }
+        if (pRes.ok) {
+          const rows = await pRes.json();
+          const freshProfile = rows[0];
+          if (freshProfile && freshProfile.is_active === false && (!uOv || uOv.is_active !== true)) {
+            window.authSession = { accessToken: null, refreshToken: null, user: null, profile: null, permissions: null };
+            localStorage.removeItem('supabase_auth_session');
+            updateNavbarAuthUI();
+            showGradeSelection();
+            toast('⛔ تم إيقاف أو تعطيل هذا الحساب من قِبل إدارة المنصة', 'error');
+            return;
+          }
+          if (freshProfile) {
+            if (uOv && uOv.role) freshProfile.role = uOv.role;
+            window.authSession.profile = freshProfile;
+            localStorage.setItem('supabase_auth_session', JSON.stringify(window.authSession));
+            updateNavbarAuthUI();
+          }
+        }
       }
     } catch (e) {}
   }
@@ -9455,26 +9512,88 @@ ESSAY
   };
 
   // ─── 19. SUPER ADMIN RBAC & USERS MANAGEMENT (Section 11) ───
+  window.fetchSystemUserOverrides = async function () {
+    let localOv = {};
+    try {
+      localOv = JSON.parse(localStorage.getItem('super_admin_user_overrides') || '{}');
+    } catch (e) {}
+    try {
+      const res = await api(`resources?select=id,url&type=eq.user_overrides&grade=eq.sys&limit=1`);
+      if (res.ok) {
+        const rows = await res.json();
+        if (rows.length && rows[0].url) {
+          const remoteOv = JSON.parse(rows[0].url);
+          const merged = { ...remoteOv, ...localOv };
+          localStorage.setItem('super_admin_user_overrides', JSON.stringify(merged));
+          return merged;
+        }
+      }
+    } catch (e) {}
+    return localOv;
+  };
+
+  window.saveSystemUserOverrides = async function (overrides) {
+    localStorage.setItem('super_admin_user_overrides', JSON.stringify(overrides));
+    try {
+      const checkRes = await api(`resources?select=id&type=eq.user_overrides&grade=eq.sys&limit=1`);
+      const rows = checkRes.ok ? await checkRes.json() : [];
+      const payload = {
+        grade: 'sys',
+        term: 1,
+        type: 'user_overrides',
+        subject: 'sys',
+        title: '__folder__',
+        url: JSON.stringify(overrides),
+        file_type: 'link'
+      };
+      if (rows.length) {
+        await api(`resources?id=eq.${rows[0].id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ url: JSON.stringify(overrides) })
+        });
+      } else {
+        await api('resources', {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
+      }
+    } catch (e) {}
+  };
+
   async function loadAdminUsersAndRoles() {
     const container = document.getElementById('admin-section-users');
     if (!container) return;
     container.innerHTML = renderSkeletonCards(3);
 
     try {
-      const [pRes, permRes] = await Promise.all([
+      const [pRes, permRes, overrides] = await Promise.all([
         api('profiles?select=*&order=created_at.desc'),
-        api('role_permissions?select=*')
+        api('role_permissions?select=*'),
+        window.fetchSystemUserOverrides()
       ]);
-      const profiles = pRes.ok ? await pRes.json() : [];
+      const rawProfiles = pRes.ok ? await pRes.json() : [];
       const perms = permRes.ok ? await permRes.json() : [];
       const permMap = new Map(perms.map(p => [p.user_id, p]));
+
+      const profiles = rawProfiles
+        .map(u => {
+          const ov = overrides[u.id] || overrides[u.email] || {};
+          return {
+            ...u,
+            role: ov.role || u.role,
+            is_active: ov.is_active !== undefined ? ov.is_active : (u.is_active !== false),
+            _deleted: !!ov.deleted,
+            _ovPerms: ov.permissions || null
+          };
+        })
+        .filter(u => !u._deleted);
 
       container.innerHTML = `
         <div class="glass-card" style="padding:1.4rem;margin-bottom:1.4rem">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:10px">
             <div>
               <h4 style="font-size:1.1rem;font-weight:900"><i class="fas fa-user-shield" style="color:var(--teal);margin-left:6px"></i> إدارة المسؤولين والصلاحيات (RBAC)</h4>
-              <p style="font-size:0.82rem;color:var(--text-dim)">تخصيص صلاحيات دقيقة لكل مسؤول (الترمات، الأقسام، والعمليات المسموحة)</p>
+              <p style="font-size:0.82rem;color:var(--text-dim)">تخصيص صلاحيات دقيقة لكل مسؤول، أو تعطيل/تفعيل وحذف أي حساب</p>
             </div>
             <div style="display:flex;gap:8px">
               <button class="btn btn-primary" onclick="openAssignRoleModal()"><i class="fas fa-user-plus"></i> تخصيص صلاحيات مسؤول</button>
@@ -9482,7 +9601,7 @@ ESSAY
           </div>
 
           ${profiles.length === 0
-            ? `<div class="empty" style="padding:2rem"><i class="fas fa-users"></i><p>قم بتشغيل ملف الـ SQL Migration وإنشاء أول حساب ليظهر المستخدمون هنا.</p></div>`
+            ? `<div class="empty" style="padding:2rem"><i class="fas fa-users"></i><p>لا توجد حسابات مسجلة حالياً.</p></div>`
             : `
             <div class="data-table-wrap">
               <table class="data-table">
@@ -9499,7 +9618,7 @@ ESSAY
                 </thead>
                 <tbody>
                   ${profiles.map(u => {
-                    const up = permMap.get(u.id);
+                    const up = u._ovPerms || permMap.get(u.id);
                     const scopeStr = u.role === 'super_admin'
                       ? 'صلاحيات كاملة (كل الأقسام والترمات)'
                       : up
@@ -9512,14 +9631,17 @@ ESSAY
                         <td><span class="role-tag-badge">${u.role}</span></td>
                         <td>${TERM_NAMES[u.term || 1] || 'الترم الأول'}</td>
                         <td style="font-size:0.78rem;color:var(--text-dim)">${scopeStr}</td>
-                        <td>${u.is_active !== false ? '<span style="color:var(--teal)">نشط</span>' : '<span style="color:var(--red)">معطل</span>'}</td>
+                        <td>${u.is_active !== false ? '<span style="color:var(--teal);font-weight:800">🟢 نشط</span>' : '<span style="color:var(--red);font-weight:800">⛔ معطل</span>'}</td>
                         <td>
-                          <div style="display:flex;gap:6px">
+                          <div style="display:flex;gap:6px;flex-wrap:wrap">
                             <button class="btn btn-blue" style="padding:5px 10px;font-size:0.78rem" onclick="openAssignRoleModal('${u.id}', '${u.email}')">
                               <i class="fas fa-key"></i> الصلاحيات
                             </button>
-                            <button class="btn btn-danger" style="padding:5px 10px;font-size:0.78rem" onclick="toggleUserActiveStatus('${u.id}', ${u.is_active === false})">
-                              <i class="fas fa-${u.is_active === false ? 'check' : 'ban'}"></i>
+                            <button class="btn ${u.is_active === false ? 'btn-primary' : 'btn-danger'}" style="padding:5px 10px;font-size:0.78rem" onclick="toggleUserActiveStatus('${u.id}', ${u.is_active === false})" title="${u.is_active === false ? 'تفعيل الحساب' : 'تعطيل الحساب'}">
+                              <i class="fas fa-${u.is_active === false ? 'check' : 'ban'}"></i> ${u.is_active === false ? 'تفعيل' : 'تعطيل'}
+                            </button>
+                            <button class="btn btn-ghost" style="padding:5px 10px;font-size:0.78rem;color:var(--red);border-color:rgba(248,113,113,0.3)" onclick="deleteUserAccountAdmin('${u.id}', '${(u.email || '').replace(/'/g, "\\'")}')" title="حذف الحساب نهائياً">
+                              <i class="fas fa-trash"></i>
                             </button>
                           </div>
                         </td>
@@ -9533,6 +9655,7 @@ ESSAY
       container.innerHTML = `<div class="empty"><p>تعذر تحميل قائمة المستخدمين</p></div>`;
     }
   }
+  window.loadAdminUsersAndRoles = loadAdminUsersAndRoles;
 
   window.openAssignRoleModal = function (userId = '', userEmail = '') {
     document.getElementById('rbac-user-id').value = userId;
@@ -9565,21 +9688,26 @@ ESSAY
     try {
       const pRes = await api(`profiles?select=id&email=eq.${encodeURIComponent(email)}`);
       const rows = pRes.ok ? await pRes.json() : [];
-      if (!rows.length) {
-        return toast('لم يتم العثور على مستخدم مسجل بهذا البريد الإلكتروني! اطلب منه إنشاء حساب أولاً.', 'error');
+      const uid = rows[0]?.id || document.getElementById('rbac-user-id').value || email;
+
+      // Save in real-time overrides + profiles table
+      const overrides = await window.fetchSystemUserOverrides();
+      overrides[uid] = { ...(overrides[uid] || {}), role: roleCode, permissions: permPayload };
+      overrides[email] = { ...(overrides[email] || {}), role: roleCode, permissions: permPayload };
+      await window.saveSystemUserOverrides(overrides);
+
+      if (rows.length) {
+        await api(`profiles?id=eq.${uid}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ role: roleCode, updated_at: new Date().toISOString() })
+        }).catch(() => {});
+
+        await api(`role_permissions?user_id=eq.${uid}`, { method: 'DELETE' }).catch(() => {});
+        await api('role_permissions', {
+          method: 'POST',
+          body: JSON.stringify({ user_id: uid, ...permPayload })
+        }).catch(() => {});
       }
-      const uid = rows[0].id;
-
-      await api(`profiles?id=eq.${uid}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ role: roleCode, updated_at: new Date().toISOString() })
-      });
-
-      await api(`role_permissions?user_id=eq.${uid}`, { method: 'DELETE' }).catch(() => {});
-      await api('role_permissions', {
-        method: 'POST',
-        body: JSON.stringify({ user_id: uid, ...permPayload })
-      });
 
       await logAdminActivity('تغيير صلاحيات مسؤول', 'user', `${email} -> ${roleCode}`, uid);
       closeModal('rbac-modal');
@@ -9592,15 +9720,50 @@ ESSAY
 
   window.toggleUserActiveStatus = async function (uid, newActive) {
     try {
+      const overrides = await window.fetchSystemUserOverrides();
+      overrides[uid] = { ...(overrides[uid] || {}), is_active: newActive };
+      await window.saveSystemUserOverrides(overrides);
+
       await api(`profiles?id=eq.${uid}`, {
         method: 'PATCH',
         body: JSON.stringify({ is_active: newActive })
-      });
+      }).catch(() => {});
+
+      if (!newActive && window.authSession?.user?.id === uid) {
+        window.authSession = { accessToken: null, refreshToken: null, user: null, profile: null, permissions: null };
+        localStorage.removeItem('supabase_auth_session');
+        updateNavbarAuthUI();
+      }
+
       await logAdminActivity(newActive ? 'تفعيل حساب' : 'تعطيل حساب', 'user', uid, uid);
-      toast(newActive ? '✅ تم تفعيل الحساب' : '⛔ تم تعطيل الحساب');
-      loadAdminUsersAndRoles();
+      toast(newActive ? '✅ تم تفعيل الحساب بنجاح' : '⛔ تم تعطيل الحساب فوراً ولن يتمكن من الدخول');
+      await loadAdminUsersAndRoles();
     } catch (e) {
       toast('تعذر تحديث حالة الحساب', 'error');
+    }
+  };
+
+  window.deleteUserAccountAdmin = async function (uid, email) {
+    if (!confirm(`هل أنت متأكد من حذف الحساب (${email || uid}) نهائياً؟`)) return;
+    try {
+      const overrides = await window.fetchSystemUserOverrides();
+      overrides[uid] = { ...(overrides[uid] || {}), deleted: true, is_active: false };
+      if (email) overrides[email] = { ...(overrides[email] || {}), deleted: true, is_active: false };
+      await window.saveSystemUserOverrides(overrides);
+
+      await api(`profiles?id=eq.${uid}`, { method: 'DELETE' }).catch(() => {});
+
+      if (window.authSession?.user?.id === uid) {
+        window.authSession = { accessToken: null, refreshToken: null, user: null, profile: null, permissions: null };
+        localStorage.removeItem('supabase_auth_session');
+        updateNavbarAuthUI();
+      }
+
+      await logAdminActivity('حذف حساب مستخدم', 'user', email || uid, uid);
+      toast('🗑️ تم حذف الحساب نهائياً');
+      await loadAdminUsersAndRoles();
+    } catch (e) {
+      toast('تعذر حذف الحساب', 'error');
     }
   };
 
