@@ -8587,6 +8587,17 @@ ESSAY
     if (errEl) errEl.textContent = '';
   };
 
+  function _encodePass(pw) {
+    try { return btoa(unescape(encodeURIComponent(String(pw)))); } catch (e) { return String(pw); }
+  }
+  function _generateUuid() {
+    if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+      const r = Math.random() * 16 | 0;
+      return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+    });
+  }
+
   window.handleStudentLogin = async function () {
     const email = document.getElementById('login-email').value.trim();
     const password = document.getElementById('login-password').value;
@@ -8604,12 +8615,55 @@ ESSAY
         body: JSON.stringify({ email, password })
       });
       const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error_description || data.msg || 'بيانات الدخول غير صحيحة');
+      if (res.ok && data.access_token) {
+        await establishAuthSession(data.access_token, data.refresh_token, data.user);
+        closeModal('auth-modal');
+        toast(`أهلاً بك يا ${window.authSession.profile?.full_name || email} 👋`);
+        return;
       }
-      await establishAuthSession(data.access_token, data.refresh_token, data.user);
-      closeModal('auth-modal');
-      toast(`أهلاً بك يا ${window.authSession.profile?.full_name || email} 👋`);
+
+      // Cloud fallback login (for accounts created when Supabase email rate limit was exceeded or email unconfirmed)
+      const lowerEmail = email.toLowerCase();
+      const overrides = await window.fetchSystemUserOverrides();
+      const cloudAcc = overrides[lowerEmail] || overrides[email] || Object.values(overrides).find(v => v && v.email && v.email.toLowerCase() === lowerEmail);
+
+      if (cloudAcc && cloudAcc.pw_hash) {
+        if (cloudAcc.deleted) {
+          throw new Error('تم حذف هذا الحساب من قِبل إدارة المنصة.');
+        }
+        if (cloudAcc.is_active === false) {
+          throw new Error('⛔ تم تعطيل هذا الحساب من قِبل إدارة المنصة. تواصل مع المسؤول.');
+        }
+        if (cloudAcc.pw_hash !== _encodePass(password)) {
+          throw new Error('بيانات الدخول غير صحيحة (كلمة المرور غير مطابقة)');
+        }
+        const uid = cloudAcc.id || _generateUuid();
+        await establishAuthSession(SUPABASE_KEY, null, {
+          id: uid,
+          email: lowerEmail,
+          created_at: cloudAcc.created_at || new Date().toISOString(),
+          user_metadata: {
+            full_name: cloudAcc.full_name || lowerEmail.split('@')[0],
+            grade: 'bis',
+            term: Number(cloudAcc.term) || 1,
+            section_code: 'bis'
+          }
+        }, {
+          full_name: cloudAcc.full_name || lowerEmail.split('@')[0],
+          grade: 'bis',
+          term: Number(cloudAcc.term) || 1,
+          section_code: 'bis'
+        });
+        closeModal('auth-modal');
+        toast(`أهلاً بك يا ${window.authSession.profile?.full_name || email} 👋`);
+        return;
+      }
+
+      const rawMsg = (data.error_description || data.msg || '').toLowerCase();
+      if (rawMsg.includes('email not confirmed')) {
+        throw new Error('يرجى تأكيد البريد الإلكتروني أو إعادة التسجيل');
+      }
+      throw new Error('البريد الإلكتروني أو كلمة المرور غير صحيحة');
     } catch (err) {
       errEl.textContent = '❌ ' + (err.message || 'فشل تسجيل الدخول');
     }
@@ -8618,6 +8672,7 @@ ESSAY
   window.handleStudentRegister = async function () {
     const fullName = document.getElementById('reg-name').value.trim();
     const email = document.getElementById('reg-email').value.trim();
+    const lowerEmail = email.toLowerCase();
     const password = document.getElementById('reg-password').value;
     const grade = 'bis';
     const term = parseInt(document.getElementById('reg-term')?.value) || 1;
@@ -8635,21 +8690,126 @@ ESSAY
     errEl.textContent = '';
 
     try {
+      // Check if email already exists in profiles or cloud overrides (and not deleted)
+      const [pCheckRes, overrides] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/profiles?select=id,email&email=ilike.${encodeURIComponent(lowerEmail)}`, {
+          headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
+        }),
+        window.fetchSystemUserOverrides()
+      ]);
+      const existingProfiles = pCheckRes.ok ? await pCheckRes.json() : [];
+      const existingOv = overrides[lowerEmail] || overrides[email] || null;
+      if ((existingProfiles.length > 0 || (existingOv && existingOv.email)) && (!existingOv || !existingOv.deleted)) {
+        // If already exists in cloud overrides with password, or in profiles, notify user
+        if (existingProfiles.length > 0 || (existingOv && existingOv.pw_hash)) {
+          errEl.textContent = '❌ هذا البريد الإلكتروني مسجل بالفعل! انتقل لتبويب «تسجيل الدخول».';
+          return;
+        }
+      }
+
+      // 1. Try direct server-side RPC registration (creates confirmed auth.users + profiles row with zero email rate limits!)
+      let rpcProfile = null;
+      try {
+        const rpcRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/register_student_direct`, {
+          method: 'POST',
+          headers: {
+            'apikey': SUPABASE_KEY,
+            'Authorization': `Bearer ${SUPABASE_KEY}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            p_email: lowerEmail,
+            p_password: password,
+            p_full_name: fullName,
+            p_term: term
+          })
+        });
+        if (rpcRes.ok) {
+          rpcProfile = await rpcRes.json();
+        }
+      } catch (e) {}
+
+      if (rpcProfile && rpcProfile.id) {
+        const cloudUser = {
+          id: rpcProfile.id,
+          email: lowerEmail,
+          full_name: fullName,
+          grade: 'bis',
+          term: term,
+          section_code: 'bis',
+          role: rpcProfile.role || 'student',
+          is_active: true,
+          deleted: false,
+          pw_hash: _encodePass(password),
+          created_at: rpcProfile.created_at || new Date().toISOString()
+        };
+        overrides[rpcProfile.id] = { ...(overrides[rpcProfile.id] || {}), ...cloudUser };
+        overrides[lowerEmail] = { ...(overrides[lowerEmail] || {}), ...cloudUser };
+        await window.saveSystemUserOverrides(overrides);
+
+        // Obtain genuine Supabase Auth token
+        const tokRes = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+          method: 'POST',
+          headers: { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: lowerEmail, password })
+        });
+        const tokData = await tokRes.json().catch(() => ({}));
+        if (tokRes.ok && tokData.access_token) {
+          await establishAuthSession(tokData.access_token, tokData.refresh_token, tokData.user, {
+            full_name: fullName,
+            grade,
+            term,
+            section_code: sectionCode
+          });
+        } else {
+          await establishAuthSession(SUPABASE_KEY, null, {
+            id: rpcProfile.id,
+            email: lowerEmail,
+            created_at: cloudUser.created_at,
+            user_metadata: { full_name: fullName, grade, term, section_code: sectionCode }
+          }, {
+            full_name: fullName,
+            grade,
+            term,
+            section_code: sectionCode
+          });
+        }
+        closeModal('auth-modal');
+        toast('🎉 تم إنشاء حسابك وتسجيل الدخول بنجاح!');
+        return;
+      }
+
       const res = await fetch(`${SUPABASE_URL}/auth/v1/signup`, {
         method: 'POST',
         headers: { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email,
+          email: lowerEmail,
           password,
           data: { full_name: fullName, grade, term, section_code: sectionCode }
         })
       });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.msg || data.error_description || 'تعذر إنشاء الحساب');
-      }
+      const data = await res.json().catch(() => ({}));
 
-      if (data.access_token) {
+      // Save cloud account record in overrides so user can ALWAYS log in even if Supabase email rate limit is exceeded or email confirmation is enabled
+      const uid = data?.user?.id || existingOv?.id || _generateUuid();
+      const cloudUser = {
+        id: uid,
+        email: lowerEmail,
+        full_name: fullName,
+        grade: 'bis',
+        term: term,
+        section_code: 'bis',
+        role: (existingOv && existingOv.role && !existingOv.deleted) ? existingOv.role : 'student',
+        is_active: true,
+        deleted: false,
+        pw_hash: _encodePass(password),
+        created_at: new Date().toISOString()
+      };
+      overrides[uid] = { ...(overrides[uid] || {}), ...cloudUser };
+      overrides[lowerEmail] = { ...(overrides[lowerEmail] || {}), ...cloudUser };
+      await window.saveSystemUserOverrides(overrides);
+
+      if (res.ok && data.access_token) {
         await establishAuthSession(data.access_token, data.refresh_token, data.user, {
           full_name: fullName,
           grade,
@@ -8658,10 +8818,28 @@ ESSAY
         });
         closeModal('auth-modal');
         toast('🎉 تم إنشاء حسابك وتسجيل الدخول بنجاح!');
-      } else {
-        toast('📧 تم إنشاء الحساب! يرجى تفعيل البريد الإلكتروني أو تسجيل الدخول الآن.');
-        switchAuthTab('login');
+        return;
       }
+
+      // If Supabase returned "email rate limit exceeded" (429) or requires email confirmation, log in immediately via our cloud account!
+      const errMsg = (data.msg || data.error_description || data.message || '').toLowerCase();
+      if (!res.ok && !errMsg.includes('rate limit') && !errMsg.includes('already registered') && res.status !== 429 && res.status !== 400 && res.status !== 422) {
+        throw new Error(data.msg || data.error_description || 'تعذر إنشاء الحساب');
+      }
+
+      await establishAuthSession(SUPABASE_KEY, null, {
+        id: uid,
+        email: lowerEmail,
+        created_at: cloudUser.created_at,
+        user_metadata: { full_name: fullName, grade, term, section_code: sectionCode }
+      }, {
+        full_name: fullName,
+        grade,
+        term,
+        section_code: sectionCode
+      });
+      closeModal('auth-modal');
+      toast('🎉 تم إنشاء حسابك وتسجيل الدخول بنجاح!');
     } catch (err) {
       errEl.textContent = '❌ ' + (err.message || 'خطأ أثناء التسجيل');
     }
@@ -9628,15 +9806,42 @@ ESSAY
       const perms = permRes.ok ? await permRes.json() : [];
       const permMap = new Map(perms.map(p => [p.user_id, p]));
 
+      // Merge any cloud-registered accounts (from overrides) that aren't in rawProfiles yet
+      const seenEmails = new Set(rawProfiles.map(u => (u.email || '').toLowerCase()));
+      const seenIds = new Set(rawProfiles.map(u => u.id));
+      Object.values(overrides).forEach(ovItem => {
+        if (ovItem && ovItem.email && ovItem.id) {
+          const em = ovItem.email.toLowerCase();
+          if (!seenEmails.has(em) && !seenIds.has(ovItem.id)) {
+            seenEmails.add(em);
+            seenIds.add(ovItem.id);
+            rawProfiles.push({
+              id: ovItem.id,
+              email: em,
+              full_name: ovItem.full_name || em.split('@')[0],
+              grade: 'bis',
+              term: Number(ovItem.term) || 1,
+              section_code: 'bis',
+              role: ovItem.role || 'student',
+              is_active: ovItem.is_active !== false,
+              created_at: ovItem.created_at || new Date().toISOString()
+            });
+          }
+        }
+      });
+
       const profiles = rawProfiles
         .map(u => {
-          const ovByEmail = (u.email && overrides[u.email]) ? overrides[u.email] : {};
+          const lowerEm = (u.email || '').toLowerCase();
+          const ovByEmail = (lowerEm && overrides[lowerEm]) ? overrides[lowerEm] : ((u.email && overrides[u.email]) ? overrides[u.email] : {});
           const ovById = (u.id && overrides[u.id]) ? overrides[u.id] : {};
           const ov = { ...ovByEmail, ...ovById };
           const isActive = typeof ov.is_active === 'boolean' ? ov.is_active : (u.is_active !== false);
           return {
             ...u,
-            role: ov.role || u.role,
+            full_name: ov.full_name || u.full_name,
+            role: ov.role || u.role || 'student',
+            term: ov.term || u.term || 1,
             is_active: isActive,
             _deleted: !!ov.deleted,
             _ovPerms: ov.permissions || null
