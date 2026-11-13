@@ -7796,6 +7796,9 @@ ESSAY
     _apiCache.clear();
   };
 
+  // مسح أي كاش قديم عالق لتعطيل الحسابات
+  try { localStorage.removeItem('super_admin_user_overrides'); } catch (e) {}
+
   window.api = async function (path, options = {}) {
     const method = (options.method || 'GET').toUpperCase();
     if (method !== 'GET') {
@@ -7811,10 +7814,19 @@ ESSAY
       ...(options.headers || {})
     };
 
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    let res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
       ...options,
       headers
     });
+
+    // إذا انتهت صلاحية توكن الطالب المحفوظ (401)، نعيد المحاولة تلقائياً بمفتاح المنصة العام
+    if (res.status === 401 && token !== SUPABASE_KEY) {
+      headers['Authorization'] = `Bearer ${SUPABASE_KEY}`;
+      res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+        ...options,
+        headers
+      });
+    }
     return res;
   };
 
@@ -8677,11 +8689,35 @@ ESSAY
   };
 
   async function establishAuthSession(accessToken, refreshToken, user, fallbackMeta = {}) {
+    try { localStorage.removeItem('super_admin_user_overrides'); } catch (e) {}
     window.authSession.accessToken = accessToken;
     window.authSession.refreshToken = refreshToken;
     window.authSession.user = user;
 
     const meta = { ...(user?.user_metadata || {}), ...fallbackMeta };
+    const isNewSignup = Boolean(fallbackMeta && fallbackMeta.full_name);
+
+    // Check real-time Super Admin user overrides (disabled / deleted / role)
+    const overrides = await window.fetchSystemUserOverrides();
+    const ovByEmail = (user.email && overrides[user.email]) ? overrides[user.email] : {};
+    const ovById = (user.id && overrides[user.id]) ? overrides[user.id] : {};
+    let uOverride = { ...ovByEmail, ...ovById };
+
+    // If user is freshly registering again after being deleted, clear old deleted flag
+    if (isNewSignup && uOverride.deleted) {
+      delete overrides[user.id];
+      if (user.email) delete overrides[user.email];
+      await window.saveSystemUserOverrides(overrides);
+      uOverride = {};
+    }
+
+    if (uOverride.deleted) {
+      window.authSession = { accessToken: null, refreshToken: null, user: null, profile: null, permissions: null };
+      localStorage.removeItem('supabase_auth_session');
+      updateNavbarAuthUI();
+      throw new Error('تم حذف هذا الحساب من قِبل إدارة المنصة.');
+    }
+
     let profile = null;
     try {
       const pRes = await api(`profiles?select=*&id=eq.${user.id}`);
@@ -8697,7 +8733,8 @@ ESSAY
           grade: 'bis',
           term: Number(meta.term) || 1,
           section_code: 'bis',
-          role: 'student'
+          role: 'student',
+          is_active: true
         };
         const insRes = await api('profiles', { method: 'POST', body: JSON.stringify(newProf) });
         if (insRes.ok) {
@@ -8716,26 +8753,16 @@ ESSAY
         term: Number(meta.term) || 1,
         section_code: 'bis',
         role: 'student',
+        is_active: true,
         created_at: user.created_at || new Date().toISOString()
       };
     }
 
-    // Check real-time Super Admin user overrides (disabled / deleted / role)
-    const overrides = await window.fetchSystemUserOverrides();
-    const uOverride = overrides[user.id] || overrides[user.email] || null;
-    if (uOverride) {
-      if (uOverride.deleted) {
-        window.authSession = { accessToken: null, refreshToken: null, user: null, profile: null, permissions: null };
-        localStorage.removeItem('supabase_auth_session');
-        updateNavbarAuthUI();
-        throw new Error('تم حذف هذا الحساب من قِبل إدارة المنصة.');
-      }
-      if (uOverride.is_active === false) {
-        profile.is_active = false;
-      }
-      if (uOverride.role) {
-        profile.role = uOverride.role;
-      }
+    if (typeof uOverride.is_active === 'boolean') {
+      profile.is_active = uOverride.is_active;
+    }
+    if (uOverride.role) {
+      profile.role = uOverride.role;
     }
 
     if (profile && profile.is_active === false) {
@@ -8791,6 +8818,7 @@ ESSAY
 
   async function restoreSavedAuthSession() {
     try {
+      localStorage.removeItem('super_admin_user_overrides');
       const raw = localStorage.getItem('supabase_auth_session');
       if (!raw) return;
       const saved = JSON.parse(raw);
@@ -8802,8 +8830,11 @@ ESSAY
           api(`profiles?select=*&id=eq.${saved.user.id}`),
           window.fetchSystemUserOverrides()
         ]);
-        const uOv = overrides[saved.user.id] || overrides[saved.user.email] || null;
-        if (uOv && (uOv.deleted || uOv.is_active === false)) {
+        const ovByEmail = (saved.user.email && overrides[saved.user.email]) ? overrides[saved.user.email] : {};
+        const ovById = (saved.user.id && overrides[saved.user.id]) ? overrides[saved.user.id] : {};
+        const uOv = { ...ovByEmail, ...ovById };
+
+        if (uOv.deleted || uOv.is_active === false) {
           window.authSession = { accessToken: null, refreshToken: null, user: null, profile: null, permissions: null };
           localStorage.removeItem('supabase_auth_session');
           updateNavbarAuthUI();
@@ -8814,7 +8845,10 @@ ESSAY
         if (pRes.ok) {
           const rows = await pRes.json();
           const freshProfile = rows[0];
-          if (freshProfile && freshProfile.is_active === false && (!uOv || uOv.is_active !== true)) {
+          const effectiveActive = typeof uOv.is_active === 'boolean'
+            ? uOv.is_active
+            : (freshProfile ? freshProfile.is_active !== false : true);
+          if (!effectiveActive) {
             window.authSession = { accessToken: null, refreshToken: null, user: null, profile: null, permissions: null };
             localStorage.removeItem('supabase_auth_session');
             updateNavbarAuthUI();
@@ -8823,7 +8857,8 @@ ESSAY
             return;
           }
           if (freshProfile) {
-            if (uOv && uOv.role) freshProfile.role = uOv.role;
+            freshProfile.is_active = true;
+            if (uOv.role) freshProfile.role = uOv.role;
             window.authSession.profile = freshProfile;
             localStorage.setItem('supabase_auth_session', JSON.stringify(window.authSession));
             updateNavbarAuthUI();
@@ -9513,48 +9548,64 @@ ESSAY
 
   // ─── 19. SUPER ADMIN RBAC & USERS MANAGEMENT (Section 11) ───
   window.fetchSystemUserOverrides = async function () {
-    let localOv = {};
+    try { localStorage.removeItem('super_admin_user_overrides'); } catch (e) {}
     try {
-      localOv = JSON.parse(localStorage.getItem('super_admin_user_overrides') || '{}');
-    } catch (e) {}
-    try {
-      const res = await api(`resources?select=id,url&type=eq.user_overrides&grade=eq.sys&limit=1`);
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/resources?select=id,url&type=eq.user_overrides&grade=eq.sys&order=id.desc&limit=1`, {
+        headers: {
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${SUPABASE_KEY}`,
+          'Cache-Control': 'no-cache'
+        }
+      });
       if (res.ok) {
         const rows = await res.json();
         if (rows.length && rows[0].url) {
           const remoteOv = JSON.parse(rows[0].url);
-          const merged = { ...remoteOv, ...localOv };
-          localStorage.setItem('super_admin_user_overrides', JSON.stringify(merged));
-          return merged;
+          localStorage.setItem('super_admin_user_overrides_v2', JSON.stringify(remoteOv));
+          return remoteOv;
         }
+        localStorage.setItem('super_admin_user_overrides_v2', '{}');
+        return {};
       }
     } catch (e) {}
-    return localOv;
+    try {
+      return JSON.parse(localStorage.getItem('super_admin_user_overrides_v2') || '{}');
+    } catch (e) {
+      return {};
+    }
   };
 
   window.saveSystemUserOverrides = async function (overrides) {
-    localStorage.setItem('super_admin_user_overrides', JSON.stringify(overrides));
+    try { localStorage.removeItem('super_admin_user_overrides'); } catch (e) {}
+    localStorage.setItem('super_admin_user_overrides_v2', JSON.stringify(overrides));
     try {
-      const checkRes = await api(`resources?select=id&type=eq.user_overrides&grade=eq.sys&limit=1`);
-      const rows = checkRes.ok ? await checkRes.json() : [];
-      const payload = {
-        grade: 'sys',
-        term: 1,
-        type: 'user_overrides',
-        subject: 'sys',
-        title: '__folder__',
-        url: JSON.stringify(overrides),
-        file_type: 'link'
+      const headers = {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=representation'
       };
+      const checkRes = await fetch(`${SUPABASE_URL}/rest/v1/resources?select=id&type=eq.user_overrides&grade=eq.sys`, { headers });
+      const rows = checkRes.ok ? await checkRes.json() : [];
       if (rows.length) {
-        await api(`resources?id=eq.${rows[0].id}`, {
+        await fetch(`${SUPABASE_URL}/rest/v1/resources?type=eq.user_overrides&grade=eq.sys`, {
           method: 'PATCH',
+          headers,
           body: JSON.stringify({ url: JSON.stringify(overrides) })
         });
       } else {
-        await api('resources', {
+        await fetch(`${SUPABASE_URL}/rest/v1/resources`, {
           method: 'POST',
-          body: JSON.stringify(payload)
+          headers,
+          body: JSON.stringify({
+            grade: 'sys',
+            term: 1,
+            type: 'user_overrides',
+            subject: 'sys',
+            title: '__folder__',
+            url: JSON.stringify(overrides),
+            file_type: 'link'
+          })
         });
       }
     } catch (e) {}
@@ -9567,7 +9618,9 @@ ESSAY
 
     try {
       const [pRes, permRes, overrides] = await Promise.all([
-        api('profiles?select=*&order=created_at.desc'),
+        fetch(`${SUPABASE_URL}/rest/v1/profiles?select=*&order=created_at.desc`, {
+          headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Cache-Control': 'no-cache' }
+        }),
         api('role_permissions?select=*'),
         window.fetchSystemUserOverrides()
       ]);
@@ -9577,11 +9630,14 @@ ESSAY
 
       const profiles = rawProfiles
         .map(u => {
-          const ov = overrides[u.id] || overrides[u.email] || {};
+          const ovByEmail = (u.email && overrides[u.email]) ? overrides[u.email] : {};
+          const ovById = (u.id && overrides[u.id]) ? overrides[u.id] : {};
+          const ov = { ...ovByEmail, ...ovById };
+          const isActive = typeof ov.is_active === 'boolean' ? ov.is_active : (u.is_active !== false);
           return {
             ...u,
             role: ov.role || u.role,
-            is_active: ov.is_active !== undefined ? ov.is_active : (u.is_active !== false),
+            is_active: isActive,
             _deleted: !!ov.deleted,
             _ovPerms: ov.permissions || null
           };
@@ -9624,6 +9680,8 @@ ESSAY
                       : up
                         ? `الترمات: ${(up.allowed_terms || []).join(',')} | الأقسام: ${(up.allowed_sections || []).join(',')}`
                         : 'قراءة وحل اختبارات فقط';
+                    const safeEmail = (u.email || '').replace(/'/g, "\\'");
+                    const isDisabled = u.is_active === false;
                     return `
                       <tr>
                         <td style="font-weight:800">${u.full_name || '—'}</td>
@@ -9631,16 +9689,16 @@ ESSAY
                         <td><span class="role-tag-badge">${u.role}</span></td>
                         <td>${TERM_NAMES[u.term || 1] || 'الترم الأول'}</td>
                         <td style="font-size:0.78rem;color:var(--text-dim)">${scopeStr}</td>
-                        <td>${u.is_active !== false ? '<span style="color:var(--teal);font-weight:800">🟢 نشط</span>' : '<span style="color:var(--red);font-weight:800">⛔ معطل</span>'}</td>
+                        <td>${!isDisabled ? '<span style="color:var(--teal);font-weight:800">🟢 نشط</span>' : '<span style="color:var(--red);font-weight:800">⛔ معطل</span>'}</td>
                         <td>
                           <div style="display:flex;gap:6px;flex-wrap:wrap">
-                            <button class="btn btn-blue" style="padding:5px 10px;font-size:0.78rem" onclick="openAssignRoleModal('${u.id}', '${u.email}')">
+                            <button class="btn btn-blue" style="padding:5px 10px;font-size:0.78rem" onclick="openAssignRoleModal('${u.id}', '${safeEmail}')">
                               <i class="fas fa-key"></i> الصلاحيات
                             </button>
-                            <button class="btn ${u.is_active === false ? 'btn-primary' : 'btn-danger'}" style="padding:5px 10px;font-size:0.78rem" onclick="toggleUserActiveStatus('${u.id}', ${u.is_active === false})" title="${u.is_active === false ? 'تفعيل الحساب' : 'تعطيل الحساب'}">
-                              <i class="fas fa-${u.is_active === false ? 'check' : 'ban'}"></i> ${u.is_active === false ? 'تفعيل' : 'تعطيل'}
+                            <button class="btn ${isDisabled ? 'btn-primary' : 'btn-danger'}" style="padding:5px 10px;font-size:0.78rem" onclick="toggleUserActiveStatus('${u.id}', ${isDisabled ? 'true' : 'false'}, '${safeEmail}')" title="${isDisabled ? 'تفعيل الحساب' : 'تعطيل الحساب'}">
+                              <i class="fas fa-${isDisabled ? 'check' : 'ban'}"></i> ${isDisabled ? 'تفعيل' : 'تعطيل'}
                             </button>
-                            <button class="btn btn-ghost" style="padding:5px 10px;font-size:0.78rem;color:var(--red);border-color:rgba(248,113,113,0.3)" onclick="deleteUserAccountAdmin('${u.id}', '${(u.email || '').replace(/'/g, "\\'")}')" title="حذف الحساب نهائياً">
+                            <button class="btn btn-ghost" style="padding:5px 10px;font-size:0.78rem;color:var(--red);border-color:rgba(248,113,113,0.3)" onclick="deleteUserAccountAdmin('${u.id}', '${safeEmail}')" title="حذف الحساب نهائياً">
                               <i class="fas fa-trash"></i>
                             </button>
                           </div>
@@ -9697,8 +9755,13 @@ ESSAY
       await window.saveSystemUserOverrides(overrides);
 
       if (rows.length) {
-        await api(`profiles?id=eq.${uid}`, {
+        await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${uid}`, {
           method: 'PATCH',
+          headers: {
+            'apikey': SUPABASE_KEY,
+            'Authorization': `Bearer ${SUPABASE_KEY}`,
+            'Content-Type': 'application/json'
+          },
           body: JSON.stringify({ role: roleCode, updated_at: new Date().toISOString() })
         }).catch(() => {});
 
@@ -9718,25 +9781,44 @@ ESSAY
     }
   };
 
-  window.toggleUserActiveStatus = async function (uid, newActive) {
+  window.toggleUserActiveStatus = async function (uid, newActive, email = '') {
     try {
-      const overrides = await window.fetchSystemUserOverrides();
-      overrides[uid] = { ...(overrides[uid] || {}), is_active: newActive };
-      await window.saveSystemUserOverrides(overrides);
+      const activeBool = (newActive === true || newActive === 'true');
 
-      await api(`profiles?id=eq.${uid}`, {
+      // 1. Update profiles table directly in Supabase
+      await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${uid}`, {
         method: 'PATCH',
-        body: JSON.stringify({ is_active: newActive })
+        headers: {
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${SUPABASE_KEY}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=representation'
+        },
+        body: JSON.stringify({ is_active: activeBool, updated_at: new Date().toISOString() })
       }).catch(() => {});
 
-      if (!newActive && window.authSession?.user?.id === uid) {
+      // 2. Sync cloud user_overrides for both uid and email
+      const overrides = await window.fetchSystemUserOverrides();
+      overrides[uid] = { ...(overrides[uid] || {}), is_active: activeBool, deleted: false };
+      if (email) {
+        overrides[email] = { ...(overrides[email] || {}), is_active: activeBool, deleted: false };
+      }
+      // Also update any key matching email in profiles
+      Object.keys(overrides).forEach(k => {
+        if (k === uid || (email && k.toLowerCase() === email.toLowerCase())) {
+          overrides[k] = { ...(overrides[k] || {}), is_active: activeBool, deleted: false };
+        }
+      });
+      await window.saveSystemUserOverrides(overrides);
+
+      if (!activeBool && window.authSession?.user?.id === uid) {
         window.authSession = { accessToken: null, refreshToken: null, user: null, profile: null, permissions: null };
         localStorage.removeItem('supabase_auth_session');
         updateNavbarAuthUI();
       }
 
-      await logAdminActivity(newActive ? 'تفعيل حساب' : 'تعطيل حساب', 'user', uid, uid);
-      toast(newActive ? '✅ تم تفعيل الحساب بنجاح' : '⛔ تم تعطيل الحساب فوراً ولن يتمكن من الدخول');
+      await logAdminActivity(activeBool ? 'تفعيل حساب' : 'تعطيل حساب', 'user', email || uid, uid);
+      toast(activeBool ? '✅ تم تفعيل الحساب بنجاح ويمكنه الدخول الآن' : '⛔ تم تعطيل الحساب فوراً ولن يتمكن من الدخول');
       await loadAdminUsersAndRoles();
     } catch (e) {
       toast('تعذر تحديث حالة الحساب', 'error');
@@ -9751,7 +9833,13 @@ ESSAY
       if (email) overrides[email] = { ...(overrides[email] || {}), deleted: true, is_active: false };
       await window.saveSystemUserOverrides(overrides);
 
-      await api(`profiles?id=eq.${uid}`, { method: 'DELETE' }).catch(() => {});
+      await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${uid}`, {
+        method: 'DELETE',
+        headers: {
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${SUPABASE_KEY}`
+        }
+      }).catch(() => {});
 
       if (window.authSession?.user?.id === uid) {
         window.authSession = { accessToken: null, refreshToken: null, user: null, profile: null, permissions: null };
