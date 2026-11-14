@@ -10550,7 +10550,139 @@ ESSAY
   };
 
   window._adminUsersList = [];
+  window._adminUsersSearchQuery = '';
   let _lastRenderedUsersSig = '';
+
+  window.onAdminUsersSearchInput = function (val) {
+    window._adminUsersSearchQuery = (val || '').trim();
+    const clearBtn = document.getElementById('admin-users-search-clear');
+    if (clearBtn) clearBtn.style.display = window._adminUsersSearchQuery ? 'inline-flex' : 'none';
+    window.renderAdminUsersRowsOnly();
+  };
+
+  window.clearAdminUsersSearch = function () {
+    window._adminUsersSearchQuery = '';
+    const inp = document.getElementById('admin-users-search-input');
+    if (inp) {
+      inp.value = '';
+      inp.focus();
+    }
+    const clearBtn = document.getElementById('admin-users-search-clear');
+    if (clearBtn) clearBtn.style.display = 'none';
+    window.renderAdminUsersRowsOnly();
+  };
+
+  window.renderAdminUsersRowsOnly = function () {
+    const tableWrap = document.getElementById('admin-users-table-body-wrap');
+    if (!tableWrap) return;
+
+    const allUsers = window._adminUsersList || [];
+    const q = (window._adminUsersSearchQuery || '').toLowerCase();
+    const filtered = !q
+      ? allUsers
+      : allUsers.filter(u => {
+          const name = (u.full_name || '').toLowerCase();
+          const email = (u.email || '').toLowerCase();
+          const role = (u.role || '').toLowerCase();
+          return name.includes(q) || email.includes(q) || role.includes(q);
+        });
+
+    const countEl = document.getElementById('admin-users-search-count');
+    if (countEl) {
+      countEl.textContent = q
+        ? `نتائج البحث: ${filtered.length} من أصل ${allUsers.length} حساب`
+        : `إجمالي الحسابات: ${allUsers.length}`;
+    }
+
+    const SEC_LABELS = { 'exams': 'الامتحانات', 'lectures': 'المحاضرات', 'lecture-quizzes': 'أسئلة المحاضرات', 'summaries': 'الملخصات', '*': 'كل الأقسام' };
+
+    if (allUsers.length === 0) {
+      tableWrap.innerHTML = `<div class="empty" style="padding:2rem"><i class="fas fa-users"></i><p>لا توجد حسابات مسجلة حالياً.</p></div>`;
+      return;
+    }
+
+    if (filtered.length === 0) {
+      tableWrap.innerHTML = `
+        <div class="empty" style="padding:2.2rem">
+          <i class="fas fa-search" style="font-size:2rem;color:var(--teal);opacity:0.6;margin-bottom:0.6rem"></i>
+          <p>لا يوجد أي حساب يطابق البحث «<b>${window._adminUsersSearchQuery}</b>» بالاسم أو الإيميل</p>
+        </div>`;
+      return;
+    }
+
+    tableWrap.innerHTML = `
+      <div class="data-table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>الاسم</th>
+              <th>البريد الإلكتروني</th>
+              <th>الدور (Role)</th>
+              <th>الترم الدراسي</th>
+              <th>نطاق الصلاحيات</th>
+              <th>الحالة</th>
+              <th>إجراءات</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${filtered.map(u => {
+              const up = u._ovPerms;
+              let scopeStr = 'قراءة وحل اختبارات فقط';
+              if (u.role === 'super_admin') {
+                scopeStr = 'صلاحيات كاملة (كل الأقسام والترمات)';
+              } else if (u.role !== 'student' && up && window.hasAnyAdminActionPermission(up)) {
+                const secNames = (up.allowed_sections || []).map(s => SEC_LABELS[s] || s).join('، ');
+                const acts = [];
+                if (up.can_create) acts.push('إضافة');
+                if (up.can_edit) acts.push('تعديل');
+                if (up.can_delete) acts.push('حذف');
+                if (up.can_publish) acts.push('نشر/إخفاء');
+                if (up.can_manage_owners) acts.push('Owners');
+                if (up.can_view_analytics) acts.push('إحصائيات');
+                scopeStr = `${secNames ? `الأقسام: (${secNames})` : ''}${acts.length ? ` | العمليات: (${acts.join('، ')})` : ''}`;
+              }
+              const safeEmail = (u.email || '').replace(/'/g, "\\'");
+              const isDisabled = u.is_active === false;
+              const isPending = u._pendingConfirmation === true;
+              const statusBadge = isDisabled
+                ? '<span style="color:var(--red);font-weight:800">⛔ معطل</span>'
+                : isPending
+                  ? '<span style="color:var(--amber);font-weight:800">⏳ بانتظار تأكيد الإيميل</span>'
+                  : '<span style="color:var(--teal);font-weight:800">🟢 نشط ومؤكد</span>';
+              return `
+                <tr>
+                  <td style="font-weight:800">${u.full_name || '—'}</td>
+                  <td>${u.email}</td>
+                  <td><span class="role-tag-badge">${u.role}</span></td>
+                  <td>${TERM_NAMES[u.term || 1] || 'الترم الأول'}</td>
+                  <td style="font-size:0.78rem;color:var(--text-dim)">${scopeStr}</td>
+                  <td>${statusBadge}</td>
+                  <td>
+                    <div style="display:flex;gap:6px;flex-wrap:wrap">
+                      ${isPending ? `
+                      <button class="btn btn-primary" style="padding:5px 10px;font-size:0.78rem" onclick="adminConfirmUserAccountNow('${u.id}', '${safeEmail}')" title="تأكيد وتفعيل الحساب فوراً بدون انتظار رابط الإيميل">
+                        <i class="fas fa-check-circle"></i> تأكيد الحساب
+                      </button>` : ''}
+                      <button class="btn btn-blue" style="padding:5px 10px;font-size:0.78rem" onclick="openAssignRoleModal('${u.id}', '${safeEmail}')">
+                        <i class="fas fa-key"></i> الصلاحيات
+                      </button>
+                      <button class="btn btn-ghost" style="padding:5px 10px;font-size:0.78rem;color:var(--teal);border-color:rgba(45,212,191,0.35)" onclick="openAdminAddUserModal('${safeEmail}', '${(u.full_name || '').replace(/'/g, "\\'")}', '${u.term || 1}')" title="تعيين أو تغيير كلمة المرور لهذا الحساب مباشرة">
+                        <i class="fas fa-lock"></i> الباسورد
+                      </button>
+                      <button class="btn ${isDisabled ? 'btn-primary' : 'btn-danger'}" style="padding:5px 10px;font-size:0.78rem" onclick="toggleUserActiveStatus('${u.id}', ${isDisabled ? 'true' : 'false'}, '${safeEmail}')" title="${isDisabled ? 'تفعيل الحساب' : 'تعطيل الحساب'}">
+                        <i class="fas fa-${isDisabled ? 'check' : 'ban'}"></i> ${isDisabled ? 'تفعيل' : 'تعطيل'}
+                      </button>
+                      <button class="btn btn-ghost" style="padding:5px 10px;font-size:0.78rem;color:var(--red);border-color:rgba(248,113,113,0.3)" onclick="deleteUserAccountAdmin('${u.id}', '${safeEmail}')" title="حذف الحساب نهائياً">
+                        <i class="fas fa-trash"></i>
+                      </button>
+                    </div>
+                  </td>
+                </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  };
 
   window.renderAdminUsersTableNow = function (profiles) {
     const container = document.getElementById('admin-section-users');
@@ -10566,96 +10698,50 @@ ESSAY
       }
     });
 
-    const SEC_LABELS = { 'exams': 'الامتحانات', 'lectures': 'المحاضرات', 'lecture-quizzes': 'أسئلة المحاضرات', 'summaries': 'الملخصات', '*': 'كل الأقسام' };
-
-    container.innerHTML = `
-      <div class="glass-card" style="padding:1.4rem;margin-bottom:1.4rem">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:10px">
-          <div>
-            <h4 style="font-size:1.1rem;font-weight:900"><i class="fas fa-user-shield" style="color:var(--teal);margin-left:6px"></i> إدارة الحسابات والمسؤولين والصلاحيات (RBAC) <span style="font-size:0.74rem;color:var(--teal);background:rgba(45,212,191,0.12);padding:3px 9px;border-radius:20px;margin-right:6px">⚡ مزامنة فورية Real-Time</span></h4>
-            <p style="font-size:0.82rem;color:var(--text-dim)">أي تعديل في الصلاحيات أو تفعيل/تعطيل أو حذف حساب يُطبَّق في نفس اللحظة بدون ريفريش</p>
+    // إذا كان هيكل البحث والجدول موجوداً بالفعل، نحدّث صفوف الجدول فقط للحفاظ على تركيز الكتابة داخل السيرش بار
+    if (!document.getElementById('admin-users-table-body-wrap')) {
+      const currentQ = (window._adminUsersSearchQuery || '').replace(/"/g, '&quot;');
+      container.innerHTML = `
+        <div class="glass-card" style="padding:1.4rem;margin-bottom:1.4rem">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:10px">
+            <div>
+              <h4 style="font-size:1.1rem;font-weight:900"><i class="fas fa-user-shield" style="color:var(--teal);margin-left:6px"></i> إدارة الحسابات والمسؤولين والصلاحيات (RBAC) <span style="font-size:0.74rem;color:var(--teal);background:rgba(45,212,191,0.12);padding:3px 9px;border-radius:20px;margin-right:6px">⚡ مزامنة فورية Real-Time</span></h4>
+              <p style="font-size:0.82rem;color:var(--text-dim)">أي تعديل في الصلاحيات أو تفعيل/تعطيل أو حذف حساب يُطبَّق في نفس اللحظة بدون ريفريش</p>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-primary" onclick="openAdminAddUserModal()"><i class="fas fa-user-plus"></i> إضافة حساب جديد مباشرة</button>
+              <button class="btn btn-blue" onclick="openAssignRoleModal()"><i class="fas fa-user-shield"></i> تخصيص صلاحيات مسؤول</button>
+            </div>
           </div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn btn-primary" onclick="openAdminAddUserModal()"><i class="fas fa-user-plus"></i> إضافة حساب جديد مباشرة</button>
-            <button class="btn btn-blue" onclick="openAssignRoleModal()"><i class="fas fa-user-shield"></i> تخصيص صلاحيات مسؤول</button>
-          </div>
-        </div>
 
-        ${window._adminUsersList.length === 0
-          ? `<div class="empty" style="padding:2rem"><i class="fas fa-users"></i><p>لا توجد حسابات مسجلة حالياً.</p></div>`
-          : `
-          <div class="data-table-wrap">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>الاسم</th>
-                  <th>البريد الإلكتروني</th>
-                  <th>الدور (Role)</th>
-                  <th>الترم الدراسي</th>
-                  <th>نطاق الصلاحيات</th>
-                  <th>الحالة</th>
-                  <th>إجراءات</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${window._adminUsersList.map(u => {
-                  const up = u._ovPerms;
-                  let scopeStr = 'قراءة وحل اختبارات فقط';
-                  if (u.role === 'super_admin') {
-                    scopeStr = 'صلاحيات كاملة (كل الأقسام والترمات)';
-                  } else if (u.role !== 'student' && up && window.hasAnyAdminActionPermission(up)) {
-                    const secNames = (up.allowed_sections || []).map(s => SEC_LABELS[s] || s).join('، ');
-                    const acts = [];
-                    if (up.can_create) acts.push('إضافة');
-                    if (up.can_edit) acts.push('تعديل');
-                    if (up.can_delete) acts.push('حذف');
-                    if (up.can_publish) acts.push('نشر/إخفاء');
-                    if (up.can_manage_owners) acts.push('Owners');
-                    if (up.can_view_analytics) acts.push('إحصائيات');
-                    scopeStr = `${secNames ? `الأقسام: (${secNames})` : ''}${acts.length ? ` | العمليات: (${acts.join('، ')})` : ''}`;
-                  }
-                  const safeEmail = (u.email || '').replace(/'/g, "\\'");
-                  const isDisabled = u.is_active === false;
-                  const isPending = u._pendingConfirmation === true;
-                  const statusBadge = isDisabled
-                    ? '<span style="color:var(--red);font-weight:800">⛔ معطل</span>'
-                    : isPending
-                      ? '<span style="color:var(--amber);font-weight:800">⏳ بانتظار تأكيد الإيميل</span>'
-                      : '<span style="color:var(--teal);font-weight:800">🟢 نشط ومؤكد</span>';
-                  return `
-                    <tr>
-                      <td style="font-weight:800">${u.full_name || '—'}</td>
-                      <td>${u.email}</td>
-                      <td><span class="role-tag-badge">${u.role}</span></td>
-                      <td>${TERM_NAMES[u.term || 1] || 'الترم الأول'}</td>
-                      <td style="font-size:0.78rem;color:var(--text-dim)">${scopeStr}</td>
-                      <td>${statusBadge}</td>
-                      <td>
-                        <div style="display:flex;gap:6px;flex-wrap:wrap">
-                          ${isPending ? `
-                          <button class="btn btn-primary" style="padding:5px 10px;font-size:0.78rem" onclick="adminConfirmUserAccountNow('${u.id}', '${safeEmail}')" title="تأكيد وتفعيل الحساب فوراً بدون انتظار رابط الإيميل">
-                            <i class="fas fa-check-circle"></i> تأكيد الحساب
-                          </button>` : ''}
-                          <button class="btn btn-blue" style="padding:5px 10px;font-size:0.78rem" onclick="openAssignRoleModal('${u.id}', '${safeEmail}')">
-                            <i class="fas fa-key"></i> الصلاحيات
-                          </button>
-                          <button class="btn btn-ghost" style="padding:5px 10px;font-size:0.78rem;color:var(--teal);border-color:rgba(45,212,191,0.35)" onclick="openAdminAddUserModal('${safeEmail}', '${(u.full_name || '').replace(/'/g, "\\'")}', '${u.term || 1}')" title="تعيين أو تغيير كلمة المرور لهذا الحساب مباشرة">
-                            <i class="fas fa-lock"></i> الباسورد
-                          </button>
-                          <button class="btn ${isDisabled ? 'btn-primary' : 'btn-danger'}" style="padding:5px 10px;font-size:0.78rem" onclick="toggleUserActiveStatus('${u.id}', ${isDisabled ? 'true' : 'false'}, '${safeEmail}')" title="${isDisabled ? 'تفعيل الحساب' : 'تعطيل الحساب'}">
-                            <i class="fas fa-${isDisabled ? 'check' : 'ban'}"></i> ${isDisabled ? 'تفعيل' : 'تعطيل'}
-                          </button>
-                          <button class="btn btn-ghost" style="padding:5px 10px;font-size:0.78rem;color:var(--red);border-color:rgba(248,113,113,0.3)" onclick="deleteUserAccountAdmin('${u.id}', '${safeEmail}')" title="حذف الحساب نهائياً">
-                            <i class="fas fa-trash"></i>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>`;
-                }).join('')}
-              </tbody>
-            </table>
-          </div>`}
-      </div>`;
+          <!-- شريط البحث الذكي في الحسابات بالاسم أو الإيميل -->
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:1.1rem;flex-wrap:wrap">
+            <div style="position:relative;flex:1;min-width:240px">
+              <i class="fas fa-search" style="position:absolute;right:14px;top:50%;transform:translateY(-50%);color:var(--teal);font-size:0.9rem;pointer-events:none"></i>
+              <input
+                type="text"
+                id="admin-users-search-input"
+                value="${currentQ}"
+                oninput="onAdminUsersSearchInput(this.value)"
+                placeholder="ابحث عن أي طالب أو مسؤول بالاسم أو البريد الإلكتروني..."
+                style="width:100%;padding:10px 38px 10px 38px;border-radius:12px;border:1px solid rgba(45,212,191,0.28);background:var(--surface2);color:var(--text);font-family:'Cairo',sans-serif;font-size:0.88rem;outline:none;transition:border-color 0.2s"
+              >
+              <button
+                type="button"
+                id="admin-users-search-clear"
+                onclick="clearAdminUsersSearch()"
+                title="مسح البحث"
+                style="display:${currentQ ? 'inline-flex' : 'none'};position:absolute;left:10px;top:50%;transform:translateY(-50%);background:rgba(248,113,113,0.15);color:var(--red);border:none;border-radius:50%;width:24px;height:24px;align-items:center;justify-content:center;cursor:pointer;font-size:0.78rem"
+              ><i class="fas fa-times"></i></button>
+            </div>
+            <span id="admin-users-search-count" style="font-size:0.8rem;font-weight:800;color:var(--teal);background:rgba(45,212,191,0.08);border:1px solid rgba(45,212,191,0.2);padding:7px 13px;border-radius:10px;white-space:nowrap"></span>
+          </div>
+
+          <div id="admin-users-table-body-wrap"></div>
+        </div>`;
+    }
+
+    window.renderAdminUsersRowsOnly();
   };
 
   async function loadAdminUsersAndRoles(silent = false) {
@@ -10728,7 +10814,7 @@ ESSAY
         id: u.id, em: u.email, fn: u.full_name, r: u.role, t: u.term, a: u.is_active, p: u._pendingConfirmation, pm: u._ovPerms
       })));
 
-      if (!silent || newSig !== _lastRenderedUsersSig || !container.querySelector('table')) {
+      if (!silent || newSig !== _lastRenderedUsersSig || !document.getElementById('admin-users-table-body-wrap')) {
         _lastRenderedUsersSig = newSig;
         window.renderAdminUsersTableNow(profiles);
       }
