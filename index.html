@@ -2662,6 +2662,118 @@
   padding: 2rem 2.2rem !important;
 }
 
+/* ─── ADVANCED ACTIVITY LOGS (TIME BUCKETS, SEARCH & INSTANT DELETE) ─── */
+#admin-section-logs .glass-card {
+  padding: 1.5rem 1.4rem !important;
+  border-radius: 24px !important;
+  border: 1px solid rgba(45, 212, 191, 0.22) !important;
+  box-shadow: 0 24px 65px rgba(0, 0, 0, 0.55), 0 0 40px rgba(45, 212, 191, 0.06) !important;
+}
+
+#admin-section-logs .data-table-wrap {
+  width: 100% !important;
+  overflow-x: hidden !important;
+  overflow-y: visible !important;
+  border-radius: 18px !important;
+  border: 1px solid rgba(120, 160, 255, 0.14) !important;
+  background: rgba(6, 9, 22, 0.78) !important;
+}
+[data-theme="light"] #admin-section-logs .data-table-wrap {
+  background: rgba(255, 255, 255, 0.92) !important;
+}
+
+#admin-section-logs .data-table {
+  width: 100% !important;
+  table-layout: fixed !important;
+  border-collapse: collapse !important;
+  font-size: 0.83rem !important;
+}
+
+#admin-section-logs .data-table th {
+  white-space: normal !important;
+  padding: 12px 10px !important;
+  font-size: 0.8rem !important;
+  font-weight: 900 !important;
+  color: var(--teal) !important;
+  background: linear-gradient(180deg, rgba(45, 212, 191, 0.09), rgba(15, 23, 42, 0.85)) !important;
+  border-bottom: 1px solid rgba(45, 212, 191, 0.22) !important;
+}
+[data-theme="light"] #admin-section-logs .data-table th {
+  background: linear-gradient(180deg, rgba(45, 212, 191, 0.14), rgba(241, 245, 249, 0.95)) !important;
+  color: #0f766e !important;
+}
+
+#admin-section-logs .data-table td {
+  padding: 11px 10px !important;
+  white-space: normal !important;
+  word-break: break-word !important;
+  overflow-wrap: anywhere !important;
+  vertical-align: middle !important;
+  line-height: 1.45 !important;
+  border-bottom: 1px solid rgba(120, 160, 255, 0.08) !important;
+}
+
+.logs-period-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 1.1rem;
+}
+
+.logs-period-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 15px;
+  border-radius: 13px;
+  border: 1px solid rgba(120, 160, 255, 0.16);
+  background: var(--surface2);
+  color: var(--text-dim);
+  font-family: 'Cairo', sans-serif;
+  font-size: 0.83rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.logs-period-tab:hover {
+  border-color: rgba(45, 212, 191, 0.45);
+  color: var(--text);
+  transform: translateY(-1px);
+}
+
+.logs-period-tab.active {
+  background: linear-gradient(135deg, rgba(45, 212, 191, 0.2), rgba(56, 189, 248, 0.16));
+  border-color: var(--teal);
+  color: var(--teal);
+  box-shadow: 0 6px 20px rgba(45, 212, 191, 0.16);
+}
+
+.logs-period-count {
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 0.73rem;
+  font-weight: 900;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text);
+}
+
+.logs-period-tab.active .logs-period-count {
+  background: var(--teal);
+  color: #041019;
+}
+
+.logs-group-header-row td {
+  background: linear-gradient(90deg, rgba(45, 212, 191, 0.13), rgba(56, 189, 248, 0.04)) !important;
+  color: var(--teal) !important;
+  font-weight: 900 !important;
+  font-size: 0.84rem !important;
+  padding: 9px 14px !important;
+  border-top: 1px solid rgba(45, 212, 191, 0.22) !important;
+  border-bottom: 1px solid rgba(45, 212, 191, 0.22) !important;
+}
+
+
 
   </style>
   <script>window.IS_PUBLIC_OWNER_DASHBOARD = true; window.IS_STANDALONE_SUPER_ADMIN = false;</script>
@@ -8200,11 +8312,94 @@ ESSAY
     return html;
   };
 
-  // ─── 4. ACTIVITY LOGGER (Section 14) ───
+  // ─── 4. ACTIVITY LOGGER & CLOUD LOGS SYNC ENGINE (Section 14) ───
+  window.computeActivityLogSig = function (log) {
+    if (!log) return '';
+    return String(log._uid || `${log.created_at || ''}|${log.action_type || ''}|${log.target_title || ''}|${log.actor_name || ''}`);
+  };
+
+  window.fetchSystemActivityLogsSync = async function () {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/resources?select=id,url&type=eq.activity_logs_sync&grade=eq.sys&order=id.desc&limit=1`, {
+        headers: {
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${SUPABASE_KEY}`,
+          'Cache-Control': 'no-cache'
+        }
+      });
+      if (res.ok) {
+        const rows = await res.json();
+        if (rows.length && rows[0].url) {
+          const parsed = JSON.parse(rows[0].url) || {};
+          const syncObj = {
+            logs: Array.isArray(parsed.logs) ? parsed.logs : [],
+            deletedSigs: Array.isArray(parsed.deletedSigs) ? parsed.deletedSigs : [],
+            clearedBeforeTs: Number(parsed.clearedBeforeTs || 0)
+          };
+          localStorage.setItem('platform_activity_logs_sync_v1', JSON.stringify(syncObj));
+          return syncObj;
+        }
+      }
+    } catch (e) {}
+    try {
+      const cached = JSON.parse(localStorage.getItem('platform_activity_logs_sync_v1') || '{}');
+      return {
+        logs: Array.isArray(cached.logs) ? cached.logs : [],
+        deletedSigs: Array.isArray(cached.deletedSigs) ? cached.deletedSigs : [],
+        clearedBeforeTs: Number(cached.clearedBeforeTs || 0)
+      };
+    } catch (e) {
+      return { logs: [], deletedSigs: [], clearedBeforeTs: 0 };
+    }
+  };
+
+  window.saveSystemActivityLogsSync = async function (syncObj) {
+    const cleanObj = {
+      logs: Array.isArray(syncObj?.logs) ? syncObj.logs.slice(0, 300) : [],
+      deletedSigs: Array.isArray(syncObj?.deletedSigs) ? syncObj.deletedSigs.slice(-500) : [],
+      clearedBeforeTs: Number(syncObj?.clearedBeforeTs || 0)
+    };
+    localStorage.setItem('platform_activity_logs_sync_v1', JSON.stringify(cleanObj));
+    try {
+      const headers = {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=representation'
+      };
+      const checkRes = await fetch(`${SUPABASE_URL}/rest/v1/resources?select=id&type=eq.activity_logs_sync&grade=eq.sys`, { headers });
+      const rows = checkRes.ok ? await checkRes.json() : [];
+      if (rows.length) {
+        await fetch(`${SUPABASE_URL}/rest/v1/resources?type=eq.activity_logs_sync&grade=eq.sys`, {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify({ url: JSON.stringify(cleanObj) })
+        });
+      } else {
+        await fetch(`${SUPABASE_URL}/rest/v1/resources`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            grade: 'sys',
+            term: 1,
+            type: 'activity_logs_sync',
+            subject: 'sys',
+            title: '__folder__',
+            url: JSON.stringify(cleanObj),
+            file_type: 'link'
+          })
+        });
+      }
+    } catch (e) {}
+  };
+
   window.logAdminActivity = async function (actionType, targetType, targetTitle, targetId = '', metadata = {}) {
     try {
-      const actorName = window.authSession?.profile?.full_name || window.authSession?.user?.email || 'مسؤول النظام';
-      const actorRole = window.authSession?.profile?.role || 'admin';
+      const actorName = window.authSession?.profile?.full_name
+        || window.authSession?.user?.email
+        || (window.IS_STANDALONE_SUPER_ADMIN ? 'السوبر أدمن (Super Admin)' : 'مسؤول النظام');
+      const actorRole = window.authSession?.profile?.role
+        || (window.IS_STANDALONE_SUPER_ADMIN ? 'super_admin' : (window.currentAdminRole || 'admin'));
       const actorId = window.authSession?.user?.id || null;
 
       // Never log passwords or sensitive keys
@@ -8213,7 +8408,11 @@ ESSAY
       delete safeMeta.key;
       delete safeMeta.token;
 
+      const nowIso = new Date().toISOString();
+      const uidStr = 'log_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+
       const logEntry = {
+        _uid: uidStr,
         actor_id: actorId,
         actor_name: actorName,
         actor_role: actorRole,
@@ -8221,22 +8420,44 @@ ESSAY
         target_type: targetType,
         target_id: String(targetId || ''),
         target_title: String(targetTitle || ''),
-        grade: currentGrade || null,
-        term: currentTerm || null,
+        grade: currentGrade || 'bis',
+        term: currentTerm || 1,
         metadata: safeMeta,
-        created_at: new Date().toISOString()
+        created_at: nowIso
       };
 
-      // Save to local backup log + Supabase activity_logs table
+      // 1. Save to local backup log
       const localLogs = JSON.parse(localStorage.getItem('platform_activity_logs') || '[]');
       localLogs.unshift(logEntry);
-      if (localLogs.length > 200) localLogs.length = 200;
+      if (localLogs.length > 300) localLogs.length = 300;
       localStorage.setItem('platform_activity_logs', JSON.stringify(localLogs));
 
-      await api('activity_logs', {
-        method: 'POST',
-        body: JSON.stringify(logEntry)
-      }).catch(() => {});
+      if (window._allActivityLogsCache && Array.isArray(window._allActivityLogsCache)) {
+        window._allActivityLogsCache.unshift(logEntry);
+        const logsPanel = document.getElementById('admin-section-logs');
+        if (logsPanel && !logsPanel.classList.contains('hidden') && typeof window.renderAdminActivityLogsUI === 'function') {
+          window.renderAdminActivityLogsUI();
+        }
+      }
+
+      if (typeof window.broadcastRealtimeUserSync === 'function') {
+        window.broadcastRealtimeUserSync('activity_log', '', uidStr);
+      }
+
+      // 2. Sync to Cloud activity_logs_sync + activity_logs DB table in parallel
+      const dbPayload = { ...logEntry };
+      delete dbPayload._uid;
+
+      const [syncObj] = await Promise.all([
+        window.fetchSystemActivityLogsSync(),
+        api('activity_logs', {
+          method: 'POST',
+          body: JSON.stringify(dbPayload)
+        }).catch(() => {})
+      ]);
+
+      syncObj.logs = [logEntry, ...(syncObj.logs || []).filter(l => window.computeActivityLogSig(l) !== window.computeActivityLogSig(logEntry))].slice(0, 300);
+      await window.saveSystemActivityLogsSync(syncObj);
     } catch (e) {}
   };
 
@@ -10725,14 +10946,33 @@ ESSAY
         </div>
 
         <div class="glass-card" style="padding:1.4rem">
-          <h4 style="font-size:1.05rem;font-weight:900;margin-bottom:1rem"><i class="fas fa-history" style="color:var(--teal);margin-left:6px"></i> النشاط الأخير على المنصة</h4>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:8px">
+            <h4 style="font-size:1.05rem;font-weight:900;margin:0"><i class="fas fa-history" style="color:var(--teal);margin-left:6px"></i> النشاط الأخير على المنصة</h4>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-blue" style="padding:6px 12px;font-size:0.78rem" onclick="switchAdminSection('logs')">
+                <i class="fas fa-clipboard-list"></i> فتح السجل المقسّم الكامل والبحث
+              </button>
+              ${localLogs.length > 0 ? `
+              <button class="btn btn-danger" style="padding:6px 12px;font-size:0.78rem" onclick="clearAllActivityLogsAdmin()">
+                <i class="fas fa-trash-alt"></i> مسح السجل
+              </button>` : ''}
+            </div>
+          </div>
           ${localLogs.length === 0
             ? `<p style="color:var(--text-dim);font-size:0.88rem">لا توجد عمليات مسجلة مؤخراً.</p>`
-            : localLogs.map(l => `
-              <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:0.85rem">
-                <div><strong>${l.actor_name}</strong> قام بـ <span style="color:var(--teal)">${l.action_type}</span>: ${l.target_title}</div>
-                <span style="color:var(--text-dim);font-size:0.76rem">${new Date(l.created_at).toLocaleTimeString('ar-EG')}</span>
-              </div>`).join('')}
+            : localLogs.map(l => {
+                const sig = window.computeActivityLogSig(l).replace(/'/g, "\\'");
+                return `
+                  <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border);font-size:0.85rem;gap:10px">
+                    <div style="flex:1"><strong>${l.actor_name || 'مسؤول'}</strong> قام بـ <span style="color:var(--teal);font-weight:800">${l.action_type}</span>: ${l.target_title || l.target_type || ''}</div>
+                    <div style="display:flex;align-items:center;gap:10px;white-space:nowrap">
+                      <span style="color:var(--text-dim);font-size:0.76rem">${new Date(l.created_at).toLocaleString('ar-EG')}</span>
+                      <button class="btn btn-ghost" style="padding:4px 8px;font-size:0.74rem;color:var(--red);border-color:rgba(248,113,113,0.3)" onclick="deleteSingleActivityLog('${sig}')" title="حذف هذا النشاط">
+                        <i class="fas fa-trash"></i>
+                      </button>
+                    </div>
+                  </div>`;
+              }).join('')}
         </div>`;
     } catch (e) {
       container.innerHTML = `<div class="empty"><p>تعذر تحميل الإحصائيات</p></div>`;
@@ -12566,51 +12806,649 @@ ESSAY
     }
   };
 
-  // ─── 21. ACTIVITY LOGS VIEWER (Section 14) ───
-  window.loadAdminActivityLogsView = async function () {
+  // ─── 21. ADVANCED ACTIVITY LOGS VIEWER (Time Division: Hour / Day / Week / Month + Universal Search + Delete Anytime) ───
+  window._allActivityLogsCache = [];
+  window._activityLogsPeriodFilter = 'all'; // 'all' | 'hour' | 'day' | 'week' | 'month'
+  window._activityLogsSearchQuery = '';
+  window._activityLogsDateFilter = '';
+  window._activityLogsCategoryFilter = 'all';
+  window._selectedActivityLogSigs = new Set();
+
+  function _normalizeDigitsAndText(str) {
+    return String(str || '')
+      .replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d))
+      .replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d))
+      .replace(/[أإآ]/g, 'ا')
+      .replace(/ة/g, 'ه')
+      .replace(/ى/g, 'ي')
+      .toLowerCase()
+      .trim();
+  }
+
+  function _getLogTimeBucketInfo(createdAtIso, nowMs = Date.now()) {
+    const dt = new Date(createdAtIso || Date.now());
+    const ts = isNaN(dt.getTime()) ? nowMs : dt.getTime();
+    const diffMs = Math.max(0, nowMs - ts);
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    const nowDate = new Date(nowMs);
+    const isSameDay = dt.getFullYear() === nowDate.getFullYear() &&
+      dt.getMonth() === nowDate.getMonth() &&
+      dt.getDate() === nowDate.getDate();
+
+    const isWithinHour = diffMs <= 3600 * 1000;
+    const isWithinDay = isSameDay || diffMs <= 24 * 3600 * 1000;
+    const isWithinWeek = diffMs <= 7 * 24 * 3600 * 1000;
+    const isWithinMonth = diffMs <= 30 * 24 * 3600 * 1000;
+
+    let primaryBucket = 'older';
+    if (isWithinHour) primaryBucket = 'hour';
+    else if (isWithinDay) primaryBucket = 'day';
+    else if (isWithinWeek) primaryBucket = 'week';
+    else if (isWithinMonth) primaryBucket = 'month';
+
+    let relativeLabel = 'الآن';
+    if (diffMins < 1) relativeLabel = 'منذ لحظات';
+    else if (diffMins < 60) relativeLabel = `منذ ${diffMins} دقيقة`;
+    else if (diffHours < 24) relativeLabel = `منذ ${diffHours} ساعة`;
+    else if (diffDays === 1) relativeLabel = 'أمس';
+    else if (diffDays < 7) relativeLabel = `منذ ${diffDays} أيام`;
+    else if (diffDays < 30) relativeLabel = `منذ ${Math.floor(diffDays / 7)} أسبوع`;
+    else relativeLabel = `منذ ${Math.floor(diffDays / 30)} شهر`;
+
+    const y = dt.getFullYear();
+    const m = String(dt.getMonth() + 1).padStart(2, '0');
+    const d = String(dt.getDate()).padStart(2, '0');
+    const isoDateOnly = `${y}-${m}-${d}`;
+    const slashDateEn = `${d}/${m}/${y}`;
+    const fullDateAr = dt.toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    const shortDateAr = dt.toLocaleDateString('ar-EG', { year: 'numeric', month: '2-digit', day: '2-digit' });
+    const timeAr = dt.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+    const hour24 = `${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`;
+
+    return {
+      ts,
+      isWithinHour,
+      isWithinDay,
+      isWithinWeek,
+      isWithinMonth,
+      primaryBucket,
+      relativeLabel,
+      isoDateOnly,
+      slashDateEn,
+      fullDateAr,
+      shortDateAr,
+      timeAr,
+      hour24
+    };
+  }
+
+  function _getLogActionCategory(log) {
+    const act = String(log.action_type || '');
+    const tgt = String(log.target_type || '');
+    if (tgt === 'user' || act.includes('حساب') || act.includes('صلاحيات') || act.includes('باسورد')) return 'users';
+    if (tgt === 'quiz' || act.includes('امتحان') || act.includes('سؤال') || act.includes('اختبار')) return 'exams';
+    if (tgt === 'lectures' || tgt === 'summaries' || act.includes('مورد') || act.includes('محتوى') || act.includes('محاضر') || act.includes('ملخص')) return 'resources';
+    return 'system';
+  }
+
+  function _getFilteredActivityLogs() {
+    const allLogs = window._allActivityLogsCache || [];
+    const nowMs = Date.now();
+    const period = window._activityLogsPeriodFilter || 'all';
+    const rawQ = (window._activityLogsSearchQuery || '').trim();
+    const normQ = _normalizeDigitsAndText(rawQ);
+    const dateFilter = (window._activityLogsDateFilter || '').trim();
+    const catFilter = window._activityLogsCategoryFilter || 'all';
+
+    const roleArMap = {
+      super_admin: 'سوبر أدمن super admin',
+      admin: 'أدمن مسؤول admin',
+      content_manager: 'مسؤول محتوى content manager',
+      student: 'طالب student'
+    };
+
+    return allLogs.filter(l => {
+      const tInfo = _getLogTimeBucketInfo(l.created_at, nowMs);
+
+      if (period === 'hour' && !tInfo.isWithinHour) return false;
+      if (period === 'day' && !tInfo.isWithinDay) return false;
+      if (period === 'week' && !tInfo.isWithinWeek) return false;
+      if (period === 'month' && !tInfo.isWithinMonth) return false;
+
+      if (dateFilter && tInfo.isoDateOnly !== dateFilter) return false;
+
+      if (catFilter !== 'all' && _getLogActionCategory(l) !== catFilter) return false;
+
+      if (normQ) {
+        const termText = l.term ? (TERM_NAMES[l.term] || `الترم ${l.term}`) : '';
+        const bucketAr = tInfo.primaryBucket === 'hour' ? 'الساعة' : tInfo.primaryBucket === 'day' ? 'اليوم' : tInfo.primaryBucket === 'week' ? 'الأسبوع' : 'الشهر';
+        const haystack = _normalizeDigitsAndText([
+          l.actor_name,
+          l.actor_role,
+          roleArMap[l.actor_role] || '',
+          l.action_type,
+          l.target_title,
+          l.target_type,
+          termText,
+          tInfo.isoDateOnly,
+          tInfo.slashDateEn,
+          tInfo.fullDateAr,
+          tInfo.shortDateAr,
+          tInfo.timeAr,
+          tInfo.hour24,
+          tInfo.relativeLabel,
+          bucketAr
+        ].join(' '));
+        if (!haystack.includes(normQ)) return false;
+      }
+
+      return true;
+    });
+  }
+
+  window.loadAdminActivityLogsView = async function (silent = false) {
     const container = document.getElementById('admin-section-logs');
     if (!container) return;
+    if (!silent && (!window._allActivityLogsCache || !window._allActivityLogsCache.length)) {
+      container.innerHTML = renderSkeletonCards(3);
+    }
 
     let dbLogs = [];
+    let syncObj = { logs: [], deletedSigs: [], clearedBeforeTs: 0 };
     try {
-      const res = await api('activity_logs?select=*&order=created_at.desc&limit=100');
-      if (res.ok) dbLogs = await res.json();
+      const [res, cloudSync] = await Promise.all([
+        api('activity_logs?select=*&order=created_at.desc&limit=200').catch(() => null),
+        window.fetchSystemActivityLogsSync()
+      ]);
+      if (res && res.ok) dbLogs = await res.json();
+      if (cloudSync) syncObj = cloudSync;
     } catch (e) {}
 
     const localLogs = JSON.parse(localStorage.getItem('platform_activity_logs') || '[]');
-    const merged = [...dbLogs, ...localLogs].slice(0, 100);
+    const localDelSigs = JSON.parse(localStorage.getItem('platform_deleted_log_sigs_v1') || '[]');
+    const deletedSet = new Set([...(syncObj.deletedSigs || []), ...localDelSigs]);
+    const clearedBeforeTs = Math.max(Number(syncObj.clearedBeforeTs || 0), Number(localStorage.getItem('platform_logs_cleared_before_ts') || 0));
 
-    if (!merged.length) {
-      container.innerHTML = `<div class="empty"><i class="fas fa-clipboard-list"></i><p>لا توجد عمليات إدارية مسجلة حتى الآن</p></div>`;
+    const mergedMap = new Map();
+    [...(syncObj.logs || []), ...localLogs, ...dbLogs].forEach(l => {
+      if (!l || (!l.action_type && !l.target_title)) return;
+      const ts = new Date(l.created_at || 0).getTime() || 0;
+      if (clearedBeforeTs && ts <= clearedBeforeTs) return;
+      const sig = window.computeActivityLogSig(l);
+      const fallbackKey = `${l.created_at || ''}|${l.action_type || ''}|${l.target_title || ''}`;
+      if (deletedSet.has(sig) || deletedSet.has(fallbackKey) || (l.id && deletedSet.has(String(l.id)))) return;
+      if (!mergedMap.has(fallbackKey)) {
+        mergedMap.set(fallbackKey, { ...l, _sig: sig });
+      }
+    });
+
+    const merged = Array.from(mergedMap.values()).sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+    window._allActivityLogsCache = merged;
+    localStorage.setItem('platform_activity_logs', JSON.stringify(merged.slice(0, 300)));
+
+    window.renderAdminActivityLogsUI();
+  };
+
+  window.renderAdminActivityLogsUI = function () {
+    const container = document.getElementById('admin-section-logs');
+    if (!container) return;
+
+    if (!document.getElementById('admin-logs-table-body-wrap')) {
+      const currentQ = (window._activityLogsSearchQuery || '').replace(/"/g, '&quot;');
+      const currentDate = window._activityLogsDateFilter || '';
+      const currentCat = window._activityLogsCategoryFilter || 'all';
+
+      container.innerHTML = `
+        <div class="glass-card" style="padding:1.5rem;margin-bottom:1.4rem">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.1rem;flex-wrap:wrap;gap:12px">
+            <div>
+              <h4 style="font-size:1.15rem;font-weight:900;margin:0"><i class="fas fa-clipboard-list" style="color:var(--teal);margin-left:8px"></i> سجل الأنشطة والتعديلات الزمني الشامل</h4>
+              <p style="font-size:0.82rem;color:var(--text-dim);margin:4px 0 0 0">مُقسّم تلقائياً حسب الساعة واليوم والأسبوع والشهر — يمكنك البحث بأي تفصيلة أو حذف أي نشاط في أي وقت</p>
+            </div>
+            <div id="admin-logs-top-actions" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+          </div>
+
+          <!-- تبويبات التقسيم الزمني (الكل / الساعة / اليوم / الأسبوع / الشهر) -->
+          <div id="admin-logs-period-tabs" class="logs-period-tabs"></div>
+
+          <!-- شريط البحث الشامل بالتاريخ والاسم والتعديلات والساعة + فلاتر التاريخ والنوع -->
+          <div style="display:grid;grid-template-columns:1fr auto auto auto;gap:10px;margin-bottom:1.1rem;align-items:center" class="logs-search-grid">
+            <div style="position:relative;min-width:240px">
+              <i class="fas fa-search" style="position:absolute;right:14px;top:50%;transform:translateY(-50%);color:var(--teal);font-size:0.92rem;pointer-events:none"></i>
+              <input
+                type="text"
+                id="admin-logs-search-input"
+                value="${currentQ}"
+                oninput="onActivityLogsSearchInput(this.value)"
+                placeholder="ابحث بالاسم، الإيميل، نوع التعديل، العنصر، التاريخ (مثال: 15/11/2026)، اليوم، أو الساعة..."
+                style="width:100%;padding:10px 40px 10px 38px;border-radius:12px;border:1px solid rgba(45,212,191,0.3);background:var(--surface2);color:var(--text);font-family:'Cairo',sans-serif;font-size:0.87rem;outline:none"
+              >
+              <button
+                type="button"
+                id="admin-logs-search-clear"
+                onclick="onActivityLogsSearchInput('', true)"
+                title="مسح البحث"
+                style="display:${currentQ ? 'inline-flex' : 'none'};position:absolute;left:10px;top:50%;transform:translateY(-50%);background:rgba(248,113,113,0.16);color:var(--red);border:none;border-radius:50%;width:24px;height:24px;align-items:center;justify-content:center;cursor:pointer;font-size:0.76rem"
+              ><i class="fas fa-times"></i></button>
+            </div>
+
+            <div style="display:flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid rgba(120,160,255,0.18);border-radius:12px;padding:5px 10px" title="فلترة بالتاريخ">
+              <i class="fas fa-calendar-day" style="color:var(--teal);font-size:0.85rem"></i>
+              <input
+                type="date"
+                id="admin-logs-date-input"
+                value="${currentDate}"
+                onchange="onActivityLogsDateChange(this.value)"
+                style="background:transparent;border:none;color:var(--text);font-family:'Cairo',sans-serif;font-size:0.82rem;outline:none;cursor:pointer"
+              >
+            </div>
+
+            <select
+              id="admin-logs-category-select"
+              onchange="onActivityLogsCategoryChange(this.value)"
+              style="padding:10px 12px;border-radius:12px;border:1px solid rgba(120,160,255,0.18);background:var(--surface2);color:var(--text);font-family:'Cairo',sans-serif;font-size:0.83rem;font-weight:700;outline:none;cursor:pointer"
+            >
+              <option value="all" ${currentCat === 'all' ? 'selected' : ''}>📂 كل التعديلات والعمليات</option>
+              <option value="users" ${currentCat === 'users' ? 'selected' : ''}>👤 الحسابات والصلاحيات والباسورد</option>
+              <option value="exams" ${currentCat === 'exams' ? 'selected' : ''}>📝 الامتحانات والأسئلة</option>
+              <option value="resources" ${currentCat === 'resources' ? 'selected' : ''}>🎥 المحاضرات والملخصات</option>
+              <option value="system" ${currentCat === 'system' ? 'selected' : ''}>🔒 قفل المنصة والإشعارات</option>
+            </select>
+
+            <button
+              type="button"
+              class="btn btn-ghost"
+              onclick="clearActivityLogsFilters()"
+              title="إعادة ضبط جميع الفلاتر والبحث"
+              style="padding:10px 13px;font-size:0.8rem;border-radius:12px"
+            >
+              <i class="fas fa-undo"></i> عرض الكل
+            </button>
+          </div>
+
+          <div id="admin-logs-table-body-wrap"></div>
+        </div>`;
+    }
+
+    window.renderAdminActivityLogsRowsOnly();
+  };
+
+  window.renderAdminActivityLogsRowsOnly = function () {
+    const wrap = document.getElementById('admin-logs-table-body-wrap');
+    const tabsEl = document.getElementById('admin-logs-period-tabs');
+    const topActionsEl = document.getElementById('admin-logs-top-actions');
+    const clearBtn = document.getElementById('admin-logs-search-clear');
+    if (clearBtn) clearBtn.style.display = window._activityLogsSearchQuery ? 'inline-flex' : 'none';
+    if (!wrap) return;
+
+    const allLogs = window._allActivityLogsCache || [];
+    const nowMs = Date.now();
+
+    let countHour = 0, countDay = 0, countWeek = 0, countMonth = 0;
+    allLogs.forEach(l => {
+      const b = _getLogTimeBucketInfo(l.created_at, nowMs);
+      if (b.isWithinHour) countHour++;
+      if (b.isWithinDay) countDay++;
+      if (b.isWithinWeek) countWeek++;
+      if (b.isWithinMonth) countMonth++;
+    });
+
+    const pFilter = window._activityLogsPeriodFilter || 'all';
+    if (tabsEl) {
+      const tabsData = [
+        { id: 'all', icon: 'fa-layer-group', label: 'كل السجل (مُقسّم زمنياً)', count: allLogs.length },
+        { id: 'hour', icon: 'fa-bolt', label: 'الساعة الأخيرة', count: countHour },
+        { id: 'day', icon: 'fa-sun', label: 'اليوم', count: countDay },
+        { id: 'week', icon: 'fa-calendar-week', label: 'الأسبوع', count: countWeek },
+        { id: 'month', icon: 'fa-calendar-alt', label: 'الشهر', count: countMonth }
+      ];
+      tabsEl.innerHTML = tabsData.map(t => `
+        <button type="button" class="logs-period-tab ${pFilter === t.id ? 'active' : ''}" onclick="setActivityLogsPeriodFilter('${t.id}')">
+          <i class="fas ${t.icon}"></i>
+          <span>${t.label}</span>
+          <span class="logs-period-count">${t.count}</span>
+        </button>
+      `).join('');
+    }
+
+    const filtered = _getFilteredActivityLogs();
+    const visibleSigs = filtered.map(l => l._sig || window.computeActivityLogSig(l));
+    const selectedVisibleCount = visibleSigs.filter(s => window._selectedActivityLogSigs.has(s)).length;
+    const allVisibleSelected = visibleSigs.length > 0 && selectedVisibleCount === visibleSigs.length;
+
+    const periodLabels = {
+      all: 'المعروض حالياً',
+      hour: 'أنشطة الساعة الأخيرة',
+      day: 'أنشطة اليوم',
+      week: 'أنشطة الأسبوع',
+      month: 'أنشطة الشهر'
+    };
+
+    if (topActionsEl) {
+      topActionsEl.innerHTML = `
+        <button class="btn btn-ghost" style="padding:8px 13px;font-size:0.8rem" onclick="loadAdminActivityLogsView()">
+          <i class="fas fa-sync-alt"></i> تحديث السجل
+        </button>
+        ${window._selectedActivityLogSigs.size > 0 ? `
+        <button class="btn btn-danger" style="padding:8px 14px;font-size:0.8rem" onclick="deleteSelectedActivityLogs()">
+          <i class="fas fa-trash"></i> حذف المحدد (${window._selectedActivityLogSigs.size})
+        </button>` : ''}
+        ${filtered.length > 0 && (pFilter !== 'all' || window._activityLogsSearchQuery || window._activityLogsDateFilter || window._activityLogsCategoryFilter !== 'all') ? `
+        <button class="btn btn-blue" style="padding:8px 14px;font-size:0.8rem;background:rgba(248,113,113,0.16);color:var(--red);border-color:rgba(248,113,113,0.4)" onclick="deleteFilteredActivityLogs()">
+          <i class="fas fa-broom"></i> حذف ${periodLabels[pFilter] || 'النتائج'} (${filtered.length})
+        </button>` : ''}
+        ${allLogs.length > 0 ? `
+        <button class="btn btn-danger" style="padding:8px 14px;font-size:0.8rem" onclick="clearAllActivityLogsAdmin()">
+          <i class="fas fa-fire-alt"></i> مسح السجل بالكامل (${allLogs.length})
+        </button>` : ''}
+      `;
+    }
+
+    if (!filtered.length) {
+      wrap.innerHTML = `
+        <div class="empty" style="padding:2.5rem 1rem">
+          <i class="fas fa-clipboard-list"></i>
+          <p>${allLogs.length === 0 ? 'لا توجد أنشطة مسجلة حالياً في السجل' : 'لا توجد أنشطة مطابقة لهذا التقسيم الزمني أو البحث الحالي'}</p>
+        </div>`;
       return;
     }
 
-    container.innerHTML = `
+    const bucketOrder = [
+      { key: 'hour', icon: '⚡', title: 'أنشطة الساعة الأخيرة (خلال آخر 60 دقيقة)' },
+      { key: 'day', icon: '☀️', title: 'أنشطة اليوم (خلال اليوم الحالي)' },
+      { key: 'week', icon: '📅', title: 'أنشطة هذا الأسبوع (خلال آخر 7 أيام)' },
+      { key: 'month', icon: '🗓️', title: 'أنشطة هذا الشهر (خلال آخر 30 يوماً)' },
+      { key: 'older', icon: '🗄️', title: 'أنشطة أقدم' }
+    ];
+
+    const grouped = { hour: [], day: [], week: [], month: [], older: [] };
+    filtered.forEach(l => {
+      const b = _getLogTimeBucketInfo(l.created_at, nowMs);
+      grouped[b.primaryBucket].push({ log: l, timeInfo: b });
+    });
+
+    const roleBadgeMap = {
+      super_admin: { label: '👑 سوبر أدمن', color: '#fbbf24', bg: 'rgba(251,191,36,0.14)' },
+      admin: { label: '🛡️ مسؤول (Admin)', color: '#38bdf8', bg: 'rgba(56,189,248,0.14)' },
+      content_manager: { label: '🛠️ مسؤول محتوى', color: '#2dd4bf', bg: 'rgba(45,212,191,0.14)' },
+      student: { label: '🎓 طالب', color: '#94a3b8', bg: 'rgba(148,163,184,0.14)' }
+    };
+
+    let rowsHtml = '';
+    bucketOrder.forEach(group => {
+      const items = grouped[group.key];
+      if (!items || !items.length) return;
+
+      rowsHtml += `
+        <tr class="logs-group-header-row">
+          <td colspan="7">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+              <span>${group.icon} ${group.title} <span style="font-size:0.75rem;opacity:0.85">(${items.length} نشاط)</span></span>
+              <button type="button" class="btn btn-ghost" style="padding:3px 10px;font-size:0.74rem;color:var(--red);border-color:rgba(248,113,113,0.35)" onclick="deleteBucketActivityLogs('${group.key}', '${group.title}')">
+                <i class="fas fa-trash-alt"></i> حذف أنشطة هذا القسم (${items.length})
+              </button>
+            </div>
+          </td>
+        </tr>`;
+
+      items.forEach(({ log: l, timeInfo }) => {
+        const sig = l._sig || window.computeActivityLogSig(l);
+        const safeSig = sig.replace(/'/g, "\\'");
+        const isChecked = window._selectedActivityLogSigs.has(sig);
+        const rInfo = roleBadgeMap[l.actor_role] || { label: l.actor_role || 'مسؤول', color: '#38bdf8', bg: 'rgba(56,189,248,0.14)' };
+
+        rowsHtml += `
+          <tr style="${isChecked ? 'background:rgba(45,212,191,0.08)' : ''}">
+            <td style="text-align:center">
+              <input type="checkbox" ${isChecked ? 'checked' : ''} onchange="toggleSelectActivityLog('${safeSig}', this.checked)" style="width:16px;height:16px;cursor:pointer;accent-color:var(--teal)">
+            </td>
+            <td style="font-weight:800">${l.actor_name || 'مسؤول النظام'}</td>
+            <td>
+              <span style="display:inline-block;padding:3px 9px;border-radius:16px;font-size:0.74rem;font-weight:800;color:${rInfo.color};background:${rInfo.bg}">${rInfo.label}</span>
+            </td>
+            <td style="color:var(--teal);font-weight:800">${l.action_type || 'عملية إدارية'}</td>
+            <td style="font-weight:700">${l.target_title || l.target_type || '—'} ${l.term ? `<div style="font-size:0.73rem;color:var(--text-dim);margin-top:2px">${TERM_NAMES[l.term] || 'الترم ' + l.term}</div>` : ''}</td>
+            <td>
+              <div style="font-weight:800;font-size:0.8rem;color:var(--text)">📅 ${timeInfo.fullDateAr}</div>
+              <div style="display:flex;align-items:center;gap:8px;margin-top:3px;flex-wrap:wrap">
+                <span style="font-size:0.76rem;color:var(--teal);font-weight:800">⏰ الساعة: ${timeInfo.timeAr}</span>
+                <span style="font-size:0.72rem;padding:1px 7px;border-radius:10px;background:rgba(120,160,255,0.12);color:var(--text-dim)">${timeInfo.relativeLabel}</span>
+              </div>
+            </td>
+            <td style="text-align:center">
+              <button type="button" class="btn btn-ghost" style="padding:5px 10px;font-size:0.76rem;color:var(--red);border-color:rgba(248,113,113,0.3)" onclick="deleteSingleActivityLog('${safeSig}')" title="حذف هذا النشاط فوراً">
+                <i class="fas fa-trash"></i> حذف
+              </button>
+            </td>
+          </tr>`;
+      });
+    });
+
+    wrap.innerHTML = `
       <div class="data-table-wrap">
         <table class="data-table">
           <thead>
             <tr>
-              <th>المستخدم</th>
-              <th>الدور</th>
-              <th>نوع العملية</th>
-              <th>العنصر المتأثر</th>
-              <th>الترم</th>
-              <th>التاريخ والوقت</th>
+              <th style="width:5%;text-align:center">
+                <input type="checkbox" ${allVisibleSelected ? 'checked' : ''} onchange="toggleSelectAllActivityLogs(this.checked)" title="تحديد / إلغاء تحديد الكل" style="width:16px;height:16px;cursor:pointer;accent-color:var(--teal)">
+              </th>
+              <th style="width:16%">الاسم / المستخدم</th>
+              <th style="width:12%">الدور</th>
+              <th style="width:16%">نوع التعديل / العملية</th>
+              <th style="width:21%">العنصر المتأثر والتفاصيل</th>
+              <th style="width:21%">التاريخ واليوم والساعة</th>
+              <th style="width:9%;text-align:center">حذف</th>
             </tr>
           </thead>
           <tbody>
-            ${merged.map(l => `
-              <tr>
-                <td style="font-weight:800">${l.actor_name || 'مسؤول'}</td>
-                <td><span class="role-tag-badge">${l.actor_role || 'admin'}</span></td>
-                <td style="color:var(--teal);font-weight:700">${l.action_type}</td>
-                <td>${l.target_title || l.target_type}</td>
-                <td>${l.term ? (TERM_NAMES[l.term] || 'ترم ' + l.term) : '—'}</td>
-                <td style="font-size:0.78rem;color:var(--text-dim)">${new Date(l.created_at).toLocaleString('ar-EG')}</td>
-              </tr>`).join('')}
+            ${rowsHtml}
           </tbody>
         </table>
       </div>`;
+  };
+
+  window.setActivityLogsPeriodFilter = function (period) {
+    window._activityLogsPeriodFilter = period || 'all';
+    window.renderAdminActivityLogsRowsOnly();
+  };
+
+  window.onActivityLogsSearchInput = function (val, clearField = false) {
+    window._activityLogsSearchQuery = val || '';
+    if (clearField) {
+      const inp = document.getElementById('admin-logs-search-input');
+      if (inp) {
+        inp.value = '';
+        inp.focus();
+      }
+    }
+    window.renderAdminActivityLogsRowsOnly();
+  };
+
+  window.onActivityLogsDateChange = function (val) {
+    window._activityLogsDateFilter = val || '';
+    window.renderAdminActivityLogsRowsOnly();
+  };
+
+  window.onActivityLogsCategoryChange = function (val) {
+    window._activityLogsCategoryFilter = val || 'all';
+    window.renderAdminActivityLogsRowsOnly();
+  };
+
+  window.clearActivityLogsFilters = function () {
+    window._activityLogsPeriodFilter = 'all';
+    window._activityLogsSearchQuery = '';
+    window._activityLogsDateFilter = '';
+    window._activityLogsCategoryFilter = 'all';
+    const sInp = document.getElementById('admin-logs-search-input');
+    const dInp = document.getElementById('admin-logs-date-input');
+    const cSel = document.getElementById('admin-logs-category-select');
+    if (sInp) sInp.value = '';
+    if (dInp) dInp.value = '';
+    if (cSel) cSel.value = 'all';
+    window.renderAdminActivityLogsRowsOnly();
+  };
+
+  window.toggleSelectActivityLog = function (sig, checked) {
+    if (checked) window._selectedActivityLogSigs.add(sig);
+    else window._selectedActivityLogSigs.delete(sig);
+    window.renderAdminActivityLogsRowsOnly();
+  };
+
+  window.toggleSelectAllActivityLogs = function (checked) {
+    const filtered = _getFilteredActivityLogs();
+    filtered.forEach(l => {
+      const sig = l._sig || window.computeActivityLogSig(l);
+      if (checked) window._selectedActivityLogSigs.add(sig);
+      else window._selectedActivityLogSigs.delete(sig);
+    });
+    window.renderAdminActivityLogsRowsOnly();
+  };
+
+  async function _removeLogsBySigs(sigsToDelete) {
+    const delSet = new Set(sigsToDelete);
+    const removedItems = (window._allActivityLogsCache || []).filter(l => {
+      const s = l._sig || window.computeActivityLogSig(l);
+      return delSet.has(s);
+    });
+    const extraKeys = [];
+    const dbIds = [];
+    removedItems.forEach(l => {
+      extraKeys.push(`${l.created_at || ''}|${l.action_type || ''}|${l.target_title || ''}`);
+      if (l.id) {
+        extraKeys.push(String(l.id));
+        dbIds.push(l.id);
+      }
+    });
+
+    // 1. Optimistic UI Removal (0ms)
+    window._allActivityLogsCache = (window._allActivityLogsCache || []).filter(l => {
+      const s = l._sig || window.computeActivityLogSig(l);
+      return !delSet.has(s);
+    });
+    sigsToDelete.forEach(s => window._selectedActivityLogSigs.delete(s));
+
+    const localDelSigs = JSON.parse(localStorage.getItem('platform_deleted_log_sigs_v1') || '[]');
+    const updatedDelSigs = Array.from(new Set([...localDelSigs, ...sigsToDelete, ...extraKeys])).slice(-600);
+    localStorage.setItem('platform_deleted_log_sigs_v1', JSON.stringify(updatedDelSigs));
+    localStorage.setItem('platform_activity_logs', JSON.stringify(window._allActivityLogsCache));
+
+    if (document.getElementById('admin-logs-table-body-wrap')) {
+      window.renderAdminActivityLogsRowsOnly();
+    }
+    const overviewPanel = document.getElementById('admin-section-overview');
+    if (overviewPanel && !overviewPanel.classList.contains('hidden')) {
+      loadAdminDashboardOverview();
+    }
+
+    // 2. Cloud + DB sync
+    try {
+      const syncObj = await window.fetchSystemActivityLogsSync();
+      syncObj.deletedSigs = Array.from(new Set([...(syncObj.deletedSigs || []), ...updatedDelSigs])).slice(-600);
+      syncObj.logs = (syncObj.logs || []).filter(l => {
+        const s = window.computeActivityLogSig(l);
+        const fk = `${l.created_at || ''}|${l.action_type || ''}|${l.target_title || ''}`;
+        return !delSet.has(s) && !syncObj.deletedSigs.includes(fk);
+      });
+      await Promise.all([
+        window.saveSystemActivityLogsSync(syncObj),
+        ...dbIds.map(id => api(`activity_logs?id=eq.${id}`, { method: 'DELETE' }).catch(() => {}))
+      ]);
+    } catch (e) {}
+  }
+
+  window.deleteSingleActivityLog = async function (sig) {
+    if (!sig) return;
+    await _removeLogsBySigs([sig]);
+    toast('🗑️ تم حذف النشاط من السجل فوراً');
+  };
+
+  window.deleteSelectedActivityLogs = async function () {
+    const count = window._selectedActivityLogSigs.size;
+    if (!count) return;
+    const ok = await window.showConfirm({
+      title: 'حذف الأنشطة المحددة',
+      msg: `هل أنت متأكد من حذف (${count}) نشاط محدد من السجل نهائياً؟`,
+      type: 'danger',
+      icon: 'fa-trash-alt',
+      okText: `نعم، احذف (${count}) نشاط`,
+      cancelText: 'إلغاء'
+    });
+    if (!ok) return;
+    await _removeLogsBySigs(Array.from(window._selectedActivityLogSigs));
+    toast(`🗑️ تم حذف (${count}) نشاط بنجاح`);
+  };
+
+  window.deleteBucketActivityLogs = async function (bucketKey, bucketTitle) {
+    const nowMs = Date.now();
+    const filtered = _getFilteredActivityLogs().filter(l => _getLogTimeBucketInfo(l.created_at, nowMs).primaryBucket === bucketKey);
+    if (!filtered.length) return;
+    const ok = await window.showConfirm({
+      title: `حذف ${bucketTitle}`,
+      msg: `هل تريد حذف جميع الأنشطة الموجودة في قسم "${bucketTitle}" وعددها (${filtered.length}) نشاط نهائياً؟`,
+      type: 'danger',
+      icon: 'fa-broom',
+      okText: `نعم، احذف (${filtered.length}) نشاط`,
+      cancelText: 'إلغاء'
+    });
+    if (!ok) return;
+    const sigs = filtered.map(l => l._sig || window.computeActivityLogSig(l));
+    await _removeLogsBySigs(sigs);
+    toast(`🧹 تم حذف (${sigs.length}) نشاط من ${bucketTitle}`);
+  };
+
+  window.deleteFilteredActivityLogs = async function () {
+    const filtered = _getFilteredActivityLogs();
+    if (!filtered.length) return;
+    const ok = await window.showConfirm({
+      title: 'حذف الأنشطة المعروضة حالياً',
+      msg: `هل أنت متأكد من حذف (${filtered.length}) نشاط معروض في هذه الفترة / نتائج البحث نهائياً؟`,
+      type: 'danger',
+      icon: 'fa-broom',
+      okText: `نعم، احذف (${filtered.length}) نشاط`,
+      cancelText: 'إلغاء'
+    });
+    if (!ok) return;
+    const sigs = filtered.map(l => l._sig || window.computeActivityLogSig(l));
+    await _removeLogsBySigs(sigs);
+    toast(`🧹 تم حذف (${sigs.length}) نشاط بنجاح`);
+  };
+
+  window.clearAllActivityLogsAdmin = async function () {
+    const total = (window._allActivityLogsCache || []).length || JSON.parse(localStorage.getItem('platform_activity_logs') || '[]').length;
+    const ok = await window.showConfirm({
+      title: 'مسح سجل الأنشطة بالكامل',
+      msg: `هل أنت متأكد من مسح جميع الأنشطة المسجلة في المنصة (${total} نشاط) نهائياً؟`,
+      type: 'danger',
+      icon: 'fa-fire-alt',
+      okText: 'نعم، امسح السجل بالكامل',
+      cancelText: 'إلغاء'
+    });
+    if (!ok) return;
+
+    const nowTs = Date.now();
+    window._allActivityLogsCache = [];
+    window._selectedActivityLogSigs.clear();
+    localStorage.setItem('platform_activity_logs', '[]');
+    localStorage.setItem('platform_logs_cleared_before_ts', String(nowTs));
+
+    if (document.getElementById('admin-logs-table-body-wrap')) {
+      window.renderAdminActivityLogsRowsOnly();
+    }
+    const overviewPanel = document.getElementById('admin-section-overview');
+    if (overviewPanel && !overviewPanel.classList.contains('hidden')) {
+      loadAdminDashboardOverview();
+    }
+    toast('🔥 تم مسح سجل الأنشطة بالكامل فوراً!');
+
+    try {
+      await Promise.all([
+        window.saveSystemActivityLogsSync({ logs: [], deletedSigs: [], clearedBeforeTs: nowTs }),
+        api('activity_logs?id=not.is.null', { method: 'DELETE' }).catch(() => {})
+      ]);
+    } catch (e) {}
   };
 
   // ─── 22. INITIALIZE ON PAGE LOAD + REAL-TIME LIVE SYNC ENGINE ───
@@ -12627,6 +13465,10 @@ ESSAY
         loadAdminUsersAndRoles(true);
       } else {
         window.fetchSystemUserOverrides();
+      }
+      const logsPanel = document.getElementById('admin-section-logs');
+      if (logsPanel && !logsPanel.classList.contains('hidden')) {
+        loadAdminActivityLogsView(true);
       }
       return;
     }
