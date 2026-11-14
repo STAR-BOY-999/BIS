@@ -8812,6 +8812,9 @@ ESSAY
       overrides[uid] = { ...(overrides[uid] || {}), ...cloudUser };
       overrides[lowerEmail] = { ...(overrides[lowerEmail] || {}), ...cloudUser };
       await window.saveSystemUserOverrides(overrides);
+      if (typeof window.broadcastRealtimeUserSync === 'function') {
+        window.broadcastRealtimeUserSync('register', lowerEmail, uid);
+      }
 
       if (isConfirmedImmediately) {
         await establishAuthSession(data.access_token, data.refresh_token, data.user, {
@@ -9124,13 +9127,156 @@ ESSAY
     }
   };
 
+  // قناة المزامنة اللحظية (Real-Time Sync) بين لوحة السوبر أدمن ومنصة الطلاب بدون ريفريش
+  let _bisRealtimeChannel = null;
+  try {
+    if (typeof BroadcastChannel !== 'undefined') {
+      _bisRealtimeChannel = new BroadcastChannel('bis_realtime_sync_v1');
+    }
+  } catch (e) {}
+
+  window.broadcastRealtimeUserSync = function (action = 'update', email = '', uid = '') {
+    const payload = { type: 'USER_SYNC', action, email: (email || '').toLowerCase(), uid: uid || '', ts: Date.now() };
+    try {
+      if (_bisRealtimeChannel) _bisRealtimeChannel.postMessage(payload);
+    } catch (e) {}
+    try {
+      localStorage.setItem('bis_realtime_user_sync_ping', JSON.stringify(payload));
+    } catch (e) {}
+  };
+
+  function _buildPermSig(role, perms) {
+    if (!role || role === 'student' || !perms) return 'student';
+    return JSON.stringify({
+      r: role,
+      t: (perms.allowed_terms || []).map(Number).sort(),
+      s: (perms.allowed_sections || []).slice().sort(),
+      c: Boolean(perms.can_create),
+      e: Boolean(perms.can_edit),
+      d: Boolean(perms.can_delete),
+      p: Boolean(perms.can_publish),
+      o: Boolean(perms.can_manage_owners),
+      a: Boolean(perms.can_view_analytics),
+      u: Boolean(perms.can_manage_users)
+    });
+  }
+
+  // تحديث واجهة الداشبورد المفتوحة حالياً في الوقت الفعلي فور تغير صلاحيات المستخدم بدون ريفريش
+  window.applyLivePermissionsToOpenUI = function (hadValidAdminBefore, hasValidAdminNow) {
+    if (window.IS_STANDALONE_SUPER_ADMIN) return;
+    const adminPage = document.getElementById('admin-page');
+    const isAdminPageOpen = adminPage && !adminPage.classList.contains('hidden');
+
+    if (!hasValidAdminNow) {
+      if (isAdminPageOpen) {
+        document.querySelectorAll('.modal-overlay').forEach(m => m.classList.add('hidden'));
+        if (typeof showGradeSelection === 'function') showGradeSelection();
+        toast('🔒 تم سحب الصلاحيات الإدارية من حسابك في الوقت الفعلي', 'error');
+      } else if (hadValidAdminBefore) {
+        toast('🔒 تم تحديث دور حسابك إلى طالب في الوقت الفعلي');
+      }
+      return;
+    }
+
+    const isSuper = window.currentAdminRole === 'super_admin';
+    const perms = window.currentAdminPermissions || {};
+    const allowedTerms = isSuper ? [1, 2] : ((perms.allowed_terms || []).map(Number));
+    const allowedSecs = isSuper
+      ? ['exams', 'lectures', 'lecture-quizzes', 'summaries']
+      : (perms.allowed_sections || []);
+
+    if (isAdminPageOpen) {
+      // 1. تحديث أزرار الترمات المسموح بها لحظياً
+      if (allowedTerms.length && !allowedTerms.includes(Number(currentTerm))) {
+        currentTerm = allowedTerms[0];
+      }
+      [1, 2].forEach(t => {
+        const btn = document.getElementById(`admin-term-${t}`);
+        if (btn) {
+          btn.style.display = (isSuper || allowedTerms.includes(t)) ? '' : 'none';
+          btn.classList.toggle('active', t === Number(currentTerm));
+        }
+      });
+
+      // 2. تحديث تبويبات الأقسام المسموح بها لحظياً
+      ['exams', 'lectures', 'lecture-quizzes', 'summaries'].forEach(sec => {
+        const tBtn = document.getElementById(`admin-tab-${sec}`);
+        if (tBtn) {
+          const canSeeSec = isSuper || allowedSecs.includes('*') || allowedSecs.includes(sec);
+          tBtn.style.display = canSeeSec ? '' : 'none';
+        }
+      });
+      ['overview', 'users', 'analytics', 'logs'].forEach(tabName => {
+        const tBtn = document.getElementById(`admin-tab-${tabName}`);
+        if (tBtn) {
+          const allowed = (isSuper && !window.IS_PUBLIC_OWNER_DASHBOARD) || (tabName === 'analytics' && window.checkAdminPermission('analytics') && !window.IS_PUBLIC_OWNER_DASHBOARD);
+          tBtn.style.display = allowed ? '' : 'none';
+        }
+      });
+
+      if (typeof updateAdminLabel === 'function') updateAdminLabel();
+
+      // 3. إذا أصبح القسم المفتوح حالياً غير مسموح به، ننتقل فوراً لأول قسم مسموح
+      const currentSecAllowed = isSuper || allowedSecs.includes('*') || allowedSecs.includes(adminCurrentSection) || (adminCurrentSection === 'analytics' && window.checkAdminPermission('analytics'));
+      if (!currentSecAllowed) {
+        const firstAllowedSec = ['exams', 'lectures', 'lecture-quizzes', 'summaries'].find(s => isSuper || allowedSecs.includes('*') || allowedSecs.includes(s));
+        if (firstAllowedSec && typeof window.switchAdminSection === 'function') {
+          window.switchAdminSection(firstAllowedSec);
+        }
+      } else {
+        // إعادة رسم القسم المفتوح حالياً لتحديث أزرار الإضافة/التعديل/الحذف/الإخفاء فوراً
+        if (adminCurrentSection === 'exams' || adminCurrentSection === 'lecture-quizzes') {
+          if (addingQuestionToQuizId && (window.checkAdminPermission('edit', adminCurrentSection) || window.checkAdminPermission('publish', adminCurrentSection))) {
+            window.openEditQuiz(addingQuestionToQuizId);
+          } else {
+            addingQuestionToQuizId = null;
+            if (adminCurrentSection === 'lecture-quizzes' && !adminLqCurrentFolder) {
+              window.renderAdminLqFolders();
+            } else {
+              window.renderAdminQuizzes();
+            }
+          }
+        } else if (adminCurrentSection === 'lectures') {
+          if (typeof window._renderAdminLecturesInsideUI === 'function' && adminLecturesCurrentSubject) {
+            window._renderAdminLecturesInsideUI();
+          } else if (typeof loadResources === 'function' && typeof renderAdminLecturesGrouped === 'function') {
+            loadResources('lectures').then(renderAdminLecturesGrouped);
+          }
+        } else if (adminCurrentSection === 'summaries') {
+          if (typeof window._renderAdminSummariesUI === 'function') {
+            window._renderAdminSummariesUI();
+          }
+        }
+        window.applyAdminActionButtonsVisibility();
+      }
+      toast('⚡ تم تحديث صلاحياتك الإدارية في الوقت الفعلي!');
+    } else {
+      toast('⚡ تم تحديث صلاحيات حسابك في الوقت الفعلي!');
+    }
+  };
+
   // دالة موحدة لمزامنة دور وصلاحيات المستخدم الحالي من قاعدة البيانات في الوقت الفعلي
-  window.syncUserPermissionsFromDB = async function () {
+  let _syncInFlight = false;
+  window.syncUserPermissionsFromDB = async function (opts = {}) {
     const u = window.authSession?.user;
     if (!u || (!u.id && !u.email)) return null;
+    if (_syncInFlight && opts.realtime) return null;
+    _syncInFlight = true;
+
     const lowerEmail = (u.email || '').trim().toLowerCase();
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(u.id || ''));
     const sbHeaders = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Cache-Control': 'no-cache' };
+
+    const prevRole = window.currentAdminRole || window.authSession?.profile?.role || 'student';
+    const prevPerms = window.currentAdminPermissions || window.authSession?.permissions || null;
+    const prevSig = _buildPermSig(prevRole, prevPerms);
+    const hadValidAdminBefore = prevRole === 'super_admin' || (
+      ['admin', 'content_manager'].includes(prevRole) &&
+      prevPerms &&
+      Array.isArray(prevPerms.allowed_terms) && prevPerms.allowed_terms.length > 0 &&
+      Array.isArray(prevPerms.allowed_sections) && prevPerms.allowed_sections.length > 0 &&
+      window.hasAnyAdminActionPermission(prevPerms)
+    );
 
     try {
       const overridesPromise = window.fetchSystemUserOverrides();
@@ -9158,10 +9304,19 @@ ESSAY
         : (dbProf ? dbProf.is_active !== false : false);
 
       if (!existsInDb || uOv.deleted || !effectiveActive) {
+        const wasLoggedIn = Boolean(window.authSession?.user);
         window._dbAccountVerified = false;
         window.authSession = { accessToken: null, refreshToken: null, user: null, profile: null, permissions: null };
+        window.currentAdminRole = 'student';
+        window.currentAdminPermissions = null;
         localStorage.removeItem('supabase_auth_session');
         updateNavbarAuthUI();
+        if (wasLoggedIn && !window.IS_STANDALONE_SUPER_ADMIN) {
+          if (typeof stopExamTimer === 'function') stopExamTimer();
+          document.querySelectorAll('.modal-overlay').forEach(m => m.classList.add('hidden'));
+          if (typeof showGradeSelection === 'function') showGradeSelection();
+          toast(uOv.deleted ? '🗑️ تم حذف حسابك من قِبل الإدارة — تم تسجيل الخروج تلقائياً' : '⛔ تم تعطيل حسابك من قِبل الإدارة — تم تسجيل الخروج تلقائياً', 'error');
+        }
         return null;
       }
 
@@ -9169,7 +9324,9 @@ ESSAY
       window._dbAccountVerifiedAt = Date.now();
 
       const resolvedId = dbProf?.id || u.id;
-      const resolvedRole = dbProf?.role || uOv.role || 'student';
+      const resolvedRole = (uOv.updated_at && (!dbProf?.updated_at || uOv.updated_at >= dbProf.updated_at) && uOv.role)
+        ? uOv.role
+        : (dbProf?.role || uOv.role || 'student');
 
       let dbPerms = null;
       if (resolvedRole !== 'student') {
@@ -9184,7 +9341,7 @@ ESSAY
 
       const rawPerms = resolvedRole === 'student'
         ? null
-        : (dbPerms || uOv.permissions || null);
+        : ((uOv.updated_at && uOv.permissions) ? uOv.permissions : (dbPerms || uOv.permissions || null));
 
       const finalPerms = rawPerms ? {
         role_code: resolvedRole,
@@ -9223,9 +9380,25 @@ ESSAY
 
       localStorage.setItem('supabase_auth_session', JSON.stringify(window.authSession));
       updateNavbarAuthUI();
+
+      const newSig = _buildPermSig(window.currentAdminRole, window.currentAdminPermissions);
+      const hasValidAdminNow = window.currentAdminRole === 'super_admin' || (
+        ['admin', 'content_manager'].includes(window.currentAdminRole) &&
+        window.currentAdminPermissions &&
+        Array.isArray(window.currentAdminPermissions.allowed_terms) && window.currentAdminPermissions.allowed_terms.length > 0 &&
+        Array.isArray(window.currentAdminPermissions.allowed_sections) && window.currentAdminPermissions.allowed_sections.length > 0 &&
+        window.hasAnyAdminActionPermission(window.currentAdminPermissions)
+      );
+
+      if (opts.realtime && newSig !== prevSig) {
+        window.applyLivePermissionsToOpenUI(hadValidAdminBefore, hasValidAdminNow);
+      }
+
       return { profile: window.authSession.profile, permissions: finalPerms };
     } catch (e) {
       return null;
+    } finally {
+      _syncInFlight = false;
     }
   };
 
@@ -10376,10 +10549,121 @@ ESSAY
     } catch (e) {}
   };
 
-  async function loadAdminUsersAndRoles() {
+  window._adminUsersList = [];
+  let _lastRenderedUsersSig = '';
+
+  window.renderAdminUsersTableNow = function (profiles) {
     const container = document.getElementById('admin-section-users');
     if (!container) return;
-    container.innerHTML = renderSkeletonCards(3);
+
+    window._adminUsersList = profiles || [];
+    window._adminUsersMap = {};
+    window._adminUsersList.forEach(u => {
+      if (u.id) window._adminUsersMap[u.id] = u;
+      if (u.email) {
+        window._adminUsersMap[u.email] = u;
+        window._adminUsersMap[u.email.toLowerCase()] = u;
+      }
+    });
+
+    const SEC_LABELS = { 'exams': 'الامتحانات', 'lectures': 'المحاضرات', 'lecture-quizzes': 'أسئلة المحاضرات', 'summaries': 'الملخصات', '*': 'كل الأقسام' };
+
+    container.innerHTML = `
+      <div class="glass-card" style="padding:1.4rem;margin-bottom:1.4rem">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:10px">
+          <div>
+            <h4 style="font-size:1.1rem;font-weight:900"><i class="fas fa-user-shield" style="color:var(--teal);margin-left:6px"></i> إدارة الحسابات والمسؤولين والصلاحيات (RBAC) <span style="font-size:0.74rem;color:var(--teal);background:rgba(45,212,191,0.12);padding:3px 9px;border-radius:20px;margin-right:6px">⚡ مزامنة فورية Real-Time</span></h4>
+            <p style="font-size:0.82rem;color:var(--text-dim)">أي تعديل في الصلاحيات أو تفعيل/تعطيل أو حذف حساب يُطبَّق في نفس اللحظة بدون ريفريش</p>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-primary" onclick="openAdminAddUserModal()"><i class="fas fa-user-plus"></i> إضافة حساب جديد مباشرة</button>
+            <button class="btn btn-blue" onclick="openAssignRoleModal()"><i class="fas fa-user-shield"></i> تخصيص صلاحيات مسؤول</button>
+          </div>
+        </div>
+
+        ${window._adminUsersList.length === 0
+          ? `<div class="empty" style="padding:2rem"><i class="fas fa-users"></i><p>لا توجد حسابات مسجلة حالياً.</p></div>`
+          : `
+          <div class="data-table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>الاسم</th>
+                  <th>البريد الإلكتروني</th>
+                  <th>الدور (Role)</th>
+                  <th>الترم الدراسي</th>
+                  <th>نطاق الصلاحيات</th>
+                  <th>الحالة</th>
+                  <th>إجراءات</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${window._adminUsersList.map(u => {
+                  const up = u._ovPerms;
+                  let scopeStr = 'قراءة وحل اختبارات فقط';
+                  if (u.role === 'super_admin') {
+                    scopeStr = 'صلاحيات كاملة (كل الأقسام والترمات)';
+                  } else if (u.role !== 'student' && up && window.hasAnyAdminActionPermission(up)) {
+                    const secNames = (up.allowed_sections || []).map(s => SEC_LABELS[s] || s).join('، ');
+                    const acts = [];
+                    if (up.can_create) acts.push('إضافة');
+                    if (up.can_edit) acts.push('تعديل');
+                    if (up.can_delete) acts.push('حذف');
+                    if (up.can_publish) acts.push('نشر/إخفاء');
+                    if (up.can_manage_owners) acts.push('Owners');
+                    if (up.can_view_analytics) acts.push('إحصائيات');
+                    scopeStr = `${secNames ? `الأقسام: (${secNames})` : ''}${acts.length ? ` | العمليات: (${acts.join('، ')})` : ''}`;
+                  }
+                  const safeEmail = (u.email || '').replace(/'/g, "\\'");
+                  const isDisabled = u.is_active === false;
+                  const isPending = u._pendingConfirmation === true;
+                  const statusBadge = isDisabled
+                    ? '<span style="color:var(--red);font-weight:800">⛔ معطل</span>'
+                    : isPending
+                      ? '<span style="color:var(--amber);font-weight:800">⏳ بانتظار تأكيد الإيميل</span>'
+                      : '<span style="color:var(--teal);font-weight:800">🟢 نشط ومؤكد</span>';
+                  return `
+                    <tr>
+                      <td style="font-weight:800">${u.full_name || '—'}</td>
+                      <td>${u.email}</td>
+                      <td><span class="role-tag-badge">${u.role}</span></td>
+                      <td>${TERM_NAMES[u.term || 1] || 'الترم الأول'}</td>
+                      <td style="font-size:0.78rem;color:var(--text-dim)">${scopeStr}</td>
+                      <td>${statusBadge}</td>
+                      <td>
+                        <div style="display:flex;gap:6px;flex-wrap:wrap">
+                          ${isPending ? `
+                          <button class="btn btn-primary" style="padding:5px 10px;font-size:0.78rem" onclick="adminConfirmUserAccountNow('${u.id}', '${safeEmail}')" title="تأكيد وتفعيل الحساب فوراً بدون انتظار رابط الإيميل">
+                            <i class="fas fa-check-circle"></i> تأكيد الحساب
+                          </button>` : ''}
+                          <button class="btn btn-blue" style="padding:5px 10px;font-size:0.78rem" onclick="openAssignRoleModal('${u.id}', '${safeEmail}')">
+                            <i class="fas fa-key"></i> الصلاحيات
+                          </button>
+                          <button class="btn btn-ghost" style="padding:5px 10px;font-size:0.78rem;color:var(--teal);border-color:rgba(45,212,191,0.35)" onclick="openAdminAddUserModal('${safeEmail}', '${(u.full_name || '').replace(/'/g, "\\'")}', '${u.term || 1}')" title="تعيين أو تغيير كلمة المرور لهذا الحساب مباشرة">
+                            <i class="fas fa-lock"></i> الباسورد
+                          </button>
+                          <button class="btn ${isDisabled ? 'btn-primary' : 'btn-danger'}" style="padding:5px 10px;font-size:0.78rem" onclick="toggleUserActiveStatus('${u.id}', ${isDisabled ? 'true' : 'false'}, '${safeEmail}')" title="${isDisabled ? 'تفعيل الحساب' : 'تعطيل الحساب'}">
+                            <i class="fas fa-${isDisabled ? 'check' : 'ban'}"></i> ${isDisabled ? 'تفعيل' : 'تعطيل'}
+                          </button>
+                          <button class="btn btn-ghost" style="padding:5px 10px;font-size:0.78rem;color:var(--red);border-color:rgba(248,113,113,0.3)" onclick="deleteUserAccountAdmin('${u.id}', '${safeEmail}')" title="حذف الحساب نهائياً">
+                            <i class="fas fa-trash"></i>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>`;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>`}
+      </div>`;
+  };
+
+  async function loadAdminUsersAndRoles(silent = false) {
+    const container = document.getElementById('admin-section-users');
+    if (!container) return;
+    if (!silent && (!window._adminUsersList || !window._adminUsersList.length)) {
+      container.innerHTML = renderSkeletonCards(3);
+    }
 
     try {
       const [pRes, permRes, overrides] = await Promise.all([
@@ -10424,121 +10708,34 @@ ESSAY
           const ovById = (u.id && overrides[u.id]) ? overrides[u.id] : {};
           const ov = { ...ovByEmail, ...ovById };
           const isActive = typeof ov.is_active === 'boolean' ? ov.is_active : (u.is_active !== false);
+          const resolvedRole = (ov.updated_at && (!u.updated_at || ov.updated_at >= u.updated_at) && ov.role)
+            ? ov.role
+            : (ov.role || u.role || 'student');
           return {
             ...u,
             full_name: ov.full_name || u.full_name,
-            role: ov.role || u.role || 'student',
+            role: resolvedRole,
             term: ov.term || u.term || 1,
             is_active: isActive,
             _deleted: !!ov.deleted,
             _pendingConfirmation: !!ov.pending_confirmation,
-            _ovPerms: ov.permissions || permMap.get(u.id) || null
+            _ovPerms: resolvedRole === 'student' ? null : (ov.permissions || permMap.get(u.id) || null)
           };
         })
         .filter(u => !u._deleted);
 
-      // حفظ كاش فوري لبيانات المستخدمين وصلاحياتهم لفتح نافذة الصلاحيات في 0ms بدون أي تأخير شبكي
-      window._adminUsersMap = {};
-      profiles.forEach(u => {
-        if (u.id) window._adminUsersMap[u.id] = u;
-        if (u.email) {
-          window._adminUsersMap[u.email] = u;
-          window._adminUsersMap[u.email.toLowerCase()] = u;
-        }
-      });
+      const newSig = JSON.stringify(profiles.map(u => ({
+        id: u.id, em: u.email, fn: u.full_name, r: u.role, t: u.term, a: u.is_active, p: u._pendingConfirmation, pm: u._ovPerms
+      })));
 
-      const SEC_LABELS = { 'exams': 'الامتحانات', 'lectures': 'المحاضرات', 'lecture-quizzes': 'أسئلة المحاضرات', 'summaries': 'الملخصات', '*': 'كل الأقسام' };
-
-      container.innerHTML = `
-        <div class="glass-card" style="padding:1.4rem;margin-bottom:1.4rem">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:10px">
-            <div>
-              <h4 style="font-size:1.1rem;font-weight:900"><i class="fas fa-user-shield" style="color:var(--teal);margin-left:6px"></i> إدارة الحسابات والمسؤولين والصلاحيات (RBAC)</h4>
-              <p style="font-size:0.82rem;color:var(--text-dim)">إضافة حسابات مباشرة، تأكيد الحسابات المعلقة، تخصيص الصلاحيات، أو تعطيل/حذف أي حساب</p>
-            </div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap">
-              <button class="btn btn-primary" onclick="openAdminAddUserModal()"><i class="fas fa-user-plus"></i> إضافة حساب جديد مباشرة</button>
-              <button class="btn btn-blue" onclick="openAssignRoleModal()"><i class="fas fa-user-shield"></i> تخصيص صلاحيات مسؤول</button>
-            </div>
-          </div>
-
-          ${profiles.length === 0
-            ? `<div class="empty" style="padding:2rem"><i class="fas fa-users"></i><p>لا توجد حسابات مسجلة حالياً.</p></div>`
-            : `
-            <div class="data-table-wrap">
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th>الاسم</th>
-                    <th>البريد الإلكتروني</th>
-                    <th>الدور (Role)</th>
-                    <th>الترم الدراسي</th>
-                    <th>نطاق الصلاحيات</th>
-                    <th>الحالة</th>
-                    <th>إجراءات</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${profiles.map(u => {
-                    const up = u._ovPerms || permMap.get(u.id);
-                    let scopeStr = 'قراءة وحل اختبارات فقط';
-                    if (u.role === 'super_admin') {
-                      scopeStr = 'صلاحيات كاملة (كل الأقسام والترمات)';
-                    } else if (u.role !== 'student' && up && window.hasAnyAdminActionPermission(up)) {
-                      const secNames = (up.allowed_sections || []).map(s => SEC_LABELS[s] || s).join('، ');
-                      const acts = [];
-                      if (up.can_create) acts.push('إضافة');
-                      if (up.can_edit) acts.push('تعديل');
-                      if (up.can_delete) acts.push('حذف');
-                      if (up.can_publish) acts.push('نشر/إخفاء');
-                      if (up.can_manage_owners) acts.push('Owners');
-                      if (up.can_view_analytics) acts.push('إحصائيات');
-                      scopeStr = `${secNames ? `الأقسام: (${secNames})` : ''}${acts.length ? ` | العمليات: (${acts.join('، ')})` : ''}`;
-                    }
-                    const safeEmail = (u.email || '').replace(/'/g, "\\'");
-                    const isDisabled = u.is_active === false;
-                    const isPending = u._pendingConfirmation === true;
-                    const statusBadge = isDisabled
-                      ? '<span style="color:var(--red);font-weight:800">⛔ معطل</span>'
-                      : isPending
-                        ? '<span style="color:var(--amber);font-weight:800">⏳ بانتظار تأكيد الإيميل</span>'
-                        : '<span style="color:var(--teal);font-weight:800">🟢 نشط ومؤكد</span>';
-                    return `
-                      <tr>
-                        <td style="font-weight:800">${u.full_name || '—'}</td>
-                        <td>${u.email}</td>
-                        <td><span class="role-tag-badge">${u.role}</span></td>
-                        <td>${TERM_NAMES[u.term || 1] || 'الترم الأول'}</td>
-                        <td style="font-size:0.78rem;color:var(--text-dim)">${scopeStr}</td>
-                        <td>${statusBadge}</td>
-                        <td>
-                          <div style="display:flex;gap:6px;flex-wrap:wrap">
-                            ${isPending ? `
-                            <button class="btn btn-primary" style="padding:5px 10px;font-size:0.78rem" onclick="adminConfirmUserAccountNow('${u.id}', '${safeEmail}')" title="تأكيد وتفعيل الحساب فوراً بدون انتظار رابط الإيميل">
-                              <i class="fas fa-check-circle"></i> تأكيد الحساب
-                            </button>` : ''}
-                            <button class="btn btn-blue" style="padding:5px 10px;font-size:0.78rem" onclick="openAssignRoleModal('${u.id}', '${safeEmail}')">
-                              <i class="fas fa-key"></i> الصلاحيات
-                            </button>
-                            <button class="btn btn-ghost" style="padding:5px 10px;font-size:0.78rem;color:var(--teal);border-color:rgba(45,212,191,0.35)" onclick="openAdminAddUserModal('${safeEmail}', '${(u.full_name || '').replace(/'/g, "\\'")}', '${u.term || 1}')" title="تعيين أو تغيير كلمة المرور لهذا الحساب مباشرة">
-                              <i class="fas fa-lock"></i> الباسورد
-                            </button>
-                            <button class="btn ${isDisabled ? 'btn-primary' : 'btn-danger'}" style="padding:5px 10px;font-size:0.78rem" onclick="toggleUserActiveStatus('${u.id}', ${isDisabled ? 'true' : 'false'}, '${safeEmail}')" title="${isDisabled ? 'تفعيل الحساب' : 'تعطيل الحساب'}">
-                              <i class="fas fa-${isDisabled ? 'check' : 'ban'}"></i> ${isDisabled ? 'تفعيل' : 'تعطيل'}
-                            </button>
-                            <button class="btn btn-ghost" style="padding:5px 10px;font-size:0.78rem;color:var(--red);border-color:rgba(248,113,113,0.3)" onclick="deleteUserAccountAdmin('${u.id}', '${safeEmail}')" title="حذف الحساب نهائياً">
-                              <i class="fas fa-trash"></i>
-                            </button>
-                          </div>
-                        </td>
-                      </tr>`;
-                  }).join('')}
-                </tbody>
-              </table>
-            </div>`}
-        </div>`;
+      if (!silent || newSig !== _lastRenderedUsersSig || !container.querySelector('table')) {
+        _lastRenderedUsersSig = newSig;
+        window.renderAdminUsersTableNow(profiles);
+      }
     } catch (e) {
-      container.innerHTML = `<div class="empty"><p>تعذر تحميل قائمة المستخدمين</p></div>`;
+      if (!silent && (!window._adminUsersList || !window._adminUsersList.length)) {
+        container.innerHTML = `<div class="empty"><p>تعذر تحميل قائمة المستخدمين</p></div>`;
+      }
     }
   }
   window.loadAdminUsersAndRoles = loadAdminUsersAndRoles;
@@ -10610,6 +10807,32 @@ ESSAY
     }
     if (errEl) errEl.textContent = '';
 
+    const nowIso = new Date().toISOString();
+    const existingUser = (window._adminUsersMap && window._adminUsersMap[email]) || null;
+    const tempUid = existingUser?.id || _generateUuid();
+
+    // 1. تحديث فوري على الشاشة (0ms Optimistic UI) بدون ريفريش
+    const updatedRow = {
+      ...(existingUser || {}),
+      id: tempUid,
+      email: email,
+      full_name: fullName,
+      grade: 'bis',
+      term: term,
+      section_code: 'bis',
+      role: existingUser?.role || 'student',
+      is_active: true,
+      _deleted: false,
+      _pendingConfirmation: false,
+      _ovPerms: existingUser?._ovPerms || null,
+      created_at: existingUser?.created_at || nowIso
+    };
+    const nextList = (window._adminUsersList || []).filter(u => (u.email || '').toLowerCase() !== email && u.id !== tempUid);
+    nextList.unshift(updatedRow);
+    window.renderAdminUsersTableNow(nextList);
+    closeModal('admin-add-user-modal');
+    toast(`✅ تم حفظ وتفعيل حساب (${email}) فوراً في الوقت الفعلي!`);
+
     try {
       let rpcProfile = null;
       const rpcRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/register_student_direct`, {
@@ -10631,7 +10854,7 @@ ESSAY
         rpcProfile = await rpcRes.json();
       }
 
-      const uid = rpcProfile?.id || _generateUuid();
+      const uid = rpcProfile?.id || tempUid;
       const overrides = await window.fetchSystemUserOverrides();
       const cloudUser = {
         id: uid,
@@ -10640,61 +10863,64 @@ ESSAY
         grade: 'bis',
         term: term,
         section_code: 'bis',
-        role: overrides[email]?.role && overrides[email].role !== 'student' ? overrides[email].role : 'student',
-        permissions: overrides[email]?.permissions || null,
+        role: overrides[email]?.role && overrides[email].role !== 'student' ? overrides[email].role : (existingUser?.role || 'student'),
+        permissions: overrides[email]?.permissions || existingUser?._ovPerms || null,
         is_active: true,
         deleted: false,
         pending_confirmation: false,
         pw_hash: _encodePass(password),
-        created_at: rpcProfile?.created_at || new Date().toISOString()
+        updated_at: nowIso,
+        created_at: rpcProfile?.created_at || existingUser?.created_at || nowIso
       };
       overrides[uid] = { ...(overrides[uid] || {}), ...cloudUser };
       overrides[email] = { ...(overrides[email] || {}), ...cloudUser };
       await window.saveSystemUserOverrides(overrides);
 
-      await logAdminActivity('إضافة حساب مباشر', 'user', `${fullName} (${email})`, uid);
-      closeModal('admin-add-user-modal');
-      toast(`✅ تم إنشاء وتفعيل حساب (${email}) بنجاح! يمكنه تسجيل الدخول الآن مباشرة.`);
-      await loadAdminUsersAndRoles();
-    } catch (e) {
-      if (errEl) errEl.textContent = '❌ حدث خطأ أثناء إنشاء الحساب';
-    }
+      window.broadcastRealtimeUserSync('upsert_user', email, uid);
+      logAdminActivity('إضافة حساب مباشر', 'user', `${fullName} (${email})`, uid);
+      await loadAdminUsersAndRoles(true);
+    } catch (e) {}
   };
 
   window.adminConfirmUserAccountNow = async function (uid, email) {
     const lowerEmail = (email || '').trim().toLowerCase();
-    try {
-      await fetch(`${SUPABASE_URL}/rest/v1/rpc/admin_confirm_user_email`, {
-        method: 'POST',
-        headers: {
-          'apikey': SUPABASE_KEY,
-          'Authorization': `Bearer ${SUPABASE_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ p_email: lowerEmail })
-      }).catch(() => {});
+    const nowIso = new Date().toISOString();
 
-      const overrides = await window.fetchSystemUserOverrides();
-      if (uid && overrides[uid]) {
-        overrides[uid].pending_confirmation = false;
-        overrides[uid].is_active = true;
-        overrides[uid].deleted = false;
-      }
-      if (lowerEmail && overrides[lowerEmail]) {
-        overrides[lowerEmail].pending_confirmation = false;
-        overrides[lowerEmail].is_active = true;
-        overrides[lowerEmail].deleted = false;
-      }
-      if (email && overrides[email]) {
-        overrides[email].pending_confirmation = false;
-        overrides[email].is_active = true;
-        overrides[email].deleted = false;
-      }
+    // 1. تحديث فوري على الشاشة (0ms Optimistic UI)
+    if (window._adminUsersList && window._adminUsersList.length) {
+      window._adminUsersList.forEach(u => {
+        if (u.id === uid || (u.email || '').toLowerCase() === lowerEmail) {
+          u._pendingConfirmation = false;
+          u.is_active = true;
+        }
+      });
+      window.renderAdminUsersTableNow(window._adminUsersList);
+    }
+    toast(`✅ تم تأكيد وتفعيل حساب (${lowerEmail}) فوراً في الوقت الفعلي!`);
+
+    try {
+      const [, overrides] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/rpc/admin_confirm_user_email`, {
+          method: 'POST',
+          headers: {
+            'apikey': SUPABASE_KEY,
+            'Authorization': `Bearer ${SUPABASE_KEY}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ p_email: lowerEmail })
+        }).catch(() => {}),
+        window.fetchSystemUserOverrides()
+      ]);
+
+      const patchObj = { pending_confirmation: false, is_active: true, deleted: false, updated_at: nowIso };
+      if (uid) overrides[uid] = { ...(overrides[uid] || {}), ...patchObj };
+      if (lowerEmail) overrides[lowerEmail] = { ...(overrides[lowerEmail] || {}), ...patchObj };
+      if (email) overrides[email] = { ...(overrides[email] || {}), ...patchObj };
       await window.saveSystemUserOverrides(overrides);
 
-      await logAdminActivity('تأكيد حساب يدوياً', 'user', lowerEmail, uid);
-      toast(`✅ تم تأكيد وتفعيل حساب (${lowerEmail}) فوراً!`);
-      await loadAdminUsersAndRoles();
+      window.broadcastRealtimeUserSync('confirm', lowerEmail, uid);
+      logAdminActivity('تأكيد حساب يدوياً', 'user', lowerEmail, uid);
+      await loadAdminUsersAndRoles(true);
     } catch (e) {
       toast('تعذر تأكيد الحساب', 'error');
     }
@@ -10797,20 +11023,15 @@ ESSAY
     // معالجة ذكية لجميع حالات اختيار الصلاحيات:
     if (!isSuper) {
       if (selectedSections.length === 0 && !hasAnyAction) {
-        // الحالة 1: لم يحدد أي قسم ولا أي عملية -> سحب جميع الصلاحيات وتحويله لطالب عادي
         roleCode = 'student';
       } else if (roleCode === 'student' && (selectedSections.length > 0 || hasAnyAction)) {
-        // إذا حدد السوبر أدمن أقساماً أو عمليات وكان الـ select على student، نرفعه تلقائياً لـ content_manager
         roleCode = 'content_manager';
       }
 
       if (roleCode !== 'student') {
-        // إذا لم يحدد أي ترم، نفعل الترم الأول والثاني تلقائياً
         if (selectedTerms.length === 0) {
           selectedTerms = [1, 2];
         }
-        // الحالة 2: حدد السوبر أدمن أقساماً من الأعلى (مثل: الامتحانات أو المحاضرات) ولم يحدد أي عملية بالأسفل
-        // -> نمنحه صلاحيات إدارة هذا القسم بالكامل (إضافة، تعديل، حذف، نشر/إخفاء)
         if (selectedSections.length > 0 && !hasAnyAction) {
           canCreate = true;
           canEdit = true;
@@ -10818,8 +11039,6 @@ ESSAY
           canPublish = true;
           hasAnyAction = true;
         }
-        // الحالة 3: حدد السوبر أدمن عملية بالأسفل فقط (مثل: نشر/إخفاء فقط) ولم يحدد أي قسم من الأعلى
-        // -> نطبق هذه العملية المختارة فقط: إذا كانت (نشر/إخفاء فقط) نطبقها على الامتحانات وأسئلة المحاضرات، وإلا على كل الأقسام
         if (selectedSections.length === 0 && hasAnyAction) {
           if (canPublish && !canCreate && !canEdit && !canDelete && !canOwners) {
             selectedSections = ['exams', 'lecture-quizzes'];
@@ -10847,11 +11066,32 @@ ESSAY
       can_manage_users: isSuper
     };
 
+    const initialUid = document.getElementById('rbac-user-id').value || (window._adminUsersMap && window._adminUsersMap[email]?.id) || email;
+    const nowIso = new Date().toISOString();
+
+    // 1. تحديث فوري (0ms Optimistic UI) في جدول السوبر أدمن وإغلاق النافذة فوراً بدون انتظار
+    if (window._adminUsersList && window._adminUsersList.length) {
+      let found = false;
+      window._adminUsersList.forEach(u => {
+        if (u.id === initialUid || (u.email || '').toLowerCase() === email) {
+          u.role = roleCode;
+          u._ovPerms = isStudent ? null : permPayload;
+          u._pendingConfirmation = false;
+          u.is_active = true;
+          found = true;
+        }
+      });
+      if (found) {
+        window.renderAdminUsersTableNow(window._adminUsersList);
+      }
+    }
+    closeModal('rbac-modal');
+    toast('⚡ تم حفظ وتفعيل الصلاحيات فوراً في الوقت الفعلي!');
+
     try {
-      // 1. Call Supabase RPC admin_save_user_permissions to atomically update profiles + role_permissions
-      let rpcUid = null;
-      try {
-        const rpcRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/admin_save_user_permissions`, {
+      // 2. حفظ متوازٍ سريع في قاعدة البيانات + الكاش السحابي (Promise.all)
+      const [rpcRes, overrides] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/rpc/admin_save_user_permissions`, {
           method: 'POST',
           headers: {
             'apikey': SUPABASE_KEY,
@@ -10871,108 +11111,106 @@ ESSAY
             p_can_view_analytics: permPayload.can_view_analytics,
             p_can_manage_users: permPayload.can_manage_users
           })
-        });
-        if (rpcRes.ok) {
-          const rpcData = await rpcRes.json();
-          if (rpcData?.user_id) rpcUid = rpcData.user_id;
-        }
-      } catch (e) {}
+        }).catch(() => null),
+        window.fetchSystemUserOverrides()
+      ]);
 
-      const pRes = await api(`profiles?select=id,email&email=ilike.${encodeURIComponent(email)}`);
-      const rows = pRes.ok ? await pRes.json() : [];
-      const uid = rpcUid || rows[0]?.id || document.getElementById('rbac-user-id').value || email;
+      let rpcUid = null;
+      if (rpcRes && rpcRes.ok) {
+        const rpcData = await rpcRes.json().catch(() => null);
+        if (rpcData?.user_id) rpcUid = rpcData.user_id;
+      }
 
-      // 2. Save in real-time overrides + profiles table + role_permissions table
-      const overrides = await window.fetchSystemUserOverrides();
-      overrides[uid] = { ...(overrides[uid] || {}), role: roleCode, permissions: permPayload, pending_confirmation: false, is_active: true, deleted: false };
-      overrides[email] = { ...(overrides[email] || {}), role: roleCode, permissions: permPayload, pending_confirmation: false, is_active: true, deleted: false };
+      const uid = rpcUid || initialUid;
+      const patchOv = {
+        role: roleCode,
+        permissions: isStudent ? null : permPayload,
+        pending_confirmation: false,
+        is_active: true,
+        deleted: false,
+        updated_at: nowIso
+      };
+      overrides[uid] = { ...(overrides[uid] || {}), ...patchOv };
+      overrides[email] = { ...(overrides[email] || {}), ...patchOv };
       if (rawEmail && rawEmail !== email) {
-        overrides[rawEmail] = { ...(overrides[rawEmail] || {}), role: roleCode, permissions: permPayload, pending_confirmation: false, is_active: true, deleted: false };
+        overrides[rawEmail] = { ...(overrides[rawEmail] || {}), ...patchOv };
       }
       await window.saveSystemUserOverrides(overrides);
 
-      if (rows.length || rpcUid) {
-        await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${uid}`, {
-          method: 'PATCH',
-          headers: {
-            'apikey': SUPABASE_KEY,
-            'Authorization': `Bearer ${SUPABASE_KEY}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ role: roleCode, updated_at: new Date().toISOString() })
-        }).catch(() => {});
-
-        await api(`role_permissions?user_id=eq.${uid}`, { method: 'DELETE' }).catch(() => {});
-        await api('role_permissions', {
-          method: 'POST',
-          body: JSON.stringify({ user_id: uid, ...permPayload })
-        }).catch(() => {});
-      }
+      // بث التحديث اللحظي لجميع الصفحات المفتوحة
+      window.broadcastRealtimeUserSync('permissions', email, uid);
 
       if (window.authSession?.user && (window.authSession.user.id === uid || (window.authSession.user.email || '').toLowerCase() === email)) {
-        await window.syncUserPermissionsFromDB();
+        await window.syncUserPermissionsFromDB({ realtime: true });
       }
 
-      await logAdminActivity('تغيير صلاحيات مسؤول', 'user', `${email} -> ${roleCode}`, uid);
-      closeModal('rbac-modal');
-      toast('✅ تم حفظ دور وصلاحيات المسؤول وتفعيلها فوراً!');
-      loadAdminUsersAndRoles();
+      logAdminActivity('تغيير صلاحيات مسؤول', 'user', `${email} -> ${roleCode}`, uid);
+      await loadAdminUsersAndRoles(true);
     } catch (e) {
       toast('خطأ أثناء حفظ الصلاحيات!', 'error');
     }
   };
 
   window.toggleUserActiveStatus = async function (uid, newActive, email = '') {
-    try {
-      const activeBool = (newActive === true || newActive === 'true');
+    const activeBool = (newActive === true || newActive === 'true');
+    const lowerEmail = (email || '').trim().toLowerCase();
+    const nowIso = new Date().toISOString();
 
-      // 1. Update profiles via DB function admin_toggle_user_active (fallback: direct PATCH)
+    // 1. تحديث فوري على الشاشة (0ms Optimistic UI) بدون ريفريش
+    if (window._adminUsersList && window._adminUsersList.length) {
+      window._adminUsersList.forEach(u => {
+        if (u.id === uid || (lowerEmail && (u.email || '').toLowerCase() === lowerEmail)) {
+          u.is_active = activeBool;
+        }
+      });
+      window.renderAdminUsersTableNow(window._adminUsersList);
+    }
+    toast(activeBool ? '✅ تم تفعيل الحساب فوراً في الوقت الفعلي!' : '⛔ تم تعطيل الحساب فوراً وطرده في الوقت الفعلي!');
+
+    try {
       const sbHeaders = {
         'apikey': SUPABASE_KEY,
         'Authorization': `Bearer ${SUPABASE_KEY}`,
         'Content-Type': 'application/json',
         'Prefer': 'return=representation'
       };
-      let rpcOk = false;
-      try {
-        const rpcRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/admin_toggle_user_active`, {
+
+      const [rpcRes, overrides] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/rpc/admin_toggle_user_active`, {
           method: 'POST',
           headers: sbHeaders,
           body: JSON.stringify({ p_user_id: uid, p_is_active: activeBool })
-        });
-        rpcOk = rpcRes.ok;
-      } catch (e) {}
-      if (!rpcOk) {
+        }).catch(() => null),
+        window.fetchSystemUserOverrides()
+      ]);
+
+      if (!rpcRes || !rpcRes.ok) {
         await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${uid}`, {
           method: 'PATCH',
           headers: sbHeaders,
-          body: JSON.stringify({ is_active: activeBool, updated_at: new Date().toISOString() })
+          body: JSON.stringify({ is_active: activeBool, updated_at: nowIso })
         }).catch(() => {});
       }
 
-      // 2. Sync cloud user_overrides for both uid and email
-      const overrides = await window.fetchSystemUserOverrides();
-      overrides[uid] = { ...(overrides[uid] || {}), is_active: activeBool, deleted: false };
-      if (email) {
-        overrides[email] = { ...(overrides[email] || {}), is_active: activeBool, deleted: false };
-      }
-      // Also update any key matching email in profiles
+      const patchOv = { is_active: activeBool, deleted: false, updated_at: nowIso };
+      if (uid) overrides[uid] = { ...(overrides[uid] || {}), ...patchOv };
+      if (email) overrides[email] = { ...(overrides[email] || {}), ...patchOv };
+      if (lowerEmail) overrides[lowerEmail] = { ...(overrides[lowerEmail] || {}), ...patchOv };
       Object.keys(overrides).forEach(k => {
-        if (k === uid || (email && k.toLowerCase() === email.toLowerCase())) {
-          overrides[k] = { ...(overrides[k] || {}), is_active: activeBool, deleted: false };
+        if (k === uid || (lowerEmail && k.toLowerCase() === lowerEmail)) {
+          overrides[k] = { ...(overrides[k] || {}), ...patchOv };
         }
       });
       await window.saveSystemUserOverrides(overrides);
 
-      if (!activeBool && window.authSession?.user?.id === uid) {
-        window.authSession = { accessToken: null, refreshToken: null, user: null, profile: null, permissions: null };
-        localStorage.removeItem('supabase_auth_session');
-        updateNavbarAuthUI();
+      window.broadcastRealtimeUserSync(activeBool ? 'enable' : 'disable', lowerEmail, uid);
+
+      if (!activeBool && window.authSession?.user && (window.authSession.user.id === uid || (window.authSession.user.email || '').toLowerCase() === lowerEmail)) {
+        await window.syncUserPermissionsFromDB({ realtime: true });
       }
 
-      await logAdminActivity(activeBool ? 'تفعيل حساب' : 'تعطيل حساب', 'user', email || uid, uid);
-      toast(activeBool ? '✅ تم تفعيل الحساب بنجاح ويمكنه الدخول الآن' : '⛔ تم تعطيل الحساب فوراً ولن يتمكن من الدخول');
-      await loadAdminUsersAndRoles();
+      logAdminActivity(activeBool ? 'تفعيل حساب' : 'تعطيل حساب', 'user', lowerEmail || uid, uid);
+      await loadAdminUsersAndRoles(true);
     } catch (e) {
       toast('تعذر تحديث حالة الحساب', 'error');
     }
@@ -10980,29 +11218,75 @@ ESSAY
 
   window.deleteUserAccountAdmin = async function (uid, email) {
     if (!confirm(`هل أنت متأكد من حذف الحساب (${email || uid}) نهائياً؟`)) return;
+    const lowerEmail = (email || '').trim().toLowerCase();
+    const nowIso = new Date().toISOString();
+
+    // 1. حذف فوري من الجدول على الشاشة (0ms Optimistic UI) بدون ريفريش
+    if (window._adminUsersList && window._adminUsersList.length) {
+      window._adminUsersList = window._adminUsersList.filter(u => u.id !== uid && (!lowerEmail || (u.email || '').toLowerCase() !== lowerEmail));
+      window.renderAdminUsersTableNow(window._adminUsersList);
+    }
+    toast('🗑️ تم حذف الحساب نهائياً في الوقت الفعلي!');
+
     try {
-      const overrides = await window.fetchSystemUserOverrides();
-      overrides[uid] = { ...(overrides[uid] || {}), deleted: true, is_active: false };
-      if (email) overrides[email] = { ...(overrides[email] || {}), deleted: true, is_active: false };
-      await window.saveSystemUserOverrides(overrides);
+      const sbHeaders = {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json'
+      };
 
-      await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${uid}`, {
-        method: 'DELETE',
-        headers: {
-          'apikey': SUPABASE_KEY,
-          'Authorization': `Bearer ${SUPABASE_KEY}`
+      const [, overrides] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/rpc/admin_toggle_user_active`, {
+          method: 'POST',
+          headers: sbHeaders,
+          body: JSON.stringify({ p_user_id: uid, p_is_active: false })
+        }).catch(() => null),
+        window.fetchSystemUserOverrides()
+      ]);
+
+      const patchDel = { deleted: true, is_active: false, role: 'student', permissions: null, updated_at: nowIso };
+      if (uid) overrides[uid] = { ...(overrides[uid] || {}), ...patchDel };
+      if (email) overrides[email] = { ...(overrides[email] || {}), ...patchDel };
+      if (lowerEmail) overrides[lowerEmail] = { ...(overrides[lowerEmail] || {}), ...patchDel };
+      Object.keys(overrides).forEach(k => {
+        if (k === uid || (lowerEmail && k.toLowerCase() === lowerEmail)) {
+          overrides[k] = { ...(overrides[k] || {}), ...patchDel };
         }
-      }).catch(() => {});
+      });
 
-      if (window.authSession?.user?.id === uid) {
-        window.authSession = { accessToken: null, refreshToken: null, user: null, profile: null, permissions: null };
-        localStorage.removeItem('supabase_auth_session');
-        updateNavbarAuthUI();
+      await Promise.all([
+        window.saveSystemUserOverrides(overrides),
+        fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${uid}`, {
+          method: 'DELETE',
+          headers: sbHeaders
+        }).catch(() => {}),
+        fetch(`${SUPABASE_URL}/rest/v1/rpc/admin_save_user_permissions`, {
+          method: 'POST',
+          headers: sbHeaders,
+          body: JSON.stringify({
+            p_email: lowerEmail,
+            p_role_code: 'student',
+            p_allowed_terms: [],
+            p_allowed_sections: [],
+            p_can_create: false,
+            p_can_edit: false,
+            p_can_delete: false,
+            p_can_publish: false,
+            p_can_manage_owners: false,
+            p_can_view_analytics: false,
+            p_can_manage_users: false
+          })
+        }).catch(() => {})
+      ]);
+
+      window.broadcastRealtimeUserSync('delete', lowerEmail, uid);
+
+      if (window.authSession?.user && (window.authSession.user.id === uid || (window.authSession.user.email || '').toLowerCase() === lowerEmail)) {
+        await window.syncUserPermissionsFromDB({ realtime: true });
       }
 
-      await logAdminActivity('حذف حساب مستخدم', 'user', email || uid, uid);
-      toast('🗑️ تم حذف الحساب نهائياً');
-      await loadAdminUsersAndRoles();
+      logAdminActivity('حذف حساب مستخدم', 'user', lowerEmail || uid, uid);
+      await loadAdminUsersAndRoles(true);
     } catch (e) {
       toast('تعذر حذف الحساب', 'error');
     }
@@ -11189,10 +11473,56 @@ ESSAY
       </div>`;
   };
 
-  // ─── 22. INITIALIZE ON PAGE LOAD ───
+  // ─── 22. INITIALIZE ON PAGE LOAD + REAL-TIME LIVE SYNC ENGINE ───
+  function handleIncomingRealtimeSync() {
+    if (window.IS_STANDALONE_SUPER_ADMIN) {
+      const usersPanel = document.getElementById('admin-section-users');
+      const rbacModal = document.getElementById('rbac-modal');
+      const addUserModal = document.getElementById('admin-add-user-modal');
+      const isModalOpen = (rbacModal && !rbacModal.classList.contains('hidden')) || (addUserModal && !addUserModal.classList.contains('hidden'));
+      if (usersPanel && !usersPanel.classList.contains('hidden') && !isModalOpen) {
+        loadAdminUsersAndRoles(true);
+      }
+      return;
+    }
+    if (window.authSession?.user) {
+      window.syncUserPermissionsFromDB({ realtime: true });
+    }
+  }
+
+  try {
+    if (_bisRealtimeChannel) {
+      _bisRealtimeChannel.onmessage = () => {
+        handleIncomingRealtimeSync();
+      };
+    }
+  } catch (e) {}
+
+  window.addEventListener('storage', (e) => {
+    if (e.key === 'bis_realtime_user_sync_ping' || e.key === 'super_admin_user_overrides_v2') {
+      handleIncomingRealtimeSync();
+    }
+  });
+
+  window.addEventListener('focus', () => {
+    handleIncomingRealtimeSync();
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+      handleIncomingRealtimeSync();
+    }
+  });
+
   document.addEventListener('DOMContentLoaded', () => {
     restoreSavedAuthSession();
     loadStudentNotifications();
+
+    // نبض مزامنة سحابي لحظي كل 2.5 ثانية لتطبيق أي تعديل في الصلاحيات أو تعطيل/حذف الحساب فوراً بدون ريفريش
+    setInterval(() => {
+      if (document.hidden) return;
+      handleIncomingRealtimeSync();
+    }, 2500);
 
     document.addEventListener('click', (e) => {
       const dd = document.getElementById('notif-dropdown');
