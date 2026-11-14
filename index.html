@@ -10103,10 +10103,22 @@ ESSAY
             term: ov.term || u.term || 1,
             is_active: isActive,
             _deleted: !!ov.deleted,
-            _ovPerms: ov.permissions || null
+            _ovPerms: ov.permissions || permMap.get(u.id) || null
           };
         })
         .filter(u => !u._deleted);
+
+      // حفظ كاش فوري لبيانات المستخدمين وصلاحياتهم لفتح نافذة الصلاحيات في 0ms بدون أي تأخير شبكي
+      window._adminUsersMap = {};
+      profiles.forEach(u => {
+        if (u.id) window._adminUsersMap[u.id] = u;
+        if (u.email) {
+          window._adminUsersMap[u.email] = u;
+          window._adminUsersMap[u.email.toLowerCase()] = u;
+        }
+      });
+
+      const SEC_LABELS = { 'exams': 'الامتحانات', 'lectures': 'المحاضرات', 'lecture-quizzes': 'أسئلة المحاضرات', 'summaries': 'الملخصات', '*': 'كل الأقسام' };
 
       container.innerHTML = `
         <div class="glass-card" style="padding:1.4rem;margin-bottom:1.4rem">
@@ -10139,11 +10151,20 @@ ESSAY
                 <tbody>
                   ${profiles.map(u => {
                     const up = u._ovPerms || permMap.get(u.id);
-                    const scopeStr = u.role === 'super_admin'
-                      ? 'صلاحيات كاملة (كل الأقسام والترمات)'
-                      : up
-                        ? `الترمات: ${(up.allowed_terms || []).join(',')} | الأقسام: ${(up.allowed_sections || []).join(',')}`
-                        : 'قراءة وحل اختبارات فقط';
+                    let scopeStr = 'قراءة وحل اختبارات فقط';
+                    if (u.role === 'super_admin') {
+                      scopeStr = 'صلاحيات كاملة (كل الأقسام والترمات)';
+                    } else if (u.role !== 'student' && up && window.hasAnyAdminActionPermission(up)) {
+                      const secNames = (up.allowed_sections || []).map(s => SEC_LABELS[s] || s).join('، ');
+                      const acts = [];
+                      if (up.can_create) acts.push('إضافة');
+                      if (up.can_edit) acts.push('تعديل');
+                      if (up.can_delete) acts.push('حذف');
+                      if (up.can_publish) acts.push('نشر/إخفاء');
+                      if (up.can_manage_owners) acts.push('Owners');
+                      if (up.can_view_analytics) acts.push('إحصائيات');
+                      scopeStr = `${secNames ? `الأقسام: (${secNames})` : ''}${acts.length ? ` | العمليات: (${acts.join('، ')})` : ''}`;
+                    }
                     const safeEmail = (u.email || '').replace(/'/g, "\\'");
                     const isDisabled = u.is_active === false;
                     return `
@@ -10183,9 +10204,9 @@ ESSAY
     document.getElementById('rbac-user-id').value = userId;
     document.getElementById('rbac-user-email').value = userEmail;
 
-    // تفريغ جميع الاختيارات أولاً لمنع بقاء أي اختيار افتراضي غير مقصود
     const setCb = (id, val) => { const el = document.getElementById(id); if (el) el.checked = Boolean(val); };
-    document.querySelectorAll('.rbac-term-cb').forEach(cb => { cb.checked = false; });
+    // افتراضياً نحدد الترم الأول والثاني لتسهيل التخصيص، مع تفريغ الأقسام والعمليات
+    document.querySelectorAll('.rbac-term-cb').forEach(cb => { cb.checked = true; });
     document.querySelectorAll('.rbac-sec-cb').forEach(cb => { cb.checked = false; });
     setCb('rbac-can-create', false);
     setCb('rbac-can-edit', false);
@@ -10194,12 +10215,45 @@ ESSAY
     setCb('rbac-can-owners', false);
     setCb('rbac-can-analytics', false);
 
+    const roleSelect = document.getElementById('rbac-role-select');
+    if (roleSelect) roleSelect.value = 'content_manager';
+
+    const applyPermsToModal = (roleCode, perms) => {
+      if (roleSelect && ['super_admin', 'admin', 'content_manager', 'student'].includes(roleCode)) {
+        // إذا كان الحساب student حالياً وفتحنا نافذة الصلاحيات لتخصيص صلاحيات له، نجعل الدور المختار content_manager افتراضياً
+        roleSelect.value = (roleCode === 'student') ? 'content_manager' : roleCode;
+      }
+      if (perms && roleCode !== 'student' && window.hasAnyAdminActionPermission(perms)) {
+        const terms = Array.isArray(perms.allowed_terms) && perms.allowed_terms.length ? perms.allowed_terms.map(Number) : [1, 2];
+        document.querySelectorAll('.rbac-term-cb').forEach(cb => {
+          cb.checked = terms.includes(Number(cb.value));
+        });
+        const secs = Array.isArray(perms.allowed_sections) ? perms.allowed_sections : [];
+        document.querySelectorAll('.rbac-sec-cb').forEach(cb => {
+          cb.checked = secs.includes('*') || secs.includes(cb.value);
+        });
+        setCb('rbac-can-create', perms.can_create === true);
+        setCb('rbac-can-edit', perms.can_edit === true);
+        setCb('rbac-can-delete', perms.can_delete === true);
+        setCb('rbac-can-publish', perms.can_publish === true);
+        setCb('rbac-can-owners', perms.can_manage_owners === true);
+        setCb('rbac-can-analytics', perms.can_view_analytics === true);
+      }
+    };
+
+    // 1. تعبئة فورية (0ms) من الكاش المحلي دون أي انتظار شبكي يمنع اختيارات المستخدم
+    const emailLower = (userEmail || '').trim().toLowerCase();
+    const cachedUser = (window._adminUsersMap && (window._adminUsersMap[userId] || window._adminUsersMap[userEmail] || window._adminUsersMap[emailLower])) || null;
+    if (cachedUser) {
+      applyPermsToModal(cachedUser.role || 'content_manager', cachedUser._ovPerms);
+    }
+
     document.getElementById('rbac-modal').classList.remove('hidden');
 
-    if (userEmail || userId) {
+    // 2. جلب من الخادم فقط إذا لم يكن المستخدم موجوداً في الكاش المحلي
+    if (!cachedUser && (userEmail || userId)) {
       try {
         const overrides = await window.fetchSystemUserOverrides();
-        const emailLower = (userEmail || '').trim().toLowerCase();
         let roleCode = 'content_manager';
         let perms = null;
 
@@ -10216,28 +10270,7 @@ ESSAY
         const ov = overrides[userId] || overrides[userEmail] || overrides[emailLower];
         if (ov?.role && ov.role !== 'student') roleCode = ov.role;
         if (!perms && ov?.permissions) perms = ov.permissions;
-
-        const roleSelect = document.getElementById('rbac-role-select');
-        if (roleSelect && ['super_admin', 'admin', 'content_manager', 'student'].includes(roleCode)) {
-          roleSelect.value = roleCode;
-        }
-
-        if (perms && window.hasAnyAdminActionPermission(perms)) {
-          const terms = Array.isArray(perms.allowed_terms) ? perms.allowed_terms.map(Number) : [];
-          document.querySelectorAll('.rbac-term-cb').forEach(cb => {
-            cb.checked = terms.includes(Number(cb.value));
-          });
-          const secs = Array.isArray(perms.allowed_sections) ? perms.allowed_sections : [];
-          document.querySelectorAll('.rbac-sec-cb').forEach(cb => {
-            cb.checked = secs.includes('*') || secs.includes(cb.value);
-          });
-          setCb('rbac-can-create', perms.can_create === true);
-          setCb('rbac-can-edit', perms.can_edit === true);
-          setCb('rbac-can-delete', perms.can_delete === true);
-          setCb('rbac-can-publish', perms.can_publish === true);
-          setCb('rbac-can-owners', perms.can_manage_owners === true);
-          setCb('rbac-can-analytics', perms.can_view_analytics === true);
-        }
+        applyPermsToModal(roleCode, perms);
       } catch (e) {}
     }
   };
@@ -10248,32 +10281,55 @@ ESSAY
     let roleCode = document.getElementById('rbac-role-select').value;
     if (!email) return toast('أدخل البريد الإلكتروني للمستخدم!', 'error');
 
-    const selectedTerms = Array.from(document.querySelectorAll('.rbac-term-cb:checked')).map(cb => parseInt(cb.value));
-    const selectedSections = Array.from(document.querySelectorAll('.rbac-sec-cb:checked')).map(cb => cb.value);
+    let selectedTerms = Array.from(document.querySelectorAll('.rbac-term-cb:checked')).map(cb => parseInt(cb.value));
+    let selectedSections = Array.from(document.querySelectorAll('.rbac-sec-cb:checked')).map(cb => cb.value);
 
-    const canCreate = document.getElementById('rbac-can-create').checked;
-    const canEdit = document.getElementById('rbac-can-edit').checked;
-    const canDelete = document.getElementById('rbac-can-delete').checked;
-    const canPublish = document.getElementById('rbac-can-publish').checked;
-    const canOwners = document.getElementById('rbac-can-owners').checked;
-    const canAnalytics = document.getElementById('rbac-can-analytics').checked;
-    const hasAnyAction = canCreate || canEdit || canDelete || canPublish || canOwners || canAnalytics;
+    let canCreate = document.getElementById('rbac-can-create').checked;
+    let canEdit = document.getElementById('rbac-can-edit').checked;
+    let canDelete = document.getElementById('rbac-can-delete').checked;
+    let canPublish = document.getElementById('rbac-can-publish').checked;
+    let canOwners = document.getElementById('rbac-can-owners').checked;
+    let canAnalytics = document.getElementById('rbac-can-analytics').checked;
+    let hasAnyAction = canCreate || canEdit || canDelete || canPublish || canOwners || canAnalytics;
 
     const isSuper = roleCode === 'super_admin';
 
-    // إذا اختار السوبر أدمن عملية (مثل: نشر/إخفاء) ولم يحدد أي قسم أو ترم، ننبّهه بدلاً من اختيار الامتحانات تلقائياً
-    if (!isSuper && roleCode !== 'student' && hasAnyAction) {
-      if (selectedTerms.length === 0) {
-        return toast('⚠️ يرجى تحديد الترم المسموح بإدارته (الترم الأول أو الثاني)!', 'error');
+    // معالجة ذكية لجميع حالات اختيار الصلاحيات:
+    if (!isSuper) {
+      if (selectedSections.length === 0 && !hasAnyAction) {
+        // الحالة 1: لم يحدد أي قسم ولا أي عملية -> سحب جميع الصلاحيات وتحويله لطالب عادي
+        roleCode = 'student';
+      } else if (roleCode === 'student' && (selectedSections.length > 0 || hasAnyAction)) {
+        // إذا حدد السوبر أدمن أقساماً أو عمليات وكان الـ select على student، نرفعه تلقائياً لـ content_manager
+        roleCode = 'content_manager';
       }
-      if (selectedSections.length === 0 && !canAnalytics) {
-        return toast('⚠️ يرجى تحديد القسم المسموح بإدارته من الأعلى (مثل: الامتحانات أو أسئلة المحاضرات)!', 'error');
-      }
-    }
 
-    // إذا لم يتم تحديد أي صلاحية للعمليات أو لم يتم تحديد أي قسم، يتحول الحساب لطالب عادي بدون أي صلاحيات
-    if (!isSuper && (!hasAnyAction || (selectedSections.length === 0 && !canAnalytics))) {
-      roleCode = 'student';
+      if (roleCode !== 'student') {
+        // إذا لم يحدد أي ترم، نفعل الترم الأول والثاني تلقائياً
+        if (selectedTerms.length === 0) {
+          selectedTerms = [1, 2];
+        }
+        // الحالة 2: حدد السوبر أدمن أقساماً من الأعلى (مثل: الامتحانات أو المحاضرات) ولم يحدد أي عملية بالأسفل
+        // -> نمنحه صلاحيات إدارة هذا القسم بالكامل (إضافة، تعديل، حذف، نشر/إخفاء)
+        if (selectedSections.length > 0 && !hasAnyAction) {
+          canCreate = true;
+          canEdit = true;
+          canDelete = true;
+          canPublish = true;
+          hasAnyAction = true;
+        }
+        // الحالة 3: حدد السوبر أدمن عملية بالأسفل فقط (مثل: نشر/إخفاء فقط) ولم يحدد أي قسم من الأعلى
+        // -> نطبق هذه العملية المختارة فقط: إذا كانت (نشر/إخفاء فقط) نطبقها على الامتحانات وأسئلة المحاضرات، وإلا على كل الأقسام
+        if (selectedSections.length === 0 && hasAnyAction) {
+          if (canPublish && !canCreate && !canEdit && !canDelete && !canOwners) {
+            selectedSections = ['exams', 'lecture-quizzes'];
+          } else if (canOwners && !canCreate && !canEdit && !canDelete && !canPublish) {
+            selectedSections = ['lectures', 'summaries'];
+          } else if (!canAnalytics || canCreate || canEdit || canDelete || canPublish || canOwners) {
+            selectedSections = ['exams', 'lectures', 'lecture-quizzes', 'summaries'];
+          }
+        }
+      }
     }
 
     const isStudent = roleCode === 'student';
