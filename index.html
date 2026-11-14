@@ -8595,8 +8595,103 @@ ESSAY
     });
   }
 
+  // توحيد صيغة البريد الإلكتروني لمنع تكرار نفس الإيميل بأي شكل (بما في ذلك نقاط Gmail أو الأحرف الكبيرة)
+  window.normalizeEmailStrict = function (rawEmail) {
+    const clean = String(rawEmail || '').trim().toLowerCase();
+    if (!clean.includes('@')) return clean;
+    const [localPart, domain] = clean.split('@');
+    if (domain === 'gmail.com' || domain === 'googlemail.com') {
+      const baseLocal = localPart.split('+')[0].replace(/\./g, '');
+      return `${baseLocal}@gmail.com`;
+    }
+    return `${localPart}@${domain}`;
+  };
+
+  // بصمة ومعرّف الجهاز الفريد لضمان عدم فتح أو تسجيل أكثر من إيميل واحد على نفس الجهاز
+  function _setCookieVal(name, val) {
+    try { document.cookie = `${name}=${encodeURIComponent(val)}; max-age=315360000; path=/; SameSite=Lax`; } catch (e) {}
+  }
+  function _getCookieVal(name) {
+    try {
+      const m = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/([$?*|{}\]\\^])/g, '\\$1') + '=([^;]*)'));
+      return m ? decodeURIComponent(m[1]) : '';
+    } catch (e) { return ''; }
+  }
+
+  window.getOrCreateDeviceId = function () {
+    let devId = '';
+    try { devId = localStorage.getItem('bis_device_unique_id_v1') || ''; } catch (e) {}
+    if (!devId) devId = _getCookieVal('bis_device_unique_id_v1');
+    if (!devId) {
+      devId = 'dev_' + _generateUuid();
+    }
+    try { localStorage.setItem('bis_device_unique_id_v1', devId); } catch (e) {}
+    _setCookieVal('bis_device_unique_id_v1', devId);
+    return devId;
+  };
+
+  window.getHardwareDeviceSignature = function () {
+    try {
+      const raw = [
+        navigator.platform || '',
+        navigator.language || '',
+        screen.width || 0,
+        screen.height || 0,
+        screen.colorDepth || 0,
+        navigator.hardwareConcurrency || 0,
+        Intl.DateTimeFormat().resolvedOptions().timeZone || ''
+      ].join('|');
+      let hash = 5381;
+      for (let i = 0; i < raw.length; i++) {
+        hash = ((hash << 5) + hash) + raw.charCodeAt(i);
+        hash = hash & hash;
+      }
+      return 'hw_' + Math.abs(hash).toString(36);
+    } catch (e) {
+      return 'hw_default';
+    }
+  };
+
+  // فحص ما إذا كان هذا الجهاز مرتبطاً بإيميل آخر بالفعل (مع تجاهل الحسابات المحذوفة من السوبر أدمن)
+  window.getDeviceBoundEmail = function (overrides = {}, existingProfiles = []) {
+    if (window.IS_STANDALONE_SUPER_ADMIN) return '';
+    const devId = window.getOrCreateDeviceId();
+    const localBound = (localStorage.getItem('bis_device_bound_email_v1') || _getCookieVal('bis_device_bound_email_v1') || '').trim().toLowerCase();
+    const cloudBindings = overrides?.__device_bindings__ || {};
+    const cloudBound = (cloudBindings[devId] || '').trim().toLowerCase();
+
+    const candidate = localBound || cloudBound;
+    if (!candidate) return '';
+
+    // إذا كان الحساب المرتبط سابقاً قد تم حذفه بواسطة السوبر أدمن، نحرر الجهاز تلقائياً
+    const candOv = overrides[candidate] || Object.values(overrides).find(v => v && v.email && window.normalizeEmailStrict(v.email) === window.normalizeEmailStrict(candidate));
+    if (candOv && candOv.deleted === true) {
+      try { localStorage.removeItem('bis_device_bound_email_v1'); } catch (e) {}
+      _setCookieVal('bis_device_bound_email_v1', '');
+      return '';
+    }
+    return candidate;
+  };
+
+  window.bindDeviceToEmail = function (email, overrides = null) {
+    if (window.IS_STANDALONE_SUPER_ADMIN) return;
+    const lowerEmail = String(email || '').trim().toLowerCase();
+    if (!lowerEmail) return;
+    const devId = window.getOrCreateDeviceId();
+    try { localStorage.setItem('bis_device_bound_email_v1', lowerEmail); } catch (e) {}
+    _setCookieVal('bis_device_bound_email_v1', lowerEmail);
+    if (overrides && typeof overrides === 'object') {
+      if (!overrides.__device_bindings__ || typeof overrides.__device_bindings__ !== 'object') {
+        overrides.__device_bindings__ = {};
+      }
+      overrides.__device_bindings__[devId] = lowerEmail;
+    }
+  };
+
   window.handleStudentLogin = async function () {
     const email = document.getElementById('login-email').value.trim();
+    const lowerEmail = email.toLowerCase();
+    const normEmail = window.normalizeEmailStrict(lowerEmail);
     const password = document.getElementById('login-password').value;
     const errEl = document.getElementById('auth-error-msg');
     if (!email || !password) {
@@ -8606,17 +8701,24 @@ ESSAY
     errEl.textContent = '';
 
     try {
+      const overridesPre = await window.fetchSystemUserOverrides();
+      const boundEmail = window.getDeviceBoundEmail(overridesPre);
+      if (boundEmail && window.normalizeEmailStrict(boundEmail) !== normEmail) {
+        errEl.style.color = 'var(--red)';
+        errEl.textContent = `⛔ لا يمكن الدخول بأكثر من إيميل على نفس الجهاز! هذا الجهاز مرتبط بالفعل بالحساب (${boundEmail}).`;
+        return;
+      }
+
       const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
         method: 'POST',
         headers: { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify({ email: lowerEmail, password })
       });
       const data = await res.json();
       if (res.ok && data.access_token) {
         // إذا نجح تسجيل الدخول عبر Supabase Auth، فهذا يعني أن الإيميل مؤكد رسمياً (email_confirmed_at موجود)
-        const lowerEmail = email.toLowerCase();
         try {
-          const overrides = await window.fetchSystemUserOverrides();
+          const overrides = overridesPre || await window.fetchSystemUserOverrides();
           let changed = false;
           if (data.user?.id && overrides[data.user.id]?.pending_confirmation) {
             overrides[data.user.id].pending_confirmation = false;
@@ -8629,6 +8731,13 @@ ESSAY
           if (overrides[email]?.pending_confirmation) {
             overrides[email].pending_confirmation = false;
             changed = true;
+          }
+          const devId = window.getOrCreateDeviceId();
+          if (overrides?.__device_bindings__?.[devId] !== lowerEmail) {
+            window.bindDeviceToEmail(lowerEmail, overrides);
+            changed = true;
+          } else {
+            window.bindDeviceToEmail(lowerEmail);
           }
           if (changed) await window.saveSystemUserOverrides(overrides);
         } catch (e) {}
@@ -8647,9 +8756,8 @@ ESSAY
       }
 
       // Cloud fallback login (for existing verified accounts in DB)
-      const lowerEmail = email.toLowerCase();
-      const overrides = await window.fetchSystemUserOverrides();
-      const cloudAcc = overrides[lowerEmail] || overrides[email] || Object.values(overrides).find(v => v && v.email && v.email.toLowerCase() === lowerEmail);
+      const overrides = overridesPre || await window.fetchSystemUserOverrides();
+      const cloudAcc = overrides[lowerEmail] || overrides[email] || Object.values(overrides).find(v => v && v.email && window.normalizeEmailStrict(v.email) === normEmail);
 
       if (cloudAcc && cloudAcc.pw_hash && !cloudAcc.pending_confirmation) {
         if (cloudAcc.deleted) {
@@ -8661,6 +8769,8 @@ ESSAY
         if (cloudAcc.pw_hash !== _encodePass(password)) {
           throw new Error('بيانات الدخول غير صحيحة (كلمة المرور غير مطابقة)');
         }
+        window.bindDeviceToEmail(lowerEmail, overrides);
+        await window.saveSystemUserOverrides(overrides);
         const uid = cloudAcc.id || _generateUuid();
         await establishAuthSession(SUPABASE_KEY, null, {
           id: uid,
@@ -8700,6 +8810,7 @@ ESSAY
     const fullName = document.getElementById('reg-name').value.trim();
     const email = document.getElementById('reg-email').value.trim();
     const lowerEmail = email.toLowerCase();
+    const normEmail = window.normalizeEmailStrict(lowerEmail);
     const password = document.getElementById('reg-password').value;
     const grade = 'bis';
     const term = parseInt(document.getElementById('reg-term')?.value) || 1;
@@ -8717,21 +8828,32 @@ ESSAY
     errEl.textContent = '';
 
     try {
-      // Check if email already exists in profiles or cloud overrides (and not deleted)
+      // 1. جلب كل البروفايلات والتعديلات السحابية للتحقق الصارم من عدم تكرار الإيميل ومن ربط الجهاز بحساب واحد فقط
       const [pCheckRes, overrides] = await Promise.all([
-        fetch(`${SUPABASE_URL}/rest/v1/profiles?select=id,email&email=ilike.${encodeURIComponent(lowerEmail)}`, {
-          headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
+        fetch(`${SUPABASE_URL}/rest/v1/profiles?select=id,email`, {
+          headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Cache-Control': 'no-cache' }
         }),
         window.fetchSystemUserOverrides()
       ]);
-      const existingProfiles = pCheckRes.ok ? await pCheckRes.json() : [];
-      const existingOv = overrides[lowerEmail] || overrides[email] || null;
-      if ((existingProfiles.length > 0 || (existingOv && existingOv.email)) && (!existingOv || !existingOv.deleted)) {
-        if (existingProfiles.length > 0 || (existingOv && existingOv.pw_hash && !existingOv.pending_confirmation)) {
-          errEl.style.color = 'var(--red)';
-          errEl.textContent = '❌ هذا البريد الإلكتروني مسجل بالفعل! انتقل لتبويب «تسجيل الدخول».';
-          return;
-        }
+      const allProfiles = pCheckRes.ok ? await pCheckRes.json() : [];
+
+      // فحص قفل الجهاز على إيميل واحد فقط
+      const boundEmail = window.getDeviceBoundEmail(overrides, allProfiles);
+      if (boundEmail && window.normalizeEmailStrict(boundEmail) !== normEmail) {
+        errEl.style.color = 'var(--red)';
+        errEl.textContent = `⛔ لا يمكن تسجيل أكثر من حساب إيميل واحد على نفس الجهاز! هذا الجهاز مرتبط بالفعل بالحساب (${boundEmail}).`;
+        return;
+      }
+
+      // فحص صارم لمنع تكرار نفس الإيميل بأي شكل (سواء كان مؤكداً أو بانتظار التأكيد)
+      const matchingProfile = allProfiles.find(p => p && p.email && window.normalizeEmailStrict(p.email) === normEmail);
+      const existingOv = overrides[lowerEmail] || overrides[email] || Object.values(overrides).find(v => v && v.email && window.normalizeEmailStrict(v.email) === normEmail) || null;
+      const isDeletedInOv = Boolean(existingOv && existingOv.deleted === true);
+
+      if ((matchingProfile || (existingOv && existingOv.email)) && !isDeletedInOv) {
+        errEl.style.color = 'var(--red)';
+        errEl.textContent = '❌ هذا البريد الإلكتروني مسجل بالفعل على المنصة ولا يمكن تكراره! انتقل لتبويب «تسجيل الدخول».';
+        return;
       }
 
       // إرسال طلب تسجيل حساب جديد عبر Supabase Auth لإرسال رسالة التأكيد (Confirm Email) للبريد الإلكتروني
@@ -8753,10 +8875,16 @@ ESSAY
       const errMsg = (data.error_description || data.msg || data.message || '').toLowerCase();
       const isRateLimited = errMsg.includes('rate limit') || res.status === 429;
 
-      // إذا أعاد Supabase حالة user_repeated_signup أو حدث تجاوز مؤقت لحد الإيميلات (429)، نسجل الطالب كـ student في قاعدة البيانات مع إبقاء الحساب بانتظار التأكيد
+      // إذا أعاد Supabase حالة user_repeated_signup ولم يكن الحساب محذوفاً من السوبر أدمن، نمنع التكرار فوراً
       const isRepeatedAuthUser = Array.isArray(data?.user?.identities) && data.user.identities.length === 0;
+      if (isRepeatedAuthUser && !isDeletedInOv) {
+        errEl.style.color = 'var(--red)';
+        errEl.textContent = '❌ هذا البريد الإلكتروني مسجل بالفعل على المنصة ولا يمكن تكراره! انتقل لتبويب «تسجيل الدخول».';
+        return;
+      }
+
       let directStudentRow = null;
-      if (isRepeatedAuthUser || isRateLimited || (existingOv && existingOv.deleted)) {
+      if ((isRepeatedAuthUser && isDeletedInOv) || isRateLimited || isDeletedInOv) {
         try {
           const dRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/register_student_direct`, {
             method: 'POST',
@@ -8788,7 +8916,7 @@ ESSAY
       } else if (!res.ok) {
         if (errMsg.includes('already registered') || errMsg.includes('already exists')) {
           errEl.style.color = 'var(--red)';
-          errEl.textContent = '❌ هذا البريد الإلكتروني مسجل بالفعل! انتقل لتبويب «تسجيل الدخول».';
+          errEl.textContent = '❌ هذا البريد الإلكتروني مسجل بالفعل على المنصة ولا يمكن تكراره! انتقل لتبويب «تسجيل الدخول».';
           return;
         }
         throw new Error(data.msg || data.error_description || 'تعذر إنشاء الحساب وإرسال رسالة التأكيد');
@@ -8798,6 +8926,7 @@ ESSAY
       const uid = directStudentRow?.id || data?.user?.id || data?.id || existingOv?.id || _generateUuid();
       const isConfirmedImmediately = Boolean(data.access_token && data?.user?.email_confirmed_at && !isRepeatedAuthUser && !isRateLimited);
 
+      const devId = window.getOrCreateDeviceId();
       const cloudUser = {
         id: uid,
         email: lowerEmail,
@@ -8809,12 +8938,14 @@ ESSAY
         permissions: null,
         is_active: true,
         deleted: false,
+        bound_device_id: devId,
         pw_hash: _encodePass(password),
         pending_confirmation: !isConfirmedImmediately,
         created_at: new Date().toISOString()
       };
       overrides[uid] = { ...(overrides[uid] || {}), ...cloudUser };
       overrides[lowerEmail] = { ...(overrides[lowerEmail] || {}), ...cloudUser };
+      window.bindDeviceToEmail(lowerEmail, overrides);
       await window.saveSystemUserOverrides(overrides);
       if (typeof window.broadcastRealtimeUserSync === 'function') {
         window.broadcastRealtimeUserSync('register', lowerEmail, uid);
@@ -10557,6 +10688,12 @@ ESSAY
       if (bar) bar.remove();
       return;
     }
+    const usersPanel = document.getElementById('admin-section-users');
+    const isUsersSectionActive = Boolean(usersPanel && !usersPanel.classList.contains('hidden'));
+    if (isUsersSectionActive) {
+      if (bar) bar.style.display = 'none';
+      return;
+    }
     if (!bar) {
       bar = document.createElement('div');
       bar.id = 'super-admin-platform-lock-bar';
@@ -10606,16 +10743,6 @@ ESSAY
         ${locked ? '🔓 فتح المنصة بالكامل الآن (Real-Time)' : '🔒 قفل المنصة بالكامل الآن (Real-Time)'}
       </button>
     `;
-
-    // تحديث زر القفل السريع داخل قسم المستخدمين إن وجد
-    const quickBtn = document.getElementById('admin-users-quick-lock-btn');
-    if (quickBtn) {
-      quickBtn.className = `btn ${locked ? 'btn-primary' : 'btn-danger'}`;
-      quickBtn.style.background = locked ? '#00e676' : 'var(--red)';
-      quickBtn.style.color = locked ? '#050509' : '#fff';
-      quickBtn.style.borderColor = 'transparent';
-      quickBtn.innerHTML = `<i class="fas fa-${locked ? 'unlock' : 'power-off'}"></i> ${locked ? '🔓 فتح المنصة الآن' : '🔒 قفل المنصة بالكامل'}`;
-    }
   };
 
   window.applyPlatformGlobalLockState = function (isLocked) {
@@ -11154,9 +11281,6 @@ ESSAY
               <p style="font-size:0.82rem;color:var(--text-dim)">أي طالب يسجل جديد يُعرَّف كـ «طالب» تلقائياً بدون صلاحيات إدارية حتى تمنحه أنت الصلاحيات — اضغط على أي كارت بالأسفل لتصفية الحسابات</p>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap">
-              <button id="admin-users-quick-lock-btn" class="btn ${window._isPlatformLockedGlobal ? 'btn-primary' : 'btn-danger'}" style="background:${window._isPlatformLockedGlobal ? '#00e676' : 'var(--red)'};color:${window._isPlatformLockedGlobal ? '#050509' : '#fff'};border-color:transparent" onclick="togglePlatformGlobalLock()">
-                <i class="fas fa-${window._isPlatformLockedGlobal ? 'unlock' : 'power-off'}"></i> ${window._isPlatformLockedGlobal ? '🔓 فتح المنصة الآن' : '🔒 قفل المنصة بالكامل'}
-              </button>
               <button class="btn btn-primary" onclick="openAdminAddUserModal()"><i class="fas fa-user-plus"></i> إضافة حساب جديد مباشرة</button>
               <button class="btn btn-blue" onclick="openAssignRoleModal()"><i class="fas fa-user-shield"></i> تخصيص صلاحيات مسؤول</button>
             </div>
@@ -11215,14 +11339,15 @@ ESSAY
       const perms = permRes.ok ? await permRes.json() : [];
       const permMap = new Map(perms.map(p => [p.user_id, p]));
 
-      // Merge any cloud-registered accounts (from overrides) that aren't in rawProfiles yet
-      const seenEmails = new Set(rawProfiles.map(u => (u.email || '').toLowerCase()));
+      // Merge any cloud-registered accounts (from overrides) that aren't in rawProfiles yet & deduplicate strictly by normalized email
+      const seenEmails = new Set(rawProfiles.map(u => window.normalizeEmailStrict(u.email || '')).filter(Boolean));
       const seenIds = new Set(rawProfiles.map(u => u.id));
       Object.values(overrides).forEach(ovItem => {
         if (ovItem && ovItem.email && ovItem.id) {
           const em = ovItem.email.toLowerCase();
-          if (!seenEmails.has(em) && !seenIds.has(ovItem.id)) {
-            seenEmails.add(em);
+          const normEm = window.normalizeEmailStrict(em);
+          if (!seenEmails.has(normEm) && !seenIds.has(ovItem.id)) {
+            seenEmails.add(normEm);
             seenIds.add(ovItem.id);
             rawProfiles.push({
               id: ovItem.id,
@@ -11240,6 +11365,7 @@ ESSAY
       });
 
       const nowMs = Date.now();
+      const uniqueEmailsFinal = new Set();
       const profiles = rawProfiles
         .map(u => {
           const lowerEm = (u.email || '').toLowerCase();
@@ -11273,7 +11399,13 @@ ESSAY
             _lastSeenAt: lastSeenAt
           };
         })
-        .filter(u => !u._deleted);
+        .filter(u => {
+          if (u._deleted) return false;
+          const normEm = window.normalizeEmailStrict(u.email || '');
+          if (normEm && uniqueEmailsFinal.has(normEm)) return false;
+          if (normEm) uniqueEmailsFinal.add(normEm);
+          return true;
+        });
 
       const newSig = JSON.stringify(profiles.map(u => ({
         id: u.id, em: u.email, fn: u.full_name, r: u.role, t: u.term, a: u.is_active, p: u._pendingConfirmation, pm: u._ovPerms, on: u._isOnlineNow
@@ -11333,8 +11465,14 @@ ESSAY
       `;
       document.body.appendChild(modal);
     }
+    window._adminAddModalIsEdit = Boolean(prefillEmail);
     document.getElementById('admin-new-user-name').value = prefillName || '';
-    document.getElementById('admin-new-user-email').value = prefillEmail || '';
+    const emailInputEl = document.getElementById('admin-new-user-email');
+    if (emailInputEl) {
+      emailInputEl.value = prefillEmail || '';
+      emailInputEl.readOnly = Boolean(prefillEmail);
+      emailInputEl.style.opacity = prefillEmail ? '0.75' : '1';
+    }
     document.getElementById('admin-new-user-password').value = '';
     document.getElementById('admin-new-user-term').value = String(prefillTerm || '1');
     document.getElementById('admin-add-user-error').textContent = '';
@@ -11344,6 +11482,7 @@ ESSAY
   window.saveAdminDirectUserAccount = async function () {
     const fullName = document.getElementById('admin-new-user-name')?.value.trim();
     const email = (document.getElementById('admin-new-user-email')?.value || '').trim().toLowerCase();
+    const normEmail = window.normalizeEmailStrict(email);
     const password = document.getElementById('admin-new-user-password')?.value || '';
     const term = parseInt(document.getElementById('admin-new-user-term')?.value) || 1;
     const errEl = document.getElementById('admin-add-user-error');
@@ -11356,17 +11495,28 @@ ESSAY
       if (errEl) errEl.textContent = '❌ كلمة المرور يجب ألا تقل عن 6 أحرف';
       return;
     }
+
+    const existingUser = (window._adminUsersMap && (window._adminUsersMap[email] || window._adminUsersMap[normEmail]))
+      || (window._adminUsersList || []).find(u => window.normalizeEmailStrict(u.email) === normEmail)
+      || null;
+
+    if (!window._adminAddModalIsEdit && existingUser && !existingUser._deleted) {
+      if (errEl) {
+        errEl.textContent = '❌ هذا البريد الإلكتروني مسجل بالفعل على المنصة ولا يمكن تكراره! (لتغيير كلمة المرور اضغط زر «الباسورد» بجانب الحساب في الجدول)';
+      }
+      return;
+    }
+
     if (errEl) errEl.textContent = '';
 
     const nowIso = new Date().toISOString();
-    const existingUser = (window._adminUsersMap && window._adminUsersMap[email]) || null;
     const tempUid = existingUser?.id || _generateUuid();
 
     // 1. تحديث فوري على الشاشة (0ms Optimistic UI) بدون ريفريش
     const updatedRow = {
       ...(existingUser || {}),
       id: tempUid,
-      email: email,
+      email: existingUser?.email || email,
       full_name: fullName,
       grade: 'bis',
       term: term,
@@ -11378,7 +11528,7 @@ ESSAY
       _ovPerms: existingUser?._ovPerms || null,
       created_at: existingUser?.created_at || nowIso
     };
-    const nextList = (window._adminUsersList || []).filter(u => (u.email || '').toLowerCase() !== email && u.id !== tempUid);
+    const nextList = (window._adminUsersList || []).filter(u => window.normalizeEmailStrict(u.email || '') !== normEmail && u.id !== tempUid);
     nextList.unshift(updatedRow);
     window.renderAdminUsersTableNow(nextList);
     closeModal('admin-add-user-modal');
@@ -11861,7 +12011,7 @@ ESSAY
         window.fetchSystemUserOverrides()
       ]);
 
-      const patchDel = { deleted: true, is_active: false, role: 'student', permissions: null, updated_at: nowIso };
+      const patchDel = { deleted: true, is_active: false, role: 'student', permissions: null, bound_device_id: null, updated_at: nowIso };
       if (uid) overrides[uid] = { ...(overrides[uid] || {}), ...patchDel };
       if (email) overrides[email] = { ...(overrides[email] || {}), ...patchDel };
       if (lowerEmail) overrides[lowerEmail] = { ...(overrides[lowerEmail] || {}), ...patchDel };
@@ -11870,6 +12020,14 @@ ESSAY
           overrides[k] = { ...(overrides[k] || {}), ...patchDel };
         }
       });
+      if (overrides.__device_bindings__ && typeof overrides.__device_bindings__ === 'object') {
+        const normDel = window.normalizeEmailStrict(lowerEmail);
+        Object.keys(overrides.__device_bindings__).forEach(devKey => {
+          if (window.normalizeEmailStrict(overrides.__device_bindings__[devKey]) === normDel) {
+            delete overrides.__device_bindings__[devKey];
+          }
+        });
+      }
 
       await Promise.all([
         window.saveSystemUserOverrides(overrides),
