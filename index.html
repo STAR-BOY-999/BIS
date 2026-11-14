@@ -8868,8 +8868,9 @@ ESSAY
       }
       return;
     }
+    ensureRecoveryTokenPasteBox();
     try {
-      const redirectUrl = window.location.origin && window.location.origin !== 'null'
+      const redirectUrl = (window.location.origin && window.location.origin !== 'null' && !window.location.origin.includes('localhost'))
         ? (window.location.origin + window.location.pathname)
         : 'https://star-boy-999.github.io/BIS/';
       const res = await fetch(`${SUPABASE_URL}/auth/v1/recover?redirect_to=${encodeURIComponent(redirectUrl)}`, {
@@ -8880,24 +8881,123 @@ ESSAY
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         const msg = (data.msg || data.error_description || data.message || '').toLowerCase();
-        if (res.status === 429 || msg.includes('rate limit') || msg.includes('security purposes')) {
+        const errCode = (data.error_code || '').toLowerCase();
+        if (errCode === 'over_email_send_rate_limit' || msg.includes('email rate limit exceeded')) {
+          if (errEl) {
+            errEl.style.color = 'var(--amber)';
+            errEl.innerHTML = `⚠️ <b>وصل سيرفر الإيميلات المجاني في Supabase للحد الأقصى المؤقت (3 إيميلات في الساعة).</b><br>حلول فورية:<br>1️⃣ انتظر حتى تتجدد حصة الساعة أو اربط Gmail SMTP مجاني في Supabase.<br>2️⃣ أو من <b>لوحة السوبر أدمن</b> اضغط زر <b>"🔑 تغيير الباسورد"</b> بجانب الإيميل لتعيين الباسورد الجديد فوراً.`;
+          }
+          toast('⚠️ تم استنفاذ حد الإيميلات المجاني في السيرفر لهذه الساعة (3 رسائل/ساعة)', 'error');
+          return;
+        }
+        if (res.status === 429 || msg.includes('security purposes')) {
           if (errEl) {
             errEl.style.color = 'var(--teal)';
-            errEl.innerHTML = `📩 تم إرسال رابط استعادة كلمة المرور بالفعل إلى <b>${email}</b>! افتح بريدك الإلكتروني (أو مجلد Spam) واضغط على الرابط لتعيين كلمة المرور الجديدة (يمكن طلب رابط جديد بعد 60 ثانية).`;
+            errEl.innerHTML = `📩 تم إرسال رابط استعادة كلمة المرور بالفعل إلى <b>${email}</b> قبل لحظات! افتح الإيميل واضغط على الرابط (أو انسخ الرابط من الإيميل والصقه بالأسفل).`;
           }
-          toast('📩 تم إرسال رابط الاستعادة بالفعل إلى بريدك الإلكتروني! افتح الإيميل واضغط على الرابط.');
+          toast('📩 تم إرسال رابط الاستعادة بالفعل قبل أقل من دقيقة! تفقد بريدك الإلكتروني.');
           return;
         }
         throw new Error(data.msg || data.error_description || 'تعذر إرسال رابط الاستعادة');
       }
       if (errEl) {
         errEl.style.color = 'var(--teal)';
-        errEl.innerHTML = `📩 تم إرسال رابط استعادة كلمة المرور إلى <b>${email}</b>! افتح الإيميل واضغط على الرابط لتظهر لك نافذة كتابة الباسورد الجديد.`;
+        errEl.innerHTML = `📩 تم إرسال رابط استعادة كلمة المرور إلى <b>${email}</b>! افتح الإيميل واضغط على الرابط لتظهر لك نافذة كتابة الباسورد الجديد (أو انسخ الرابط من الإيميل والصقه في الخانة بالأسفل).`;
       }
       toast('📩 تم إرسال رابط استعادة كلمة المرور إلى بريدك الإلكتروني');
     } catch (err) {
       if (errEl) errEl.style.color = 'var(--red)';
       errEl.textContent = '❌ ' + err.message;
+    }
+  };
+
+  function ensureRecoveryTokenPasteBox() {
+    const recoverForm = document.getElementById('auth-form-recover');
+    if (!recoverForm || document.getElementById('recover-paste-box')) return;
+    const box = document.createElement('div');
+    box.id = 'recover-paste-box';
+    box.style.cssText = 'margin-top:1rem;padding-top:0.9rem;border-top:1px solid rgba(120,160,255,0.14)';
+    box.innerHTML = `
+      <label style="display:block;font-size:0.78rem;color:var(--text-dim);margin-bottom:6px">
+        🔗 <b>وصلك الإيميل؟</b> اضغط على الرابط في الإيميل مباشرة، أو إذا فتح معك صفحة <code style="color:var(--teal)">localhost</code> انسخ الرابط من الإيميل/المتصفح والصقه هنا لتعيين الباسورد فوراً:
+      </label>
+      <div style="display:flex;gap:6px">
+        <input type="text" id="recover-pasted-link" placeholder="الصق رابط الاستعادة من الإيميل أو الكود هنا..." dir="ltr" style="flex:1;font-size:0.8rem">
+        <button class="btn btn-blue" type="button" onclick="verifyPastedRecoveryLink()" style="white-space:nowrap;padding:8px 12px;font-size:0.8rem">
+          <i class="fas fa-key"></i> فتح نافذة الباسورد
+        </button>
+      </div>
+    `;
+    recoverForm.appendChild(box);
+  }
+
+  const _origSwitchAuthTab = window.switchAuthTab;
+  if (_origSwitchAuthTab) {
+    window.switchAuthTab = function (tab) {
+      _origSwitchAuthTab(tab);
+      if (tab === 'recover') ensureRecoveryTokenPasteBox();
+    };
+  }
+
+  window.verifyPastedRecoveryLink = async function () {
+    const rawInput = (document.getElementById('recover-pasted-link')?.value || '').trim();
+    const email = (document.getElementById('recover-email')?.value || '').trim().toLowerCase();
+    const errEl = document.getElementById('auth-error-msg');
+    if (!rawInput) {
+      if (errEl) {
+        errEl.style.color = 'var(--red)';
+        errEl.textContent = '❌ الصق الرابط الموجود داخل رسالة الإيميل أولاً';
+      }
+      return;
+    }
+
+    try {
+      // 1. إذا كان الرابط يحتوي على access_token (مثل http://localhost:3000/#access_token=...)
+      if (rawInput.includes('access_token=')) {
+        const hashPart = rawInput.includes('#') ? rawInput.split('#')[1] : rawInput.split('?')[1] || rawInput;
+        const params = new URLSearchParams(hashPart);
+        const accessToken = params.get('access_token');
+        if (accessToken) {
+          const uRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+            headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${accessToken}` }
+          });
+          if (!uRes.ok) throw new Error('انتهت صلاحية هذا الرابط، اطلب رابطاً جديداً');
+          const userObj = await uRes.json();
+          closeModal('auth-modal');
+          window.openResetPasswordModal(accessToken, (userObj.email || email || '').toLowerCase());
+          return;
+        }
+      }
+
+      // 2. إذا كان الرابط هو رابط التحقق الأصلي من الإيميل (.../auth/v1/verify?token=...&type=recovery)
+      let tokenHash = '';
+      if (rawInput.includes('token=') || rawInput.includes('token_hash=')) {
+        const qPart = rawInput.includes('?') ? rawInput.split('?')[1].split('#')[0] : rawInput;
+        const qParams = new URLSearchParams(qPart);
+        tokenHash = qParams.get('token_hash') || qParams.get('token') || '';
+      }
+
+      const verifyPayload = tokenHash
+        ? { type: 'recovery', token_hash: tokenHash }
+        : { type: 'recovery', email, token: rawInput };
+
+      const vRes = await fetch(`${SUPABASE_URL}/auth/v1/verify`, {
+        method: 'POST',
+        headers: { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify(verifyPayload)
+      });
+      const vData = await vRes.json().catch(() => ({}));
+      if (!vRes.ok || !vData.access_token) {
+        throw new Error('الرابط غير صالح أو تم الضغط عليه واستهلاكه مسبقاً (الرابط يُستخدم مرة واحدة فقط)');
+      }
+
+      closeModal('auth-modal');
+      window.openResetPasswordModal(vData.access_token, (vData.user?.email || email || '').toLowerCase());
+    } catch (err) {
+      if (errEl) {
+        errEl.style.color = 'var(--red)';
+        errEl.textContent = '❌ ' + (err.message || 'تعذر التحقق من الرابط');
+      }
     }
   };
 
@@ -9277,7 +9377,34 @@ ESSAY
     try {
       localStorage.removeItem('super_admin_user_overrides');
 
-      // 1. فحص ما إذا كان الطالب عائداً من رابط تأكيد البريد الإلكتروني أو رابط استعادة كلمة المرور (Recovery) في الـ URL Hash
+      // 1. فحص ما إذا كان الطالب عائداً من رابط تأكيد البريد الإلكتروني أو رابط استعادة كلمة المرور (Recovery) في الـ URL Hash أو Query
+      if (window.location.search && (window.location.search.includes('token_hash=') || window.location.search.includes('token='))) {
+        const qParams = new URLSearchParams(window.location.search);
+        const tokenHash = qParams.get('token_hash') || qParams.get('token');
+        const linkType = (qParams.get('type') || 'recovery').toLowerCase();
+        if (tokenHash) {
+          try {
+            const vRes = await fetch(`${SUPABASE_URL}/auth/v1/verify`, {
+              method: 'POST',
+              headers: { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ type: linkType, token_hash: tokenHash })
+            });
+            const vData = await vRes.json().catch(() => ({}));
+            history.replaceState(null, '', window.location.pathname);
+            if (vRes.ok && vData.access_token) {
+              if (linkType === 'recovery') {
+                window.openResetPasswordModal(vData.access_token, (vData.user?.email || '').toLowerCase());
+                toast('🔑 أدخل كلمة المرور الجديدة لحسابك الآن');
+                return;
+              }
+              await establishAuthSession(vData.access_token, vData.refresh_token, vData.user);
+              toast('🎉 تم تأكيد بريدك الإلكتروني وتفعيل حسابك بنجاح!');
+              return;
+            }
+          } catch (e) {}
+        }
+      }
+
       if (window.location.hash && (window.location.hash.includes('access_token=') || window.location.hash.includes('error='))) {
         const hashParams = new URLSearchParams(window.location.hash.substring(1));
         const accessToken = hashParams.get('access_token');
@@ -10393,6 +10520,9 @@ ESSAY
                             <button class="btn btn-blue" style="padding:5px 10px;font-size:0.78rem" onclick="openAssignRoleModal('${u.id}', '${safeEmail}')">
                               <i class="fas fa-key"></i> الصلاحيات
                             </button>
+                            <button class="btn btn-ghost" style="padding:5px 10px;font-size:0.78rem;color:var(--teal);border-color:rgba(45,212,191,0.35)" onclick="openAdminAddUserModal('${safeEmail}', '${(u.full_name || '').replace(/'/g, "\\'")}', '${u.term || 1}')" title="تعيين أو تغيير كلمة المرور لهذا الحساب مباشرة">
+                              <i class="fas fa-lock"></i> الباسورد
+                            </button>
                             <button class="btn ${isDisabled ? 'btn-primary' : 'btn-danger'}" style="padding:5px 10px;font-size:0.78rem" onclick="toggleUserActiveStatus('${u.id}', ${isDisabled ? 'true' : 'false'}, '${safeEmail}')" title="${isDisabled ? 'تفعيل الحساب' : 'تعطيل الحساب'}">
                               <i class="fas fa-${isDisabled ? 'check' : 'ban'}"></i> ${isDisabled ? 'تفعيل' : 'تعطيل'}
                             </button>
@@ -10413,8 +10543,8 @@ ESSAY
   }
   window.loadAdminUsersAndRoles = loadAdminUsersAndRoles;
 
-  // نافذة إضافة حساب جديد مباشرة من السوبر أدمن (الاسم + الإيميل + الباسورد + الترم) بدون انتظار رابط تأكيد الإيميل
-  window.openAdminAddUserModal = function () {
+  // نافذة إضافة حساب جديد أو تحديث باسورد حساب من السوبر أدمن (الاسم + الإيميل + الباسورد + الترم) بدون انتظار رابط تأكيد الإيميل
+  window.openAdminAddUserModal = function (prefillEmail = '', prefillName = '', prefillTerm = '1') {
     let modal = document.getElementById('admin-add-user-modal');
     if (!modal) {
       modal = document.createElement('div');
@@ -10423,10 +10553,10 @@ ESSAY
       modal.innerHTML = `
         <div class="modal" style="max-width:440px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.2rem">
-            <h3 style="margin:0"><i class="fas fa-user-plus" style="color:var(--teal);margin-left:8px"></i> إضافة حساب طالب / مستخدم مباشرة</h3>
+            <h3 style="margin:0" id="admin-add-user-title"><i class="fas fa-user-plus" style="color:var(--teal);margin-left:8px"></i> إضافة / تحديث حساب وباسورد مباشرة</h3>
             <button class="btn btn-ghost" onclick="closeModal('admin-add-user-modal')" style="padding:6px 10px"><i class="fas fa-times"></i></button>
           </div>
-          <p style="font-size:0.82rem;color:var(--text-dim);margin-bottom:1rem">سيتم إنشاء هذا الحساب وتأكيده فوراً في قاعدة البيانات ليتمكن من تسجيل الدخول مباشرة بدون انتظار إيميل التأكيد.</p>
+          <p style="font-size:0.82rem;color:var(--text-dim);margin-bottom:1rem">سيتم إنشاء أو تحديث كلمة المرور وتأكيد هذا الحساب فوراً في قاعدة البيانات ليتمكن من تسجيل الدخول مباشرة بدون انتظار إيميل.</p>
           <div id="admin-add-user-error" style="color:var(--red);font-size:0.84rem;margin-bottom:0.8rem;min-height:18px;font-weight:700"></div>
           <div class="form-group">
             <label>الاسم بالكامل</label>
@@ -10437,8 +10567,8 @@ ESSAY
             <input type="email" id="admin-new-user-email" placeholder="student@example.com" dir="ltr">
           </div>
           <div class="form-group">
-            <label>كلمة المرور (6 أحرف على الأقل)</label>
-            <input type="text" id="admin-new-user-password" placeholder="اكتب كلمة المرور للحساب" dir="ltr">
+            <label>كلمة المرور الجديدة (6 أحرف على الأقل)</label>
+            <input type="text" id="admin-new-user-password" placeholder="اكتب كلمة المرور الجديدة للحساب" dir="ltr">
           </div>
           <div class="form-group">
             <label>الترم الدراسي</label>
@@ -10449,16 +10579,16 @@ ESSAY
           </div>
           <div class="modal-actions">
             <button class="btn btn-ghost" onclick="closeModal('admin-add-user-modal')">إلغاء</button>
-            <button class="btn btn-primary" onclick="saveAdminDirectUserAccount()"><i class="fas fa-check-circle"></i> إنشاء وتفعيل الحساب فوراً</button>
+            <button class="btn btn-primary" onclick="saveAdminDirectUserAccount()"><i class="fas fa-check-circle"></i> حفظ وتفعيل الباسورد فوراً</button>
           </div>
         </div>
       `;
       document.body.appendChild(modal);
     }
-    document.getElementById('admin-new-user-name').value = '';
-    document.getElementById('admin-new-user-email').value = '';
+    document.getElementById('admin-new-user-name').value = prefillName || '';
+    document.getElementById('admin-new-user-email').value = prefillEmail || '';
     document.getElementById('admin-new-user-password').value = '';
-    document.getElementById('admin-new-user-term').value = '1';
+    document.getElementById('admin-new-user-term').value = String(prefillTerm || '1');
     document.getElementById('admin-add-user-error').textContent = '';
     modal.classList.remove('hidden');
   };
