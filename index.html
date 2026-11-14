@@ -8619,12 +8619,17 @@ ESSAY
         return;
       }
 
-      // Cloud fallback login (for accounts created when Supabase email rate limit was exceeded or email unconfirmed)
+      const rawMsg = (data.error_description || data.msg || '').toLowerCase();
+      if (rawMsg.includes('email not confirmed')) {
+        throw new Error('📩 يرجى فتح بريدك الإلكتروني والضغط على رابط التأكيد (Confirm Email) أولاً لتفعيل حسابك قبل تسجيل الدخول.');
+      }
+
+      // Cloud fallback login (for existing verified accounts in DB)
       const lowerEmail = email.toLowerCase();
       const overrides = await window.fetchSystemUserOverrides();
       const cloudAcc = overrides[lowerEmail] || overrides[email] || Object.values(overrides).find(v => v && v.email && v.email.toLowerCase() === lowerEmail);
 
-      if (cloudAcc && cloudAcc.pw_hash) {
+      if (cloudAcc && cloudAcc.pw_hash && !cloudAcc.pending_confirmation) {
         if (cloudAcc.deleted) {
           throw new Error('تم حذف هذا الحساب من قِبل إدارة المنصة.');
         }
@@ -8656,10 +8661,10 @@ ESSAY
         return;
       }
 
-      const rawMsg = (data.error_description || data.msg || '').toLowerCase();
-      if (rawMsg.includes('email not confirmed')) {
-        throw new Error('يرجى تأكيد البريد الإلكتروني أو إعادة التسجيل');
+      if (cloudAcc && cloudAcc.pending_confirmation) {
+        throw new Error('📩 يرجى فتح بريدك الإلكتروني والضغط على رابط التأكيد (Confirm Email) أولاً لتفعيل حسابك.');
       }
+
       throw new Error('البريد الإلكتروني أو كلمة المرور غير صحيحة');
     } catch (err) {
       errEl.textContent = '❌ ' + (err.message || 'فشل تسجيل الدخول');
@@ -8697,100 +8702,46 @@ ESSAY
       const existingProfiles = pCheckRes.ok ? await pCheckRes.json() : [];
       const existingOv = overrides[lowerEmail] || overrides[email] || null;
       if ((existingProfiles.length > 0 || (existingOv && existingOv.email)) && (!existingOv || !existingOv.deleted)) {
-        // If already exists in cloud overrides with password, or in profiles, notify user
-        if (existingProfiles.length > 0 || (existingOv && existingOv.pw_hash)) {
+        if (existingProfiles.length > 0 || (existingOv && existingOv.pw_hash && !existingOv.pending_confirmation)) {
+          errEl.style.color = 'var(--red)';
           errEl.textContent = '❌ هذا البريد الإلكتروني مسجل بالفعل! انتقل لتبويب «تسجيل الدخول».';
           return;
         }
       }
 
-      // 1. Try direct server-side RPC registration (creates confirmed auth.users + profiles row with zero email rate limits!)
-      let rpcProfile = null;
-      try {
-        const rpcRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/register_student_direct`, {
-          method: 'POST',
-          headers: {
-            'apikey': SUPABASE_KEY,
-            'Authorization': `Bearer ${SUPABASE_KEY}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            p_email: lowerEmail,
-            p_password: password,
-            p_full_name: fullName,
-            p_term: term
-          })
-        });
-        if (rpcRes.ok) {
-          rpcProfile = await rpcRes.json();
-        }
-      } catch (e) {}
-
-      if (rpcProfile && rpcProfile.id) {
-        // أي حساب جديد يتم إنشاؤه على المنصة يكون دائماً طالب عادي (student) فقط
-        const cloudUser = {
-          id: rpcProfile.id,
-          email: lowerEmail,
-          full_name: fullName,
-          grade: 'bis',
-          term: term,
-          section_code: 'bis',
-          role: 'student',
-          permissions: null,
-          is_active: true,
-          deleted: false,
-          pw_hash: _encodePass(password),
-          created_at: rpcProfile.created_at || new Date().toISOString()
-        };
-        overrides[rpcProfile.id] = { ...(overrides[rpcProfile.id] || {}), ...cloudUser };
-        overrides[lowerEmail] = { ...(overrides[lowerEmail] || {}), ...cloudUser };
-        await window.saveSystemUserOverrides(overrides);
-
-        // Obtain genuine Supabase Auth token
-        const tokRes = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
-          method: 'POST',
-          headers: { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: lowerEmail, password })
-        });
-        const tokData = await tokRes.json().catch(() => ({}));
-        if (tokRes.ok && tokData.access_token) {
-          await establishAuthSession(tokData.access_token, tokData.refresh_token, tokData.user, {
-            full_name: fullName,
-            grade,
-            term,
-            section_code: sectionCode
-          });
-        } else {
-          await establishAuthSession(SUPABASE_KEY, null, {
-            id: rpcProfile.id,
-            email: lowerEmail,
-            created_at: cloudUser.created_at,
-            user_metadata: { full_name: fullName, grade, term, section_code: sectionCode }
-          }, {
-            full_name: fullName,
-            grade,
-            term,
-            section_code: sectionCode
-          });
-        }
-        closeModal('auth-modal');
-        toast('🎉 تم إنشاء حسابك كطالب وتسجيل الدخول بنجاح!');
-        return;
-      }
-
+      // إرسال طلب تسجيل حساب جديد عبر Supabase Auth لإرسال رسالة التأكيد (Confirm Email) للبريد الإلكتروني
+      const redirectUrl = window.location.origin + window.location.pathname;
       const res = await fetch(`${SUPABASE_URL}/auth/v1/signup`, {
         method: 'POST',
         headers: { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: lowerEmail,
           password,
-          data: { full_name: fullName, grade, term, section_code: sectionCode }
+          data: { full_name: fullName, grade, term, section_code: sectionCode },
+          gotrue_meta_security: {},
+          code_challenge: null,
+          code_challenge_method: null
         })
       });
       const data = await res.json().catch(() => ({}));
 
-      // Save cloud account record in overrides — always 'student' on new signup
-      const uid = data?.user?.id || existingOv?.id || _generateUuid();
+      if (!res.ok) {
+        const errMsg = (data.msg || data.error_description || data.message || '').toLowerCase();
+        if (errMsg.includes('already registered') || errMsg.includes('already exists')) {
+          errEl.style.color = 'var(--red)';
+          errEl.textContent = '❌ هذا البريد الإلكتروني مسجل بالفعل! انتقل لتبويب «تسجيل الدخول».';
+          return;
+        }
+        if (errMsg.includes('rate limit') || res.status === 429) {
+          throw new Error('تم إرسال عدة رسائل تأكيد في وقت قصير. يرجى فحص بريدك الإلكتروني (أو الرسائل غير المرغوب فيها Spam) أو المحاولة بعد دقائق.');
+        }
+        throw new Error(data.msg || data.error_description || 'تعذر إنشاء الحساب وإرسال رسالة التأكيد');
+      }
+
+      // إذا كانت إعدادات Supabase ترسل إيميل تأكيد (Confirmation Email)، لن يعود access_token إلا بعد ضغط الطالب على الرابط في الإيميل
+      const uid = data?.user?.id || data?.id || existingOv?.id || _generateUuid();
+      const isConfirmedImmediately = Boolean(data.access_token && data?.user?.email_confirmed_at);
+
       const cloudUser = {
         id: uid,
         email: lowerEmail,
@@ -8802,14 +8753,14 @@ ESSAY
         permissions: null,
         is_active: true,
         deleted: false,
-        pw_hash: _encodePass(password),
+        pending_confirmation: !isConfirmedImmediately,
         created_at: new Date().toISOString()
       };
       overrides[uid] = { ...(overrides[uid] || {}), ...cloudUser };
       overrides[lowerEmail] = { ...(overrides[lowerEmail] || {}), ...cloudUser };
       await window.saveSystemUserOverrides(overrides);
 
-      if (res.ok && data.access_token) {
+      if (isConfirmedImmediately) {
         await establishAuthSession(data.access_token, data.refresh_token, data.user, {
           full_name: fullName,
           grade,
@@ -8817,30 +8768,20 @@ ESSAY
           section_code: sectionCode
         });
         closeModal('auth-modal');
-        toast('🎉 تم إنشاء حسابك كطالب وتسجيل الدخول بنجاح!');
+        toast('🎉 تم إنشاء حسابك وتسجيل الدخول بنجاح!');
         return;
       }
 
-      // If Supabase returned "email rate limit exceeded" (429) or requires email confirmation, log in immediately via our cloud account!
-      const errMsg = (data.msg || data.error_description || data.message || '').toLowerCase();
-      if (!res.ok && !errMsg.includes('rate limit') && !errMsg.includes('already registered') && res.status !== 429 && res.status !== 400 && res.status !== 422) {
-        throw new Error(data.msg || data.error_description || 'تعذر إنشاء الحساب');
+      // تحويل المستخدم لتبويب تسجيل الدخول مع إظهار رسالة واضحة بتأكيد الإيميل
+      switchAuthTab('login');
+      document.getElementById('login-email').value = lowerEmail;
+      if (errEl) {
+        errEl.style.color = 'var(--teal)';
+        errEl.innerHTML = '📩 تم إرسال رسالة تأكيد الحساب (Confirm) إلى بريدك الإلكتروني! افتح الإيميل واضغط على رابط التأكيد ثم سجل الدخول هنا.';
       }
-
-      await establishAuthSession(SUPABASE_KEY, null, {
-        id: uid,
-        email: lowerEmail,
-        created_at: cloudUser.created_at,
-        user_metadata: { full_name: fullName, grade, term, section_code: sectionCode }
-      }, {
-        full_name: fullName,
-        grade,
-        term,
-        section_code: sectionCode
-      });
-      closeModal('auth-modal');
-      toast('🎉 تم إنشاء حسابك كطالب وتسجيل الدخول بنجاح!');
+      toast('📩 تم إرسال رسالة تأكيد الحساب إلى بريدك الإلكتروني! يرجى تأكيد الحساب من الإيميل أولاً.');
     } catch (err) {
+      if (errEl) errEl.style.color = 'var(--red)';
       errEl.textContent = '❌ ' + (err.message || 'خطأ أثناء التسجيل');
     }
   };
@@ -9118,6 +9059,36 @@ ESSAY
   async function restoreSavedAuthSession() {
     try {
       localStorage.removeItem('super_admin_user_overrides');
+
+      // 1. فحص ما إذا كان الطالب عائداً من رابط تأكيد البريد الإلكتروني (Confirm Email Link) في الـ URL Hash
+      if (window.location.hash && window.location.hash.includes('access_token=')) {
+        const hashParams = new URLSearchParams(window.location.hash.substring(1));
+        const accessToken = hashParams.get('access_token');
+        const refreshToken = hashParams.get('refresh_token');
+        if (accessToken) {
+          try {
+            const uRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+              headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${accessToken}` }
+            });
+            if (uRes.ok) {
+              const userObj = await uRes.json();
+              if (userObj && userObj.id) {
+                const overrides = await window.fetchSystemUserOverrides();
+                const lowerEm = (userObj.email || '').toLowerCase();
+                if (overrides[userObj.id]) overrides[userObj.id].pending_confirmation = false;
+                if (lowerEm && overrides[lowerEm]) overrides[lowerEm].pending_confirmation = false;
+                await window.saveSystemUserOverrides(overrides);
+
+                await establishAuthSession(accessToken, refreshToken, userObj);
+                history.replaceState(null, '', window.location.pathname + window.location.search);
+                toast('🎉 تم تأكيد بريدك الإلكتروني وتفعيل حسابك بنجاح!');
+                return;
+              }
+            }
+          } catch (e) {}
+        }
+      }
+
       const raw = localStorage.getItem('supabase_auth_session');
       if (!raw) {
         window._dbAccountVerified = false;
@@ -9130,7 +9101,6 @@ ESSAY
         const synced = await window.syncUserPermissionsFromDB();
         if (!synced) {
           showGradeSelection();
-          toast('⛔ يرجى تسجيل الدخول بحسابك للوصول إلى المنصة', 'error');
         }
       }
     } catch (e) {}
@@ -11465,7 +11435,7 @@ ESSAY
       }
       const profileRow = rows[0];
       const ov = overrides[uid] || overrides[profileRow.id] || (email ? overrides[email] : null);
-      if (ov?.deleted === true || ov?.is_active === false || (profileRow.is_active === false && ov?.is_active !== true)) {
+      if (ov?.deleted === true || ov?.is_active === false || ov?.pending_confirmation === true || (profileRow.is_active === false && ov?.is_active !== true)) {
         window._dbAccountVerified = false;
         window.authSession = { accessToken: null, refreshToken: null, user: null, profile: null, permissions: null };
         localStorage.removeItem('supabase_auth_session');
@@ -11484,14 +11454,14 @@ ESSAY
     if (window.IS_STANDALONE_SUPER_ADMIN) return true;
     const uid = window.authSession?.user?.id;
     if (!uid || window._dbAccountVerified === false) {
-      toast(promptMessage || '🔒 يجب تسجيل الدخول بحساب مسجل في قاعدة البيانات أولاً لعرض المحتوى أو فتح الاختبارات والأسئلة', 'error');
+      toast(promptMessage || '🔒 يجب تسجيل الدخول بحسابك المسجل في المنصة أولاً لتحميل المحتوى أو الدخول على الامتحانات', 'error');
       if (typeof openAuthModal === 'function') openAuthModal('login');
       return false;
     }
     // Trigger background verification against DB
     window.verifyActiveDatabaseAccount(false).then(valid => {
       if (!valid) {
-        toast('🔒 يجب أن يكون لديك حساب مسجل ومفعل في قاعدة البيانات للوصول إلى محتوى المنصة', 'error');
+        toast('🔒 يجب أن يكون لديك حساب مسجل ومؤكد في المنصة لتحميل المحتوى أو دخول الامتحانات', 'error');
         if (typeof showGradeSelection === 'function') showGradeSelection();
         if (typeof openAuthModal === 'function') openAuthModal('login');
       }
@@ -11499,58 +11469,15 @@ ESSAY
     return true;
   };
 
-  // Gate navigation & content loading functions on student platform
-  const _origSelectTerm = window.selectTerm;
-  if (typeof _origSelectTerm === 'function') {
-    window.selectTerm = async function (term) {
-      if (window.IS_STANDALONE_SUPER_ADMIN) return _origSelectTerm.apply(this, arguments);
-      if (!window.authSession?.user?.id) {
-        toast('🔒 يجب تسجيل الدخول بحسابك المسجل في المنصة أولاً لفتح الترم وعرض المحتوى', 'error');
-        if (typeof openAuthModal === 'function') openAuthModal('login');
-        return;
-      }
-      const ok = await window.verifyActiveDatabaseAccount(true);
-      if (!ok) {
-        toast('🔒 هذا الحساب غير موجود أو غير مفعل في قاعدة البيانات — سجل حساباً جديداً أو تواصل مع الإدارة', 'error');
-        if (typeof openAuthModal === 'function') openAuthModal('login');
-        return;
-      }
-      return _origSelectTerm.apply(this, arguments);
-    };
-  }
-
-  const _origShowSectionsPage = window.showSectionsPage;
-  if (typeof _origShowSectionsPage === 'function') {
-    window.showSectionsPage = function () {
-      if (!window.IS_STANDALONE_SUPER_ADMIN && !window.requireDatabaseAccount('🔒 يجب تسجيل الدخول بحسابك المسجل في قاعدة البيانات أولاً')) return;
-      return _origShowSectionsPage.apply(this, arguments);
-    };
-  }
-
-  const _origOpenSection = window.openSection;
-  if (typeof _origOpenSection === 'function') {
-    window.openSection = async function (section) {
-      if (!window.IS_STANDALONE_SUPER_ADMIN) {
-        if (!window.requireDatabaseAccount('🔒 يجب تسجيل الدخول بحسابك المسجل في قاعدة البيانات أولاً لفتح هذا القسم')) return;
-        const ok = await window.verifyActiveDatabaseAccount(false);
-        if (!ok) {
-          toast('🔒 الحساب غير مسجل أو غير مفعل في قاعدة البيانات', 'error');
-          if (typeof openAuthModal === 'function') openAuthModal('login');
-          return;
-        }
-      }
-      return _origOpenSection.apply(this, arguments);
-    };
-  }
-
+  // السماح لأي زائر بتصفح المنصة والأقسام والمواد بحرية، مع اشتراط تسجيل الدخول فقط عند دخول امتحان أو تحميل أي محتوى
   const _origStartQuiz = window.startQuiz;
   if (typeof _origStartQuiz === 'function') {
     window.startQuiz = async function (id) {
       if (!window.IS_STANDALONE_SUPER_ADMIN) {
-        if (!window.requireDatabaseAccount('🔒 لا يمكن فتح أي امتحان أو أسئلة إلا بعد تسجيل الدخول بحساب مسجل في قاعدة البيانات')) return;
+        if (!window.requireDatabaseAccount('🔒 لا يمكن الدخول على أي امتحان أو أسئلة إلا بعد تسجيل الدخول بحسابك المسجل في المنصة')) return;
         const ok = await window.verifyActiveDatabaseAccount(true);
         if (!ok) {
-          toast('🔒 لا يمكن فتح الاختبار — يجب أن يكون حسابك مسجلاً ومفعلاً في قاعدة البيانات', 'error');
+          toast('🔒 لا يمكن فتح الاختبار — يرجى تسجيل الدخول بحسابك المؤكد أولاً', 'error');
           if (typeof openAuthModal === 'function') openAuthModal('login');
           return;
         }
@@ -11574,76 +11501,12 @@ ESSAY
     };
   }
 
-  const _origLoadQuizzes = window.loadQuizzes;
-  if (typeof _origLoadQuizzes === 'function') {
-    window.loadQuizzes = async function () {
-      const isAdminView = !document.getElementById('admin-page')?.classList.contains('hidden');
-      if (!window.IS_STANDALONE_SUPER_ADMIN && !isAdminView && !window.requireDatabaseAccount('🔒 سجل الدخول بحسابك أولاً لتحميل وعرض الاختبارات')) {
-        const grid = document.getElementById('quizzes-grid');
-        if (grid) grid.innerHTML = '';
-        return;
-      }
-      return _origLoadQuizzes.apply(this, arguments);
-    };
-  }
-
-  const _origLoadResources = window.loadResources;
-  if (typeof _origLoadResources === 'function') {
-    window.loadResources = async function (type) {
-      const isAdminView = !document.getElementById('admin-page')?.classList.contains('hidden');
-      if (!window.IS_STANDALONE_SUPER_ADMIN && !isAdminView && !window.requireDatabaseAccount('🔒 سجل الدخول بحسابك أولاً لتحميل وعرض المحاضرات والملخصات')) {
-        const lList = document.getElementById('lectures-list');
-        const sList = document.getElementById('summaries-list');
-        if (lList) lList.innerHTML = '';
-        if (sList) sList.innerHTML = '';
-        return [];
-      }
-      return _origLoadResources.apply(this, arguments);
-    };
-  }
-
-  [
-    'showLecturesList',
-    'openPublicLectureOwner',
-    'openPublicOwner',
-    'openPublicLectureOwnerFolder',
-    'openPublicSummaryOwnerFolder',
-    'showSubjectSummaries'
-  ].forEach(fnName => {
-    const orig = window[fnName];
-    if (typeof orig === 'function') {
-      window[fnName] = async function (...args) {
-        if (!window.IS_STANDALONE_SUPER_ADMIN) {
-          if (!window.requireDatabaseAccount('🔒 يجب تسجيل الدخول بحساب مسجل في قاعدة البيانات أولاً لعرض أو تحميل المحتوى')) return;
-          const ok = await window.verifyActiveDatabaseAccount(false);
-          if (!ok) {
-            if (typeof openAuthModal === 'function') openAuthModal('login');
-            return;
-          }
-        }
-        return orig.apply(this, args);
-      };
-    }
-  });
-
-  const _origOnGlobalSearchInput = window.onGlobalSearchInput;
-  if (typeof _origOnGlobalSearchInput === 'function') {
-    window.onGlobalSearchInput = function (val) {
-      if (!window.IS_STANDALONE_SUPER_ADMIN && val && val.trim().length > 0 && !window.requireDatabaseAccount('🔒 يجب تسجيل الدخول بحسابك أولاً للبحث في محتوى المنصة')) {
-        const resBox = document.getElementById('global-search-results');
-        if (resBox) resBox.classList.add('hidden');
-        return;
-      }
-      return _origOnGlobalSearchInput.apply(this, arguments);
-    };
-  }
-
-  // Intercept clicks on any resource/lecture/summary download link if not logged in with a verified DB account
+  // اعتراض أي محاولة لتحميل ملف أو محاضرة أو ملخص (سواء من الأقسام أو من نتائج البحث) إذا لم يكن مسجلاً بحسابه
   document.addEventListener('click', (e) => {
     if (window.IS_STANDALONE_SUPER_ADMIN) return;
-    const link = e.target.closest('.resource-card a[href], #lectures-list a[href], #summaries-list a[href]');
+    const link = e.target.closest('.resource-card a[href], a.resource-card[href], #lectures-list a[href], #lectures-subjects-list a[href], #summaries-list a[href], #global-search-results a[href]');
     if (link) {
-      if (!window.requireDatabaseAccount('🔒 لا يمكن تحميل أي محتوى إلا بعد تسجيل الدخول بحساب مسجل في قاعدة البيانات')) {
+      if (!window.requireDatabaseAccount('🔒 لا يمكن تحميل أو فتح أي محتوى إلا بعد تسجيل الدخول بحسابك المسجل في المنصة')) {
         e.preventDefault();
         e.stopPropagation();
       }
