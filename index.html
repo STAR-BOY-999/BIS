@@ -11328,7 +11328,19 @@ ESSAY
     `;
   };
 
-  window.applyPlatformGlobalLockState = function (isLocked) {
+  window._lastPlatformLockTs = Number(localStorage.getItem('bis_platform_lock_ts_v1') || 0);
+  let _lockToggleInFlight = false;
+
+  window.applyPlatformGlobalLockState = function (isLocked, incomingTs = 0) {
+    const numTs = Number(incomingTs || 0);
+    if (numTs > 0) {
+      if (window._lastPlatformLockTs && numTs < window._lastPlatformLockTs) {
+        return; // تجاهل أي استجابة قديمة أقدم من آخر ضغطة قفل/فتح
+      }
+      window._lastPlatformLockTs = numTs;
+      try { localStorage.setItem('bis_platform_lock_ts_v1', String(numTs)); } catch (e) {}
+    }
+
     const locked = Boolean(isLocked);
     const prevLocked = Boolean(window._isPlatformLockedGlobal);
     window._isPlatformLockedGlobal = locked;
@@ -11338,8 +11350,8 @@ ESSAY
       window.renderSuperAdminPlatformLockBar();
     }
 
-    // السوبر أدمن لا يُقفل عليه أبداً حتى يتمكن من فتح وإدارة المنصة بحرية
-    if (window.IS_STANDALONE_SUPER_ADMIN || window.currentAdminRole === 'super_admin') {
+    // فقط ملف السوبر أدمن المستقل (super-admin.html) يظل مفتوحاً للتحكم، أما منصة الطلاب فتُقفل بالكامل على الجميع بدون استثناء!
+    if (window.IS_STANDALONE_SUPER_ADMIN) {
       const existingOverlay = document.getElementById('platform-global-lock-overlay');
       if (existingOverlay) existingOverlay.remove();
       document.body.style.overflow = '';
@@ -11352,14 +11364,16 @@ ESSAY
         overlay = document.createElement('div');
         overlay.id = 'platform-global-lock-overlay';
         overlay.style.cssText = `
-          position:fixed;inset:0;z-index:999999;
-          background:radial-gradient(circle at 50% 25%, rgba(15,23,42,0.97), rgba(5,5,15,0.995));
-          backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
-          display:flex;align-items:center;justify-content:center;padding:1.5rem;text-align:center;
-          font-family:'Cairo',sans-serif;direction:rtl;
+          position:fixed !important;inset:0 !important;z-index:2147483647 !important;
+          background:radial-gradient(circle at 50% 25%, rgba(15,23,42,0.985), rgba(5,5,15,0.998)) !important;
+          backdrop-filter:blur(22px) !important;-webkit-backdrop-filter:blur(22px) !important;
+          display:flex !important;align-items:center !important;justify-content:center !important;
+          padding:1.5rem !important;text-align:center !important;
+          font-family:'Cairo',sans-serif !important;direction:rtl !important;
+          pointer-events:all !important;user-select:none !important;
         `;
         overlay.innerHTML = `
-          <div style="max-width:480px;width:100%;background:rgba(15,23,42,0.88);border:1.5px solid rgba(248,113,113,0.4);border-radius:24px;padding:2.4rem 1.8rem;box-shadow:0 20px 60px rgba(0,0,0,0.75), 0 0 40px rgba(248,113,113,0.15)">
+          <div style="max-width:480px;width:100%;background:rgba(15,23,42,0.92);border:1.5px solid rgba(248,113,113,0.45);border-radius:24px;padding:2.4rem 1.8rem;box-shadow:0 20px 60px rgba(0,0,0,0.85), 0 0 40px rgba(248,113,113,0.18)">
             <div style="width:76px;height:76px;border-radius:50%;background:rgba(248,113,113,0.15);border:2px solid rgba(248,113,113,0.45);color:#f87171;font-size:2.1rem;display:flex;align-items:center;justify-content:center;margin:0 auto 1.2rem auto;box-shadow:0 0 28px rgba(248,113,113,0.28)">
               <i class="fas fa-lock"></i>
             </div>
@@ -11370,13 +11384,13 @@ ESSAY
             </p>
             <div style="margin:0 0 1.25rem 0;padding:12px 14px;border-radius:16px;background:rgba(37,211,102,0.08);border:1px solid rgba(37,211,102,0.28);display:flex;flex-direction:column;align-items:center;gap:10px">
               <div style="font-size:0.84rem;color:#e2e8f0;font-weight:700">
-                📞 رقم التواصل مع المطور: <span dir="ltr" style="color:#25d366;font-weight:900;font-size:0.95rem">01154335024</span>
+                📞 رقم التواصل مع المطور: <span dir="ltr" style="color:#25d366;font-weight:900;font-size:0.95rem;user-select:text">01154335024</span>
               </div>
               <a
                 href="https://wa.me/+201154335024"
                 target="_blank"
                 rel="noopener"
-                style="display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;max-width:280px;padding:11px 20px;border-radius:12px;background:linear-gradient(135deg, #25d366, #128c7e);color:#fff;font-weight:900;font-size:0.92rem;text-decoration:none;box-shadow:0 6px 20px rgba(37,211,102,0.35);transition:transform 0.2s"
+                style="display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;max-width:280px;padding:11px 20px;border-radius:12px;background:linear-gradient(135deg, #25d366, #128c7e);color:#fff;font-weight:900;font-size:0.92rem;text-decoration:none;box-shadow:0 6px 20px rgba(37,211,102,0.35);transition:transform 0.2s;cursor:pointer"
               >
                 <i class="fab fa-whatsapp" style="font-size:1.15rem"></i>
                 تواصل مع المطور
@@ -11388,7 +11402,20 @@ ESSAY
             </div>
           </div>
         `;
+        // عزل كامل لجميع النقرات والضغطات المتكررة على شاشة القفل حتى لا تتأثر أي نافذة خلفها أبداً
+        ['click', 'dblclick', 'mousedown', 'mouseup', ' pointerdown', 'pointerup', 'touchstart', 'touchend', 'contextmenu'].forEach(evType => {
+          overlay.addEventListener(evType.trim(), (ev) => {
+            if (ev.target && ev.target.closest && ev.target.closest('a[href*="wa.me"]')) {
+              ev.stopPropagation();
+              return;
+            }
+            ev.stopPropagation();
+          }, true);
+        });
         document.body.appendChild(overlay);
+      } else {
+        overlay.classList.remove('hidden');
+        overlay.style.display = 'flex';
       }
       document.body.style.overflow = 'hidden';
     } else {
@@ -11402,17 +11429,37 @@ ESSAY
     }
   };
 
+  // حارس مستمر (Lock Guardian): يمنع إزالة أو إخفاء شاشة القفل بأي شكل طالما المنصة مقفولة
+  if (!window.IS_STANDALONE_SUPER_ADMIN) {
+    setInterval(() => {
+      if (window._isPlatformLockedGlobal) {
+        const ov = document.getElementById('platform-global-lock-overlay');
+        if (!ov || ov.classList.contains('hidden') || ov.style.display === 'none') {
+          window.applyPlatformGlobalLockState(true);
+        }
+      }
+    }, 600);
+  }
+
   window.togglePlatformGlobalLock = async function (forceState = null) {
     if (!window.IS_STANDALONE_SUPER_ADMIN && window.currentAdminRole !== 'super_admin') {
       return toast('⛔ هذا الزر مخصص للسوبر أدمن فقط!', 'error');
     }
     const nextLocked = typeof forceState === 'boolean' ? forceState : !window._isPlatformLockedGlobal;
-    const nowIso = new Date().toISOString();
+    const nowTs = Date.now();
+    const nowIso = new Date(nowTs).toISOString();
+    _lockToggleInFlight = true;
 
-    // 1. تطبيق فوري (0ms Optimistic UI) على الشاشة وفي التخزين المحلي وعبر BroadcastChannel
-    window.applyPlatformGlobalLockState(nextLocked);
+    // 1. تطبيق فوري (0ms Optimistic UI) مع ختم زمني صارم يمنع أي استجابة قديمة من إلغاء القفل
+    window.applyPlatformGlobalLockState(nextLocked, nowTs);
+    try {
+      const localCached = JSON.parse(localStorage.getItem('super_admin_user_overrides_v2') || '{}');
+      localCached.__platform_status__ = { locked: nextLocked, ts: nowTs, updated_at: nowIso };
+      localStorage.setItem('super_admin_user_overrides_v2', JSON.stringify(localCached));
+    } catch (e) {}
+
     if (typeof window.broadcastRealtimeUserSync === 'function') {
-      window.broadcastRealtimeUserSync(nextLocked ? 'platform_locked' : 'platform_unlocked', '__platform__', '__platform__');
+      window.broadcastRealtimeUserSync(nextLocked ? 'platform_locked' : 'platform_unlocked', '__platform__', String(nowTs));
     }
     toast(nextLocked
       ? '🔒 تم قفل المنصة بالكامل الآن في الوقت الفعلي على جميع المستخدمين!'
@@ -11422,47 +11469,68 @@ ESSAY
       const overrides = await window.fetchSystemUserOverrides({ skipApplyLock: true });
       overrides.__platform_status__ = {
         locked: nextLocked,
+        ts: nowTs,
         updated_at: nowIso
       };
       await window.saveSystemUserOverrides(overrides);
       if (typeof window.broadcastRealtimeUserSync === 'function') {
-        window.broadcastRealtimeUserSync(nextLocked ? 'platform_locked' : 'platform_unlocked', '__platform__', '__platform__');
+        window.broadcastRealtimeUserSync(nextLocked ? 'platform_locked' : 'platform_unlocked', '__platform__', String(nowTs));
       }
       logAdminActivity(nextLocked ? 'قفل المنصة بالكامل' : 'فتح المنصة بالكامل', 'platform', nextLocked ? 'تم إغلاق المنصة مؤقتاً' : 'تم إعادة فتح المنصة');
     } catch (e) {
       toast('تعذر حفظ حالة قفل المنصة في الخادم', 'error');
+    } finally {
+      _lockToggleInFlight = false;
     }
   };
 
   window.fetchSystemUserOverrides = async function (opts = {}) {
     try { localStorage.removeItem('super_admin_user_overrides'); } catch (e) {}
     try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/resources?select=id,url&type=eq.user_overrides&grade=eq.sys&order=id.desc&limit=1`, {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/resources?select=id,url&type=eq.user_overrides&grade=eq.sys&order=id.desc&limit=1&_t=${Date.now()}`, {
         headers: {
           'apikey': SUPABASE_KEY,
           'Authorization': `Bearer ${SUPABASE_KEY}`,
-          'Cache-Control': 'no-cache'
-        }
+          'Cache-Control': 'no-cache, no-store, must-revalidate'
+        },
+        cache: 'no-store'
       });
       if (res.ok) {
         const rows = await res.json();
         if (rows.length && rows[0].url) {
           const remoteOv = JSON.parse(rows[0].url);
-          localStorage.setItem('super_admin_user_overrides_v2', JSON.stringify(remoteOv));
-          if (!opts?.skipApplyLock && remoteOv && typeof remoteOv.__platform_status__?.locked === 'boolean') {
-            window.applyPlatformGlobalLockState(remoteOv.__platform_status__.locked);
+          const remoteLockObj = remoteOv?.__platform_status__;
+          const remoteTs = Number(remoteLockObj?.ts || (remoteLockObj?.updated_at ? new Date(remoteLockObj.updated_at).getTime() : 0) || 0);
+          const localTs = Number(window._lastPlatformLockTs || localStorage.getItem('bis_platform_lock_ts_v1') || 0);
+
+          // إذا كان الختم الزمني المحلي أحدث (بسبب ضغطة قفل/فتح حديثة لم تنتهِ مزامنتها بعد)، نحافظ على الحالة المحلية الأحدث
+          if (localTs > remoteTs && (_lockToggleInFlight || (Date.now() - localTs < 8000))) {
+            remoteOv.__platform_status__ = {
+              locked: Boolean(window._isPlatformLockedGlobal),
+              ts: localTs,
+              updated_at: new Date(localTs).toISOString()
+            };
+          } else if (!opts?.skipApplyLock && remoteLockObj && typeof remoteLockObj.locked === 'boolean') {
+            window.applyPlatformGlobalLockState(remoteLockObj.locked, remoteTs);
           }
+
+          if (remoteOv?.__ga4_config__?.measurement_id && typeof window.initGoogleAnalyticsGA4 === 'function') {
+            window.initGoogleAnalyticsGA4(remoteOv.__ga4_config__.measurement_id);
+          }
+
+          localStorage.setItem('super_admin_user_overrides_v2', JSON.stringify(remoteOv));
           return remoteOv;
         }
         localStorage.setItem('super_admin_user_overrides_v2', '{}');
-        if (!opts?.skipApplyLock) window.applyPlatformGlobalLockState(false);
+        if (!opts?.skipApplyLock && !_lockToggleInFlight) window.applyPlatformGlobalLockState(false);
         return {};
       }
     } catch (e) {}
     try {
       const cachedOv = JSON.parse(localStorage.getItem('super_admin_user_overrides_v2') || '{}');
       if (!opts?.skipApplyLock && cachedOv && typeof cachedOv.__platform_status__?.locked === 'boolean') {
-        window.applyPlatformGlobalLockState(cachedOv.__platform_status__.locked);
+        const cTs = Number(cachedOv.__platform_status__?.ts || 0);
+        window.applyPlatformGlobalLockState(cachedOv.__platform_status__.locked, cTs);
       }
       return cachedOv;
     } catch (e) {
@@ -11472,6 +11540,25 @@ ESSAY
 
   window.saveSystemUserOverrides = async function (overrides) {
     try { localStorage.removeItem('super_admin_user_overrides'); } catch (e) {}
+    // الحفاظ دائماً على أحدث حالة قفل للمنصة وإعدادات Google Analytics عند حفظ أي تعديلات أخرى
+    try {
+      const prevCached = JSON.parse(localStorage.getItem('super_admin_user_overrides_v2') || '{}');
+      const localLockTs = Number(window._lastPlatformLockTs || localStorage.getItem('bis_platform_lock_ts_v1') || 0);
+      const ovLockTs = Number(overrides?.__platform_status__?.ts || 0);
+      if (localLockTs >= ovLockTs && localStorage.getItem('bis_platform_lock_state_v1') !== null) {
+        overrides.__platform_status__ = {
+          locked: localStorage.getItem('bis_platform_lock_state_v1') === 'true',
+          ts: localLockTs || Date.now(),
+          updated_at: new Date(localLockTs || Date.now()).toISOString()
+        };
+      } else if (!overrides.__platform_status__ && prevCached.__platform_status__) {
+        overrides.__platform_status__ = prevCached.__platform_status__;
+      }
+      if (!overrides.__ga4_config__ && prevCached.__ga4_config__) {
+        overrides.__ga4_config__ = prevCached.__ga4_config__;
+      }
+    } catch (e) {}
+
     localStorage.setItem('super_admin_user_overrides_v2', JSON.stringify(overrides));
     try {
       const headers = {
@@ -12672,7 +12759,83 @@ ESSAY
     }
   };
 
-  // ─── 20. SUPER ADMIN ANALYTICS ENGINE (Section 17) ───
+  // ─── 20. SUPER ADMIN ANALYTICS ENGINE + GOOGLE ANALYTICS (GA4) LIVE INTEGRATION (Section 17) ───
+  window._currentGA4MeasurementId = localStorage.getItem('bis_ga4_measurement_id_v1') || '';
+
+  window.initGoogleAnalyticsGA4 = function (measurementId) {
+    const cleanId = String(measurementId || '').trim().toUpperCase();
+    if (!cleanId || !/^G-[A-Z0-9]+$/i.test(cleanId)) return false;
+
+    try { localStorage.setItem('bis_ga4_measurement_id_v1', cleanId); } catch (e) {}
+    if (window._loadedGA4ScriptId === cleanId) return true;
+    window._loadedGA4ScriptId = cleanId;
+    window._currentGA4MeasurementId = cleanId;
+
+    window.dataLayer = window.dataLayer || [];
+    window.gtag = window.gtag || function () { window.dataLayer.push(arguments); };
+    window.gtag('js', new Date());
+    window.gtag('config', cleanId, {
+      page_title: document.title || 'كلية نظم ومعلومات (BIS)',
+      page_location: window.location.href,
+      send_page_view: true
+    });
+
+    const existingScript = document.getElementById('bis-ga4-gtag-script');
+    if (existingScript) existingScript.remove();
+    const s = document.createElement('script');
+    s.id = 'bis-ga4-gtag-script';
+    s.async = true;
+    s.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(cleanId)}`;
+    document.head.appendChild(s);
+    return true;
+  };
+
+  window.trackGA4Event = function (eventName, params = {}) {
+    try {
+      if (typeof window.gtag === 'function' && window._currentGA4MeasurementId) {
+        window.gtag('event', eventName, params);
+      }
+    } catch (e) {}
+  };
+
+  if (window._currentGA4MeasurementId) {
+    window.initGoogleAnalyticsGA4(window._currentGA4MeasurementId);
+  }
+
+  window.saveGoogleAnalyticsIdAdmin = async function () {
+    const inp = document.getElementById('ga4-measurement-id-input');
+    const rawVal = (inp ? inp.value : '').trim().toUpperCase();
+
+    if (rawVal && !/^G-[A-Z0-9]{4,}$/i.test(rawVal)) {
+      return toast('❌ يرجى إدخال معرّف قياس صحيح يبدأ بـ G- (مثال: G-XXXXXXXXXX)', 'error');
+    }
+
+    window._currentGA4MeasurementId = rawVal;
+    try {
+      if (rawVal) {
+        localStorage.setItem('bis_ga4_measurement_id_v1', rawVal);
+        window.initGoogleAnalyticsGA4(rawVal);
+      } else {
+        localStorage.removeItem('bis_ga4_measurement_id_v1');
+        window._loadedGA4ScriptId = '';
+      }
+    } catch (e) {}
+
+    try {
+      const overrides = await window.fetchSystemUserOverrides({ skipApplyLock: true });
+      overrides.__ga4_config__ = {
+        measurement_id: rawVal,
+        updated_at: new Date().toISOString()
+      };
+      await window.saveSystemUserOverrides(overrides);
+      await logAdminActivity(rawVal ? 'ربط Google Analytics (GA4)' : 'إلغاء ربط Google Analytics', 'analytics', rawVal || 'تم مسح المعرّف');
+      toast(rawVal ? `✅ تم ربط المنصة بـ Google Analytics (${rawVal}) وتفعيله على جميع الطلاب فوراً!` : '🗑️ تم إلغاء ربط Google Analytics');
+      loadSuperAdminAnalytics();
+    } catch (e) {
+      toast('تعذر حفظ معرّف Google Analytics', 'error');
+    }
+  };
+
   window.loadSuperAdminAnalytics = async function () {
     const container = document.getElementById('admin-section-analytics');
     if (!container) return;
@@ -12681,18 +12844,24 @@ ESSAY
     const filterDays = parseInt(document.getElementById('analytics-filter-days')?.value) || 0;
 
     try {
-      const [pRes, aRes, qRes, rRes, vRes] = await Promise.all([
+      const [pRes, aRes, qRes, rRes, vRes, overrides] = await Promise.all([
         api('profiles?select=id,role,grade,term,created_at'),
         api('quiz_attempts?select=*&order=started_at.desc'),
         api('quizzes?select=id,title,grade,term,section,subject'),
         api('resources?select=id,type,subject,grade,term,title'),
-        api('active_visitors?select=id,last_seen')
+        api('active_visitors?select=id,last_seen'),
+        window.fetchSystemUserOverrides({ skipApplyLock: true })
       ]);
+
+      const ga4Id = overrides?.__ga4_config__?.measurement_id || window._currentGA4MeasurementId || '';
+      if (ga4Id && ga4Id !== window._currentGA4MeasurementId) {
+        window.initGoogleAnalyticsGA4(ga4Id);
+      }
 
       const profiles = pRes.ok ? await pRes.json() : [];
       const dbAttempts = aRes.ok ? await aRes.json() : [];
       const localAttempts = JSON.parse(localStorage.getItem('student_quiz_attempts') || '[]');
-      const resourcesAll = (rRes.ok ? await rRes.json() : []).filter(r => r.title !== '__folder__');
+      const resourcesAll = (rRes.ok ? await rRes.json() : []).filter(r => r.title !== '__folder__' && r.grade !== 'sys');
       const visitors = vRes.ok ? await vRes.json() : [];
 
       const mergedAttemptsMap = new Map();
@@ -12739,6 +12908,42 @@ ESSAY
       const maxSubCount = topSubjects[0]?.[1] || 1;
 
       container.innerHTML = `
+        <!-- كارت ربط Google Analytics (GA4) المباشر بضغطة زر -->
+        <div class="glass-card" style="padding:1.4rem;margin-bottom:1.2rem;border:1.5px solid ${ga4Id ? 'rgba(0,230,118,0.35)' : 'rgba(56,189,248,0.28)'}">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:0.9rem">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <div style="width:40px;height:40px;border-radius:12px;background:rgba(251,191,36,0.15);color:#fbbf24;display:flex;align-items:center;justify-content:center;font-size:1.2rem">
+                <i class="fas fa-chart-line"></i>
+              </div>
+              <div>
+                <h4 style="font-size:1.05rem;font-weight:900;margin:0">ربط المنصة بـ Google Analytics 4 (GA4) مباشر</h4>
+                <p style="font-size:0.8rem;color:var(--text-dim);margin:2px 0 0 0">أدخل معرّف القياس (Measurement ID) من حسابك في جوجل أناليتكس ليتم تفعيله سحابياً على المنصة بالكامل بدون تعديل الكود</p>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <span style="padding:4px 12px;border-radius:20px;font-size:0.76rem;font-weight:900;background:${ga4Id ? 'rgba(0,230,118,0.16)' : 'rgba(148,163,184,0.15)'};color:${ga4Id ? '#00e676' : '#94a3b8'}">
+                ${ga4Id ? `🟢 متصل ومفعّل الآن (${ga4Id})` : '⚪ غير مربوط بعد'}
+              </span>
+              <a href="https://analytics.google.com/" target="_blank" rel="noopener" class="btn btn-ghost" style="padding:6px 12px;font-size:0.78rem;text-decoration:none">
+                <i class="fas fa-external-link-alt"></i> فتح Google Analytics
+              </a>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <input
+              type="text"
+              id="ga4-measurement-id-input"
+              value="${ga4Id}"
+              dir="ltr"
+              placeholder="G-XXXXXXXXXX (معرّف القياس Measurement ID)"
+              style="flex:1;min-width:240px;padding:10px 14px;border-radius:12px;border:1px solid rgba(45,212,191,0.3);background:var(--surface2);color:var(--text);font-family:monospace;font-size:0.92rem;font-weight:800;outline:none"
+            >
+            <button type="button" class="btn btn-primary" onclick="saveGoogleAnalyticsIdAdmin()" style="padding:10px 18px;font-size:0.86rem">
+              <i class="fas fa-link"></i> حفظ وتفعيل الربط السحابي
+            </button>
+          </div>
+        </div>
+
         <div class="admin-filter-bar">
           <strong style="font-size:0.85rem;color:var(--teal)"><i class="fas fa-filter"></i> تصفية التحليلات:</strong>
           <select id="analytics-filter-term" onchange="loadSuperAdminAnalytics()">
@@ -13481,9 +13686,16 @@ ESSAY
 
   try {
     if (_bisRealtimeChannel) {
-      _bisRealtimeChannel.onmessage = () => {
+      _bisRealtimeChannel.onmessage = (ev) => {
+        const msg = ev?.data || {};
+        if (msg.action === 'platform_locked' || msg.action === 'platform_unlocked') {
+          const lockTs = Number(msg.uid || msg.ts || Date.now());
+          window.applyPlatformGlobalLockState(msg.action === 'platform_locked', lockTs);
+          return;
+        }
         if (!window.IS_STANDALONE_SUPER_ADMIN && localStorage.getItem('bis_platform_lock_state_v1') !== null) {
-          window.applyPlatformGlobalLockState(localStorage.getItem('bis_platform_lock_state_v1') === 'true');
+          const savedTs = Number(localStorage.getItem('bis_platform_lock_ts_v1') || 0);
+          window.applyPlatformGlobalLockState(localStorage.getItem('bis_platform_lock_state_v1') === 'true', savedTs);
         }
         handleIncomingRealtimeSync();
       };
@@ -13492,7 +13704,8 @@ ESSAY
 
   window.addEventListener('storage', (e) => {
     if (e.key === 'bis_platform_lock_state_v1') {
-      window.applyPlatformGlobalLockState(e.newValue === 'true');
+      const savedTs = Number(localStorage.getItem('bis_platform_lock_ts_v1') || Date.now());
+      window.applyPlatformGlobalLockState(e.newValue === 'true', savedTs);
       return;
     }
     if (e.key === 'bis_realtime_user_sync_ping' || e.key === 'super_admin_user_overrides_v2' || e.key === 'super_admin_user_presence_v1') {
