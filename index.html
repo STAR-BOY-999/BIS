@@ -2423,6 +2423,246 @@
   color: var(--teal);
 }
 
+/* ─── ULTRA-PROFESSIONAL DIALOGS, MODALS & WIDE RBAC WINDOW (NO HORIZONTAL SCROLL) ─── */
+
+/* توسيع حاوية لوحة التحكم ونافذة إدارة الحسابات والصلاحيات لتظهر كل الأعمدة بالعرض بدون أي شريط تمرير أفقي */
+#main.admin-wide-mode,
+#main:has(#admin-page:not(.hidden)) {
+  max-width: min(1540px, 98vw) !important;
+  width: 98vw !important;
+  padding-left: 1rem !important;
+  padding-right: 1rem !important;
+  transition: max-width 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+#admin-section-users .glass-card {
+  padding: 1.5rem 1.4rem !important;
+  border-radius: 24px !important;
+  border: 1px solid rgba(45, 212, 191, 0.22) !important;
+  box-shadow: 0 24px 65px rgba(0, 0, 0, 0.55), 0 0 40px rgba(45, 212, 191, 0.06) !important;
+  overflow: visible !important;
+}
+
+#admin-section-users .data-table-wrap,
+#admin-users-table-body-wrap .data-table-wrap {
+  width: 100% !important;
+  overflow-x: hidden !important;
+  overflow-y: visible !important;
+  border-radius: 18px !important;
+  border: 1px solid rgba(120, 160, 255, 0.14) !important;
+  background: rgba(6, 9, 22, 0.78) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+[data-theme="light"] #admin-section-users .data-table-wrap,
+[data-theme="light"] #admin-users-table-body-wrap .data-table-wrap {
+  background: rgba(255, 255, 255, 0.92) !important;
+}
+
+#admin-section-users .data-table {
+  width: 100% !important;
+  table-layout: fixed !important;
+  border-collapse: collapse !important;
+  font-size: 0.82rem !important;
+}
+
+#admin-section-users .data-table th {
+  white-space: normal !important;
+  padding: 13px 10px !important;
+  font-size: 0.8rem !important;
+  font-weight: 900 !important;
+  color: var(--teal) !important;
+  background: linear-gradient(180deg, rgba(45, 212, 191, 0.09), rgba(15, 23, 42, 0.85)) !important;
+  border-bottom: 1px solid rgba(45, 212, 191, 0.22) !important;
+  line-height: 1.35 !important;
+}
+[data-theme="light"] #admin-section-users .data-table th {
+  background: linear-gradient(180deg, rgba(45, 212, 191, 0.14), rgba(241, 245, 249, 0.95)) !important;
+  color: #0f766e !important;
+}
+
+#admin-section-users .data-table td {
+  padding: 12px 10px !important;
+  white-space: normal !important;
+  word-break: break-word !important;
+  overflow-wrap: anywhere !important;
+  vertical-align: middle !important;
+  line-height: 1.45 !important;
+  border-bottom: 1px solid rgba(120, 160, 255, 0.08) !important;
+}
+
+#admin-section-users .data-table tbody tr {
+  transition: background 0.2s ease;
+}
+#admin-section-users .data-table tbody tr:hover td {
+  background: rgba(45, 212, 191, 0.055) !important;
+}
+
+/* توزيع متوازن ودقيق لأعمدة جدول الحسابات الـ 8 لتظهر كلها بالعرض بدون أي سكرول أفقي */
+#admin-section-users .data-table th:nth-child(1),
+#admin-section-users .data-table td:nth-child(1) { width: 11%; } /* الاسم */
+#admin-section-users .data-table th:nth-child(2),
+#admin-section-users .data-table td:nth-child(2) { width: 17%; direction: ltr; text-align: right; font-family: 'Segoe UI', Tahoma, sans-serif; font-size: 0.79rem; } /* البريد الإلكتروني */
+#admin-section-users .data-table th:nth-child(3),
+#admin-section-users .data-table td:nth-child(3) { width: 11%; } /* الدور */
+#admin-section-users .data-table th:nth-child(4),
+#admin-section-users .data-table td:nth-child(4) { width: 7%; } /* الترم الدراسي */
+#admin-section-users .data-table th:nth-child(5),
+#admin-section-users .data-table td:nth-child(5) { width: 17%; } /* نطاق الصلاحيات */
+#admin-section-users .data-table th:nth-child(6),
+#admin-section-users .data-table td:nth-child(6) { width: 12%; } /* الاتصال الآن */
+#admin-section-users .data-table th:nth-child(7),
+#admin-section-users .data-table td:nth-child(7) { width: 9%; } /* حالة الحساب */
+#admin-section-users .data-table th:nth-child(8),
+#admin-section-users .data-table td:nth-child(8) { width: 16%; } /* إجراءات */
+
+#admin-section-users .admin-user-actions-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+#admin-section-users .admin-user-actions-grid .btn {
+  padding: 5px 9px !important;
+  font-size: 0.75rem !important;
+  border-radius: 9px !important;
+  font-weight: 800 !important;
+  white-space: nowrap !important;
+}
+
+/* ترقية شاملة لجميع النوافذ المنبثقة (Confirm & Modals) في المنصة لتبدو احترافية وفاخرة */
+#confirm-overlay {
+  background: rgba(2, 4, 14, 0.84) !important;
+  backdrop-filter: blur(22px) saturate(160%) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(160%) !important;
+  z-index: 99990 !important;
+}
+
+#confirm-box {
+  max-width: 430px !important;
+  width: 94% !important;
+  padding: 2.2rem 2rem 1.85rem !important;
+  border-radius: 28px !important;
+  background: linear-gradient(165deg, rgba(12, 17, 38, 0.97) 0%, rgba(5, 7, 18, 0.99) 100%) !important;
+  border: 1.5px solid rgba(120, 160, 255, 0.18) !important;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.8), 0 0 60px rgba(45, 212, 191, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  overflow: hidden;
+}
+[data-theme="light"] #confirm-box {
+  background: linear-gradient(165deg, #ffffff 0%, #f1f5f9 100%) !important;
+  border-color: rgba(15, 23, 42, 0.12) !important;
+  box-shadow: 0 25px 70px rgba(15, 23, 42, 0.22) !important;
+}
+
+#confirm-box::before {
+  content: '' !important;
+  position: absolute !important;
+  top: 0 !important; left: 0 !important; right: 0 !important;
+  height: 3px !important;
+  background: linear-gradient(90deg, transparent, var(--teal), var(--accent), var(--red), transparent) !important;
+  opacity: 0.9 !important;
+}
+
+.confirm-icon-wrap {
+  width: 74px !important;
+  height: 74px !important;
+  border-radius: 22px !important;
+  margin: 0 auto 1.25rem !important;
+  font-size: 2rem !important;
+  position: relative;
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+#confirm-overlay.open .confirm-icon-wrap {
+  transform: scale(1.04);
+}
+.confirm-icon-wrap.danger {
+  background: radial-gradient(circle at 30% 30%, rgba(248, 113, 113, 0.24), rgba(220, 38, 38, 0.08)) !important;
+  border: 1.5px solid rgba(248, 113, 113, 0.4) !important;
+  color: #f87171 !important;
+  box-shadow: 0 0 32px rgba(248, 113, 113, 0.25) !important;
+}
+.confirm-icon-wrap.warning {
+  background: radial-gradient(circle at 30% 30%, rgba(251, 191, 36, 0.24), rgba(217, 119, 6, 0.08)) !important;
+  border: 1.5px solid rgba(251, 191, 36, 0.4) !important;
+  color: #fbbf24 !important;
+  box-shadow: 0 0 32px rgba(251, 191, 36, 0.22) !important;
+}
+.confirm-icon-wrap.info,
+.confirm-icon-wrap.primary {
+  background: radial-gradient(circle at 30% 30%, rgba(45, 212, 191, 0.24), rgba(56, 189, 248, 0.08)) !important;
+  border: 1.5px solid rgba(45, 212, 191, 0.4) !important;
+  color: var(--teal) !important;
+  box-shadow: 0 0 32px rgba(45, 212, 191, 0.24) !important;
+}
+
+#confirm-title {
+  font-size: 1.26rem !important;
+  font-weight: 900 !important;
+  margin-bottom: 0.6rem !important;
+  letter-spacing: -0.2px;
+  color: var(--text) !important;
+}
+
+#confirm-msg {
+  font-size: 0.92rem !important;
+  color: var(--text-dim) !important;
+  line-height: 1.75 !important;
+  margin-bottom: 1.6rem !important;
+  padding: 0.75rem 1rem;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(120, 160, 255, 0.08);
+  word-break: break-word;
+}
+[data-theme="light"] #confirm-msg {
+  background: rgba(15, 23, 42, 0.035);
+  border-color: rgba(15, 23, 42, 0.08);
+}
+
+.confirm-btns {
+  display: grid !important;
+  grid-template-columns: 1fr 1.25fr !important;
+  gap: 12px !important;
+}
+
+.confirm-btns button {
+  padding: 13px 16px !important;
+  border-radius: 14px !important;
+  font-size: 0.94rem !important;
+  font-weight: 900 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+}
+
+.confirm-ok-btn.primary,
+.confirm-ok-btn.info {
+  background: linear-gradient(135deg, var(--teal), var(--accent-dim)) !important;
+  color: #fff !important;
+  box-shadow: 0 6px 22px rgba(45, 212, 191, 0.3) !important;
+}
+.confirm-ok-btn.primary:hover,
+.confirm-ok-btn.info:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 30px rgba(45, 212, 191, 0.42) !important;
+}
+
+/* ترقية كافة النوافذ المنبثقة (.modal) في المنصة */
+.modal {
+  border-radius: 26px !important;
+  border: 1.5px solid rgba(120, 160, 255, 0.16) !important;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.72), 0 0 65px rgba(45, 212, 191, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+}
+
+#rbac-modal .modal {
+  max-width: 680px !important;
+  width: 95% !important;
+  padding: 2rem 2.2rem !important;
+}
+
+
   </style>
   <script>window.IS_PUBLIC_OWNER_DASHBOARD = true; window.IS_STANDALONE_SUPER_ADMIN = false;</script>
 </head>
@@ -7842,7 +8082,110 @@ ESSAY
     return await res.json();
   };
 
-  // ─── 3. SKELETON LOADING HELPER ───
+  // ─── 3. SKELETON LOADING HELPER & LUXURY CUSTOM DIALOGS ENGINE ───
+  // توسيع حاوية #main تلقائياً عند فتح لوحة التحكم (#admin-page) لتتسع لجميع الجداول بالعرض الكامل بدون سكرول أفقي
+  const _origShowPage = window.showPage;
+  if (typeof _origShowPage === 'function') {
+    window.showPage = function (id) {
+      _origShowPage(id);
+      const mainEl = document.getElementById('main');
+      if (mainEl) {
+        mainEl.classList.toggle('admin-wide-mode', id === 'admin-page');
+      }
+    };
+  }
+
+  // ترقية نافذة التأكيد المخصصة (showConfirm) وإضافة نافذة إدخال احترافية (showProPromptDialog) لاستبدال كل نوافذ المتصفح التقليدية (confirm / prompt / alert)
+  window.showConfirm = function ({ title = 'تأكيد الإجراء', msg = '', type = 'danger', icon = 'fa-trash-alt', okText = 'تأكيد', cancelText = 'إلغاء' } = {}) {
+    return new Promise(resolve => {
+      _confirmResolve = resolve;
+      const titleEl = document.getElementById('confirm-title');
+      const msgEl = document.getElementById('confirm-msg');
+      const iconI = document.getElementById('confirm-icon-i');
+      const iconWrap = document.getElementById('confirm-icon');
+      const okBtn = document.getElementById('confirm-ok-btn');
+      const cancelBtn = document.querySelector('#confirm-box .confirm-cancel-btn');
+
+      if (titleEl) titleEl.textContent = title;
+      if (msgEl) msgEl.innerHTML = String(msg || '').replace(/\n/g, '<br>');
+      if (iconI) iconI.className = `fas ${icon}`;
+      if (iconWrap) iconWrap.className = `confirm-icon-wrap ${type}`;
+      if (okBtn) {
+        okBtn.innerHTML = `<i class="fas ${type === 'danger' ? 'fa-trash-alt' : type === 'warning' ? 'fa-exclamation-circle' : 'fa-check-circle'}"></i> ${okText}`;
+        okBtn.className = `confirm-ok-btn ${type}`;
+      }
+      if (cancelBtn) {
+        cancelBtn.textContent = cancelText || 'إلغاء';
+      }
+      document.getElementById('confirm-overlay')?.classList.add('open');
+    });
+  };
+
+  window.showProPromptDialog = function ({ title = 'إدخال بيانات', msg = '', placeholder = 'اكتب هنا...', defaultValue = '', icon = 'fa-folder-plus', okText = 'حفظ وتأكيد', cancelText = 'إلغاء' } = {}) {
+    return new Promise(resolve => {
+      let overlay = document.getElementById('pro-prompt-overlay');
+      if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'pro-prompt-overlay';
+        overlay.className = 'modal-overlay hidden';
+        overlay.style.zIndex = '99995';
+        overlay.innerHTML = `
+          <div class="modal" style="max-width:430px;text-align:center;padding:2.2rem 2rem 1.8rem">
+            <div class="confirm-icon-wrap primary" id="pro-prompt-icon-wrap" style="margin:0 auto 1.1rem">
+              <i class="fas fa-folder-plus" id="pro-prompt-icon"></i>
+            </div>
+            <h3 id="pro-prompt-title" style="margin:0 0 0.5rem;font-size:1.22rem;font-weight:900"></h3>
+            <p id="pro-prompt-msg" style="font-size:0.88rem;color:var(--text-dim);margin:0 0 1.1rem;line-height:1.6"></p>
+            <div class="form-group" style="text-align:right;margin-bottom:1.4rem">
+              <input type="text" id="pro-prompt-input" style="text-align:right;padding:12px 14px;font-size:0.95rem;border-radius:14px;border:1.5px solid rgba(45,212,191,0.35)">
+            </div>
+            <div class="confirm-btns">
+              <button type="button" class="confirm-cancel-btn" id="pro-prompt-cancel-btn">إلغاء</button>
+              <button type="button" class="confirm-ok-btn primary" id="pro-prompt-ok-btn"><i class="fas fa-check-circle"></i> تأكيد</button>
+            </div>
+          </div>
+        `;
+        document.body.appendChild(overlay);
+      }
+
+      const titleEl = document.getElementById('pro-prompt-title');
+      const msgEl = document.getElementById('pro-prompt-msg');
+      const iconEl = document.getElementById('pro-prompt-icon');
+      const inputEl = document.getElementById('pro-prompt-input');
+      const okBtn = document.getElementById('pro-prompt-ok-btn');
+      const cancelBtn = document.getElementById('pro-prompt-cancel-btn');
+
+      if (titleEl) titleEl.textContent = title;
+      if (msgEl) {
+        msgEl.textContent = msg || '';
+        msgEl.style.display = msg ? 'block' : 'none';
+      }
+      if (iconEl) iconEl.className = `fas ${icon}`;
+      if (inputEl) {
+        inputEl.placeholder = placeholder;
+        inputEl.value = defaultValue || '';
+      }
+      if (okBtn) okBtn.innerHTML = `<i class="fas fa-check-circle"></i> ${okText}`;
+      if (cancelBtn) cancelBtn.textContent = cancelText;
+
+      const cleanup = (val) => {
+        overlay.classList.add('hidden');
+        resolve(val);
+      };
+
+      okBtn.onclick = () => cleanup(inputEl.value);
+      cancelBtn.onclick = () => cleanup(null);
+      overlay.onclick = (e) => { if (e.target === overlay) cleanup(null); };
+      inputEl.onkeydown = (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); cleanup(inputEl.value); }
+        else if (e.key === 'Escape') { e.preventDefault(); cleanup(null); }
+      };
+
+      overlay.classList.remove('hidden');
+      setTimeout(() => inputEl?.focus(), 120);
+    });
+  };
+
   window.renderSkeletonCards = function (count = 4) {
     let html = '<div class="skeleton-grid">';
     for (let i = 0; i < count; i++) {
@@ -11244,21 +11587,21 @@ ESSAY
                   <td>${onlineBadge}</td>
                   <td>${statusBadge}</td>
                   <td>
-                    <div style="display:flex;gap:6px;flex-wrap:wrap">
+                    <div class="admin-user-actions-grid">
                       ${isPending ? `
-                      <button class="btn btn-primary" style="padding:5px 10px;font-size:0.78rem" onclick="adminConfirmUserAccountNow('${u.id}', '${safeEmail}')" title="تأكيد وتفعيل الحساب فوراً بدون انتظار رابط الإيميل">
-                        <i class="fas fa-check-circle"></i> تأكيد الحساب
+                      <button class="btn btn-primary" style="padding:5px 9px;font-size:0.75rem" onclick="adminConfirmUserAccountNow('${u.id}', '${safeEmail}')" title="تأكيد وتفعيل الحساب فوراً بدون انتظار رابط الإيميل">
+                        <i class="fas fa-check-circle"></i> تأكيد
                       </button>` : ''}
-                      <button class="btn btn-blue" style="padding:5px 10px;font-size:0.78rem" onclick="openAssignRoleModal('${u.id}', '${safeEmail}')">
+                      <button class="btn btn-blue" style="padding:5px 9px;font-size:0.75rem" onclick="openAssignRoleModal('${u.id}', '${safeEmail}')">
                         <i class="fas fa-key"></i> الصلاحيات
                       </button>
-                      <button class="btn btn-ghost" style="padding:5px 10px;font-size:0.78rem;color:var(--teal);border-color:rgba(45,212,191,0.35)" onclick="openAdminAddUserModal('${safeEmail}', '${(u.full_name || '').replace(/'/g, "\\'")}', '${u.term || 1}')" title="تعيين أو تغيير كلمة المرور لهذا الحساب مباشرة">
+                      <button class="btn btn-ghost" style="padding:5px 9px;font-size:0.75rem;color:var(--teal);border-color:rgba(45,212,191,0.35)" onclick="openAdminAddUserModal('${safeEmail}', '${(u.full_name || '').replace(/'/g, "\\'")}', '${u.term || 1}')" title="تعيين أو تغيير كلمة المرور لهذا الحساب مباشرة">
                         <i class="fas fa-lock"></i> الباسورد
                       </button>
-                      <button class="btn ${isDisabled ? 'btn-primary' : 'btn-danger'}" style="padding:5px 10px;font-size:0.78rem" onclick="toggleUserActiveStatus('${u.id}', ${isDisabled ? 'true' : 'false'}, '${safeEmail}')" title="${isDisabled ? 'تفعيل الحساب' : 'تعطيل الحساب'}">
+                      <button class="btn ${isDisabled ? 'btn-primary' : 'btn-danger'}" style="padding:5px 9px;font-size:0.75rem" onclick="toggleUserActiveStatus('${u.id}', ${isDisabled ? 'true' : 'false'}, '${safeEmail}')" title="${isDisabled ? 'تفعيل الحساب' : 'تعطيل الحساب'}">
                         <i class="fas fa-${isDisabled ? 'check' : 'ban'}"></i> ${isDisabled ? 'تفعيل' : 'تعطيل'}
                       </button>
-                      <button class="btn btn-ghost" style="padding:5px 10px;font-size:0.78rem;color:var(--red);border-color:rgba(248,113,113,0.3)" onclick="deleteUserAccountAdmin('${u.id}', '${safeEmail}')" title="حذف الحساب نهائياً">
+                      <button class="btn btn-ghost" style="padding:5px 9px;font-size:0.75rem;color:var(--red);border-color:rgba(248,113,113,0.3)" onclick="deleteUserAccountAdmin('${u.id}', '${safeEmail}')" title="حذف الحساب نهائياً">
                         <i class="fas fa-trash"></i>
                       </button>
                     </div>
@@ -11998,7 +12341,15 @@ ESSAY
   };
 
   window.deleteUserAccountAdmin = async function (uid, email) {
-    if (!confirm(`هل أنت متأكد من حذف الحساب (${email || uid}) نهائياً؟`)) return;
+    const ok = await window.showConfirm({
+      title: 'حذف الحساب نهائياً',
+      msg: `هل أنت متأكد من حذف الحساب (${email || uid}) نهائياً من المنصة وقاعدة البيانات؟ لا يمكن التراجع عن هذا الإجراء.`,
+      type: 'danger',
+      icon: 'fa-user-times',
+      okText: 'نعم، احذف الحساب نهائياً',
+      cancelText: 'إلغاء'
+    });
+    if (!ok) return;
     const lowerEmail = (email || '').trim().toLowerCase();
     const nowIso = new Date().toISOString();
 
@@ -12531,7 +12882,14 @@ ESSAY
 
   window.promptAddSummaryOwnerFolder = async function () {
     if (!adminCurrentOwner) return;
-    const folderName = prompt('أدخل اسم المجلد الجديد داخل صفحة صاحب الملخص:');
+    const folderName = await window.showProPromptDialog({
+      title: 'إضافة مجلد جديد',
+      msg: `أدخل اسم المجلد الجديد داخل صفحة (${adminCurrentOwner.name}):`,
+      placeholder: 'مثال: ملخصات الميدترم أو اسم المادة...',
+      icon: 'fa-folder-plus',
+      okText: 'إنشاء المجلد الآن',
+      cancelText: 'إلغاء'
+    });
     if (!folderName || !folderName.trim()) return;
     try {
       await createResource({
