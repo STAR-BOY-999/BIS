@@ -8613,6 +8613,26 @@ ESSAY
       });
       const data = await res.json();
       if (res.ok && data.access_token) {
+        // إذا نجح تسجيل الدخول عبر Supabase Auth، فهذا يعني أن الإيميل مؤكد رسمياً (email_confirmed_at موجود)
+        const lowerEmail = email.toLowerCase();
+        try {
+          const overrides = await window.fetchSystemUserOverrides();
+          let changed = false;
+          if (data.user?.id && overrides[data.user.id]?.pending_confirmation) {
+            overrides[data.user.id].pending_confirmation = false;
+            changed = true;
+          }
+          if (overrides[lowerEmail]?.pending_confirmation) {
+            overrides[lowerEmail].pending_confirmation = false;
+            changed = true;
+          }
+          if (overrides[email]?.pending_confirmation) {
+            overrides[email].pending_confirmation = false;
+            changed = true;
+          }
+          if (changed) await window.saveSystemUserOverrides(overrides);
+        } catch (e) {}
+
         await establishAuthSession(data.access_token, data.refresh_token, data.user);
         closeModal('auth-modal');
         toast(`أهلاً بك يا ${window.authSession.profile?.full_name || email} 👋`);
@@ -10575,10 +10595,10 @@ ESSAY
 
       // 2. Save in real-time overrides + profiles table + role_permissions table
       const overrides = await window.fetchSystemUserOverrides();
-      overrides[uid] = { ...(overrides[uid] || {}), role: roleCode, permissions: permPayload };
-      overrides[email] = { ...(overrides[email] || {}), role: roleCode, permissions: permPayload };
+      overrides[uid] = { ...(overrides[uid] || {}), role: roleCode, permissions: permPayload, pending_confirmation: false, is_active: true, deleted: false };
+      overrides[email] = { ...(overrides[email] || {}), role: roleCode, permissions: permPayload, pending_confirmation: false, is_active: true, deleted: false };
       if (rawEmail && rawEmail !== email) {
-        overrides[rawEmail] = { ...(overrides[rawEmail] || {}), role: roleCode, permissions: permPayload };
+        overrides[rawEmail] = { ...(overrides[rawEmail] || {}), role: roleCode, permissions: permPayload, pending_confirmation: false, is_active: true, deleted: false };
       }
       await window.saveSystemUserOverrides(overrides);
 
@@ -11656,7 +11676,7 @@ ESSAY
       }
       const profileRow = rows[0];
       const ov = overrides[uid] || overrides[profileRow.id] || (email ? overrides[email] : null);
-      if (ov?.deleted === true || ov?.is_active === false || ov?.pending_confirmation === true || (profileRow.is_active === false && ov?.is_active !== true)) {
+      if (ov?.deleted === true || ov?.is_active === false || (profileRow.is_active === false && ov?.is_active !== true)) {
         window._dbAccountVerified = false;
         window.authSession = { accessToken: null, refreshToken: null, user: null, profile: null, permissions: null };
         localStorage.removeItem('supabase_auth_session');
