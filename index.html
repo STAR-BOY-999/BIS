@@ -8751,15 +8751,14 @@ ESSAY
       const data = await res.json().catch(() => ({}));
 
       const errMsg = (data.error_description || data.msg || data.message || '').toLowerCase();
-      if (errMsg.includes('rate limit') || res.status === 429) {
-        throw new Error('تم تجاوز الحد المؤقت لإرسال رسائل التأكيد. يمكنك التواصل مع السوبر أدمن لإضافة أو تأكيد حسابك مباشرة.');
-      }
+      const isRateLimited = errMsg.includes('rate limit') || res.status === 429;
 
-      // إذا أعاد Supabase حالة user_repeated_signup (حساب مسجل سابقاً في auth.users ولكن تم حذفه من لوحة السوبر أدمن)
+      // إذا أعاد Supabase حالة user_repeated_signup أو حدث تجاوز مؤقت لحد الإيميلات (429)، نسجل الطالب كـ student في قاعدة البيانات مع إبقاء الحساب بانتظار التأكيد
       const isRepeatedAuthUser = Array.isArray(data?.user?.identities) && data.user.identities.length === 0;
-      if (isRepeatedAuthUser || (existingOv && existingOv.deleted)) {
+      let directStudentRow = null;
+      if (isRepeatedAuthUser || isRateLimited || (existingOv && existingOv.deleted)) {
         try {
-          await fetch(`${SUPABASE_URL}/rest/v1/rpc/register_student_direct`, {
+          const dRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/register_student_direct`, {
             method: 'POST',
             headers: {
               'apikey': SUPABASE_KEY,
@@ -8774,12 +8773,17 @@ ESSAY
               p_require_confirm: true
             })
           });
-          // إرسال رسالة تأكيد حقيقية للبريد عبر /auth/v1/resend
-          await fetch(`${SUPABASE_URL}/auth/v1/resend`, {
-            method: 'POST',
-            headers: { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ type: 'signup', email: lowerEmail })
-          }).catch(() => {});
+          if (dRes.ok) {
+            directStudentRow = await dRes.json().catch(() => null);
+          }
+          if (!isRateLimited) {
+            // إرسال رسالة تأكيد حقيقية للبريد عبر /auth/v1/resend
+            await fetch(`${SUPABASE_URL}/auth/v1/resend`, {
+              method: 'POST',
+              headers: { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ type: 'signup', email: lowerEmail })
+            }).catch(() => {});
+          }
         } catch (e) {}
       } else if (!res.ok) {
         if (errMsg.includes('already registered') || errMsg.includes('already exists')) {
@@ -8791,8 +8795,8 @@ ESSAY
       }
 
       // إذا كانت إعدادات Supabase ترسل إيميل تأكيد (Confirmation Email)، لن يعود access_token إلا بعد ضغط الطالب على الرابط في الإيميل
-      const uid = data?.user?.id || data?.id || existingOv?.id || _generateUuid();
-      const isConfirmedImmediately = Boolean(data.access_token && data?.user?.email_confirmed_at && !isRepeatedAuthUser);
+      const uid = directStudentRow?.id || data?.user?.id || data?.id || existingOv?.id || _generateUuid();
+      const isConfirmedImmediately = Boolean(data.access_token && data?.user?.email_confirmed_at && !isRepeatedAuthUser && !isRateLimited);
 
       const cloudUser = {
         id: uid,
@@ -8814,6 +8818,17 @@ ESSAY
       await window.saveSystemUserOverrides(overrides);
       if (typeof window.broadcastRealtimeUserSync === 'function') {
         window.broadcastRealtimeUserSync('register', lowerEmail, uid);
+      }
+
+      if (isRateLimited) {
+        switchAuthTab('login');
+        document.getElementById('login-email').value = lowerEmail;
+        if (errEl) {
+          errEl.style.color = 'var(--amber)';
+          errEl.innerHTML = `⏳ تم تسجيل بيانات حسابك كـ <b>طالب</b> في المنصة، ولكن تم تجاوز الحد المؤقت لإرسال رسائل التأكيد. يمكن للسوبر أدمن الضغط على «تأكيد الحساب» لك فوراً أو يمكنك إعادة المحاولة بعد قليل.`;
+        }
+        toast('⏳ تم تسجيل حسابك كطالب — بانتظار تأكيد الإيميل أو تفعيل السوبر أدمن');
+        return;
       }
 
       if (isConfirmedImmediately) {
@@ -9524,10 +9539,16 @@ ESSAY
 
     updateNavbarAuthUI();
     window.loadStudentNotifications();
+    if (!window.IS_STANDALONE_SUPER_ADMIN && typeof window.pingCurrentUserPresence === 'function') {
+      window.pingCurrentUserPresence(true);
+    }
   }
 
   window.handleLogout = async function () {
     try {
+      if (!window.IS_STANDALONE_SUPER_ADMIN && typeof window.pingCurrentUserPresence === 'function') {
+        await window.pingCurrentUserPresence(false);
+      }
       if (window.authSession.accessToken) {
         await fetch(`${SUPABASE_URL}/auth/v1/logout`, {
           method: 'POST',
@@ -10129,11 +10150,13 @@ ESSAY
     container.innerHTML = renderSkeletonCards(5);
 
     try {
-      const [qRes, rRes, pRes, aRes] = await Promise.all([
+      const [qRes, rRes, pRes, aRes, overrides, presenceMap] = await Promise.all([
         api(`quizzes?select=id,section,published&grade=eq.bis&term=eq.${currentTerm}`),
         api(`resources?select=id,type,title,subject&grade=eq.bis&term=eq.${currentTerm}`),
-        api('profiles?select=id,role'),
-        api('quiz_attempts?select=id,score_pct')
+        api('profiles?select=id,email,role,is_active'),
+        api('quiz_attempts?select=id,score_pct'),
+        window.fetchSystemUserOverrides ? window.fetchSystemUserOverrides() : Promise.resolve({}),
+        window.fetchSystemUserPresence ? window.fetchSystemUserPresence() : Promise.resolve({})
       ]);
 
       const qList = qRes.ok ? await qRes.json() : [];
@@ -10143,18 +10166,57 @@ ESSAY
       const localAttempts = JSON.parse(localStorage.getItem('student_quiz_attempts') || '[]');
       const totalAttempts = Math.max(dbAttempts.length, localAttempts.length);
 
+      // دمج الحسابات وحساب المتصلين حالياً (Online) وغير المتصلين (Offline)
+      const seenEmails = new Set(pList.map(u => (u.email || '').toLowerCase()).filter(Boolean));
+      const seenIds = new Set(pList.map(u => u.id).filter(Boolean));
+      Object.values(overrides || {}).forEach(ovItem => {
+        if (ovItem && ovItem.email && ovItem.id) {
+          const em = ovItem.email.toLowerCase();
+          if (!seenEmails.has(em) && !seenIds.has(ovItem.id)) {
+            seenEmails.add(em);
+            seenIds.add(ovItem.id);
+            pList.push({ id: ovItem.id, email: em, role: ovItem.role || 'student', is_active: ovItem.is_active !== false });
+          }
+        }
+      });
+      const nowMs = Date.now();
+      const activeAccounts = pList.filter(u => {
+        const em = (u.email || '').toLowerCase();
+        const ov = { ...((em && overrides[em]) || {}), ...((u.id && overrides[u.id]) || {}) };
+        return !ov.deleted;
+      });
+      const totalAccountsCount = activeAccounts.length;
+      const onlineAccountsCount = activeAccounts.filter(u => {
+        const em = (u.email || '').toLowerCase();
+        const ov = { ...((em && overrides[em]) || {}), ...((u.id && overrides[u.id]) || {}) };
+        const isAct = typeof ov.is_active === 'boolean' ? ov.is_active : (u.is_active !== false);
+        if (!isAct) return false;
+        const pres = (em && presenceMap[em]) || (u.id && presenceMap[u.id]) || null;
+        return Boolean(pres && pres.online !== false && (nowMs - Number(pres.last_seen || 0) < 20000));
+      }).length;
+      const offlineAccountsCount = Math.max(0, totalAccountsCount - onlineAccountsCount);
+
       const lecturesCount = rList.filter(r => r.type === 'lectures').length;
       const summariesCount = rList.filter(r => r.type === 'summaries').length;
-      const studentsCount = pList.filter(p => p.role === 'student').length;
 
       const localLogs = JSON.parse(localStorage.getItem('platform_activity_logs') || '[]').slice(0, 6);
 
       container.innerHTML = `
         <div class="kpi-grid animate-up">
           <div class="kpi-card">
-            <div class="kpi-icon" style="background:rgba(45,212,191,0.12);color:var(--teal)"><i class="fas fa-user-graduate"></i></div>
-            <div class="kpi-val">${studentsCount}</div>
-            <div class="kpi-label">الطلاب المسجلون</div>
+            <div class="kpi-icon" style="background:rgba(45,212,191,0.12);color:var(--teal)"><i class="fas fa-users"></i></div>
+            <div class="kpi-val">${totalAccountsCount}</div>
+            <div class="kpi-label">إجمالي الحسابات على المنصة</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon" style="background:rgba(0,230,118,0.14);color:#00e676"><i class="fas fa-circle"></i></div>
+            <div class="kpi-val" style="color:#00e676">${onlineAccountsCount}</div>
+            <div class="kpi-label">فاتح المنصة الآن (Online)</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon" style="background:rgba(148,163,184,0.14);color:#94a3b8"><i class="fas fa-power-off"></i></div>
+            <div class="kpi-val" style="color:#cbd5e1">${offlineAccountsCount}</div>
+            <div class="kpi-label">قافل المنصة حالياً (Offline)</div>
           </div>
           <div class="kpi-card">
             <div class="kpi-icon" style="background:rgba(56,189,248,0.12);color:var(--accent)"><i class="fas fa-file-alt"></i></div>
@@ -10164,12 +10226,7 @@ ESSAY
           <div class="kpi-card">
             <div class="kpi-icon" style="background:rgba(251,191,36,0.12);color:var(--amber)"><i class="fas fa-video"></i></div>
             <div class="kpi-val">${lecturesCount}</div>
-            <div class="kpi-label">المحاضرات</div>
-          </div>
-          <div class="kpi-card">
-            <div class="kpi-icon" style="background:rgba(248,113,113,0.12);color:var(--red)"><i class="fas fa-sticky-note"></i></div>
-            <div class="kpi-val">${summariesCount}</div>
-            <div class="kpi-label">الملخصات</div>
+            <div class="kpi-label">المحاضرات (${summariesCount} ملخص)</div>
           </div>
           <div class="kpi-card">
             <div class="kpi-icon" style="background:rgba(45,212,191,0.12);color:var(--teal)"><i class="fas fa-check-double"></i></div>
@@ -10549,9 +10606,129 @@ ESSAY
     } catch (e) {}
   };
 
+  // ─── محرك تتبع المتصلين في الوقت الفعلي (Real-Time User Presence Engine) ───
+  window.fetchSystemUserPresence = async function () {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/resources?select=id,url&type=eq.user_presence&grade=eq.sys&order=id.desc&limit=1`, {
+        headers: {
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${SUPABASE_KEY}`,
+          'Cache-Control': 'no-cache'
+        }
+      });
+      if (res.ok) {
+        const rows = await res.json();
+        if (rows.length && rows[0].url) {
+          const remotePres = JSON.parse(rows[0].url);
+          let localPres = {};
+          try { localPres = JSON.parse(localStorage.getItem('super_admin_user_presence_v1') || '{}'); } catch (e) {}
+          const merged = { ...remotePres };
+          Object.keys(localPres).forEach(k => {
+            if (!merged[k] || Number(localPres[k]?.last_seen || 0) >= Number(merged[k]?.last_seen || 0)) {
+              merged[k] = localPres[k];
+            }
+          });
+          localStorage.setItem('super_admin_user_presence_v1', JSON.stringify(merged));
+          return merged;
+        }
+      }
+    } catch (e) {}
+    try {
+      return JSON.parse(localStorage.getItem('super_admin_user_presence_v1') || '{}');
+    } catch (e) {
+      return {};
+    }
+  };
+
+  let _presencePingInFlight = false;
+  window.pingCurrentUserPresence = async function (isOnline = true) {
+    if (window.IS_STANDALONE_SUPER_ADMIN) return;
+    const uid = window.authSession?.user?.id || window.authSession?.profile?.id;
+    const email = (window.authSession?.user?.email || window.authSession?.profile?.email || '').trim().toLowerCase();
+    if (!uid && !email) return;
+
+    const nowMs = Date.now();
+    const entry = {
+      id: uid || email,
+      email: email,
+      full_name: window.authSession?.profile?.full_name || '',
+      role: window.authSession?.profile?.role || 'student',
+      online: Boolean(isOnline),
+      last_seen: nowMs,
+      updated_at: new Date(nowMs).toISOString()
+    };
+
+    // 1. تحديث فوري في التخزين المحلي وإرسال إشعار لحظي عبر BroadcastChannel (0ms)
+    try {
+      const localMap = JSON.parse(localStorage.getItem('super_admin_user_presence_v1') || '{}');
+      if (uid) localMap[uid] = entry;
+      if (email) localMap[email] = entry;
+      localStorage.setItem('super_admin_user_presence_v1', JSON.stringify(localMap));
+      if (typeof window.broadcastRealtimeUserSync === 'function') {
+        window.broadcastRealtimeUserSync(isOnline ? 'presence_online' : 'presence_offline', email, uid);
+      }
+    } catch (e) {}
+
+    if (_presencePingInFlight && isOnline) return;
+    _presencePingInFlight = true;
+    try {
+      const headers = {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=representation'
+      };
+      const checkRes = await fetch(`${SUPABASE_URL}/rest/v1/resources?select=id,url&type=eq.user_presence&grade=eq.sys&order=id.desc&limit=1`, { headers });
+      const rows = checkRes.ok ? await checkRes.json() : [];
+      let remoteMap = {};
+      if (rows.length && rows[0].url) {
+        try { remoteMap = JSON.parse(rows[0].url) || {}; } catch (e) { remoteMap = {}; }
+      }
+      // تنظيف السجلات الأقدم من 7 أيام للحفاظ على سرعة المزامنة
+      const weekAgo = nowMs - 7 * 86400000;
+      Object.keys(remoteMap).forEach(k => {
+        if (Number(remoteMap[k]?.last_seen || 0) < weekAgo) delete remoteMap[k];
+      });
+      if (uid) remoteMap[uid] = entry;
+      if (email) remoteMap[email] = entry;
+      localStorage.setItem('super_admin_user_presence_v1', JSON.stringify(remoteMap));
+
+      if (rows.length) {
+        await fetch(`${SUPABASE_URL}/rest/v1/resources?type=eq.user_presence&grade=eq.sys`, {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify({ url: JSON.stringify(remoteMap) })
+        });
+      } else {
+        await fetch(`${SUPABASE_URL}/rest/v1/resources`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            grade: 'sys',
+            term: 1,
+            type: 'user_presence',
+            subject: 'sys',
+            title: '__folder__',
+            url: JSON.stringify(remoteMap),
+            file_type: 'link'
+          })
+        });
+      }
+    } catch (e) {
+    } finally {
+      _presencePingInFlight = false;
+    }
+  };
+
   window._adminUsersList = [];
   window._adminUsersSearchQuery = '';
+  window._adminUsersStatusFilter = 'all'; // 'all' | 'online' | 'offline' | 'disabled'
   let _lastRenderedUsersSig = '';
+
+  window.setAdminUsersStatusFilter = function (filterKey) {
+    window._adminUsersStatusFilter = filterKey || 'all';
+    window.renderAdminUsersRowsOnly();
+  };
 
   window.onAdminUsersSearchInput = function (val) {
     window._adminUsersSearchQuery = (val || '').trim();
@@ -10572,29 +10749,106 @@ ESSAY
     window.renderAdminUsersRowsOnly();
   };
 
+  function _formatLastSeenAgo(lastSeenMs) {
+    if (!lastSeenMs) return 'غير متصل حالياً';
+    const diffSec = Math.max(1, Math.floor((Date.now() - Number(lastSeenMs)) / 1000));
+    if (diffSec < 60) return `منذ ${diffSec} ثانية`;
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `منذ ${diffMin} دقيقة`;
+    const diffHr = Math.floor(diffMin / 60);
+    if (diffHr < 24) return `منذ ${diffHr} ساعة`;
+    const diffDays = Math.floor(diffHr / 24);
+    return `منذ ${diffDays} يوم`;
+  }
+
   window.renderAdminUsersRowsOnly = function () {
     const tableWrap = document.getElementById('admin-users-table-body-wrap');
     if (!tableWrap) return;
 
     const allUsers = window._adminUsersList || [];
+    const totalCount = allUsers.length;
+    const onlineCount = allUsers.filter(u => u._isOnlineNow && u.is_active !== false).length;
+    const offlineCount = allUsers.filter(u => !u._isOnlineNow && u.is_active !== false).length;
+    const disabledCount = allUsers.filter(u => u.is_active === false).length;
+
+    const statusFilter = window._adminUsersStatusFilter || 'all';
+
+    // تحديث كروت الإحصائيات الفورية (إجمالي الحسابات / الفاتحة الآن Online / القافلة Offline / المعطلة)
+    const statsGrid = document.getElementById('admin-users-live-stats-grid');
+    if (statsGrid) {
+      const cardStyle = (key, borderCol, bgCol) => `
+        flex:1;min-width:175px;padding:12px 14px;border-radius:14px;cursor:pointer;transition:all 0.2s;
+        background:${statusFilter === key ? bgCol : 'var(--surface2)'};
+        border:1.5px solid ${statusFilter === key ? borderCol : 'rgba(255,255,255,0.07)'};
+        box-shadow:${statusFilter === key ? `0 0 16px ${bgCol}` : 'none'};
+      `;
+      statsGrid.innerHTML = `
+        <div onclick="setAdminUsersStatusFilter('all')" style="${cardStyle('all', 'var(--teal)', 'rgba(45,212,191,0.14)')}">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+            <span style="font-size:0.78rem;color:var(--text-dim);font-weight:800">👥 إجمالي الحسابات بالمنصة</span>
+            <i class="fas fa-users" style="color:var(--teal);font-size:0.95rem"></i>
+          </div>
+          <div style="font-size:1.45rem;font-weight:900;color:var(--text)">${totalCount} <span style="font-size:0.74rem;font-weight:700;color:var(--teal)">حساب مسجل</span></div>
+        </div>
+
+        <div onclick="setAdminUsersStatusFilter('online')" style="${cardStyle('online', '#00e676', 'rgba(0,230,118,0.14)')}">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+            <span style="font-size:0.78rem;color:var(--text-dim);font-weight:800">🟢 فاتح المنصة الآن (Online)</span>
+            <span style="width:9px;height:9px;border-radius:50%;background:#00e676;box-shadow:0 0 8px #00e676;display:inline-block"></span>
+          </div>
+          <div style="font-size:1.45rem;font-weight:900;color:#00e676">${onlineCount} <span style="font-size:0.74rem;font-weight:700;color:var(--text-dim)">متصل حالياً</span></div>
+        </div>
+
+        <div onclick="setAdminUsersStatusFilter('offline')" style="${cardStyle('offline', '#94a3b8', 'rgba(148,163,184,0.15)')}">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+            <span style="font-size:0.78rem;color:var(--text-dim);font-weight:800">⚪ قافل المنصة حالياً (Offline)</span>
+            <i class="fas fa-power-off" style="color:#94a3b8;font-size:0.9rem"></i>
+          </div>
+          <div style="font-size:1.45rem;font-weight:900;color:#cbd5e1">${offlineCount} <span style="font-size:0.74rem;font-weight:700;color:var(--text-dim)">غير متصل</span></div>
+        </div>
+
+        <div onclick="setAdminUsersStatusFilter('disabled')" style="${cardStyle('disabled', 'var(--red)', 'rgba(248,113,113,0.14)')}">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+            <span style="font-size:0.78rem;color:var(--text-dim);font-weight:800">⛔ الحسابات المقفولة / المعطلة</span>
+            <i class="fas fa-ban" style="color:var(--red);font-size:0.9rem"></i>
+          </div>
+          <div style="font-size:1.45rem;font-weight:900;color:var(--red)">${disabledCount} <span style="font-size:0.74rem;font-weight:700;color:var(--text-dim)">موقوف</span></div>
+        </div>
+      `;
+    }
+
     const q = (window._adminUsersSearchQuery || '').toLowerCase();
-    const filtered = !q
-      ? allUsers
-      : allUsers.filter(u => {
-          const name = (u.full_name || '').toLowerCase();
-          const email = (u.email || '').toLowerCase();
-          const role = (u.role || '').toLowerCase();
-          return name.includes(q) || email.includes(q) || role.includes(q);
-        });
+    const filtered = allUsers.filter(u => {
+      if (statusFilter === 'online' && (!u._isOnlineNow || u.is_active === false)) return false;
+      if (statusFilter === 'offline' && (u._isOnlineNow || u.is_active === false)) return false;
+      if (statusFilter === 'disabled' && u.is_active !== false) return false;
+      if (!q) return true;
+      const name = (u.full_name || '').toLowerCase();
+      const email = (u.email || '').toLowerCase();
+      const role = (u.role || '').toLowerCase();
+      return name.includes(q) || email.includes(q) || role.includes(q);
+    });
 
     const countEl = document.getElementById('admin-users-search-count');
     if (countEl) {
-      countEl.textContent = q
-        ? `نتائج البحث: ${filtered.length} من أصل ${allUsers.length} حساب`
+      const filterNames = {
+        all: 'كل الحسابات',
+        online: 'الفاتحة للمنصة الآن',
+        offline: 'القافلة للمنصة حالياً',
+        disabled: 'المعطلة/المقفولة'
+      };
+      countEl.textContent = (q || statusFilter !== 'all')
+        ? `المعروض (${filterNames[statusFilter] || 'الكل'}): ${filtered.length} من أصل ${allUsers.length} حساب`
         : `إجمالي الحسابات: ${allUsers.length}`;
     }
 
     const SEC_LABELS = { 'exams': 'الامتحانات', 'lectures': 'المحاضرات', 'lecture-quizzes': 'أسئلة المحاضرات', 'summaries': 'الملخصات', '*': 'كل الأقسام' };
+    const ROLE_BADGE_MAP = {
+      'student': { label: '🎓 طالب (Student)', bg: 'rgba(56,189,248,0.12)', color: 'var(--accent)', border: 'rgba(56,189,248,0.28)' },
+      'content_manager': { label: '🛠️ مسؤول محتوى', bg: 'rgba(45,212,191,0.13)', color: 'var(--teal)', border: 'rgba(45,212,191,0.3)' },
+      'admin': { label: '🛡️ مسؤول (Admin)', bg: 'rgba(251,191,36,0.14)', color: 'var(--amber)', border: 'rgba(251,191,36,0.32)' },
+      'super_admin': { label: '👑 سوبر أدمن', bg: 'rgba(167,139,250,0.16)', color: '#c4b5fd', border: 'rgba(167,139,250,0.35)' }
+    };
 
     if (allUsers.length === 0) {
       tableWrap.innerHTML = `<div class="empty" style="padding:2rem"><i class="fas fa-users"></i><p>لا توجد حسابات مسجلة حالياً.</p></div>`;
@@ -10605,7 +10859,8 @@ ESSAY
       tableWrap.innerHTML = `
         <div class="empty" style="padding:2.2rem">
           <i class="fas fa-search" style="font-size:2rem;color:var(--teal);opacity:0.6;margin-bottom:0.6rem"></i>
-          <p>لا يوجد أي حساب يطابق البحث «<b>${window._adminUsersSearchQuery}</b>» بالاسم أو الإيميل</p>
+          <p>لا يوجد أي حساب يطابق التصفية الحالية ${window._adminUsersSearchQuery ? `أو البحث «<b>${window._adminUsersSearchQuery}</b>»` : ''}</p>
+          ${statusFilter !== 'all' ? `<button class="btn btn-ghost" style="margin-top:8px" onclick="setAdminUsersStatusFilter('all')">عرض كل الحسابات (${allUsers.length})</button>` : ''}
         </div>`;
       return;
     }
@@ -10620,14 +10875,15 @@ ESSAY
               <th>الدور (Role)</th>
               <th>الترم الدراسي</th>
               <th>نطاق الصلاحيات</th>
-              <th>الحالة</th>
+              <th>الاتصال الآن (Real-Time)</th>
+              <th>حالة الحساب</th>
               <th>إجراءات</th>
             </tr>
           </thead>
           <tbody>
             ${filtered.map(u => {
               const up = u._ovPerms;
-              let scopeStr = 'قراءة وحل اختبارات فقط';
+              let scopeStr = 'طالب — تصفح وحل اختبارات فقط';
               if (u.role === 'super_admin') {
                 scopeStr = 'صلاحيات كاملة (كل الأقسام والترمات)';
               } else if (u.role !== 'student' && up && window.hasAnyAdminActionPermission(up)) {
@@ -10644,8 +10900,20 @@ ESSAY
               const safeEmail = (u.email || '').replace(/'/g, "\\'");
               const isDisabled = u.is_active === false;
               const isPending = u._pendingConfirmation === true;
+              const isOnline = Boolean(u._isOnlineNow && !isDisabled);
+              const roleInfo = ROLE_BADGE_MAP[u.role] || ROLE_BADGE_MAP['student'];
+
+              const onlineBadge = isDisabled
+                ? `<span style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:20px;background:rgba(248,113,113,0.12);color:var(--red);font-size:0.76rem;font-weight:800">⛔ حساب مقفول</span>`
+                : isOnline
+                  ? `<span style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:20px;background:rgba(0,230,118,0.14);border:1px solid rgba(0,230,118,0.35);color:#00e676;font-size:0.77rem;font-weight:900"><span style="width:8px;height:8px;border-radius:50%;background:#00e676;box-shadow:0 0 8px #00e676;display:inline-block"></span> فاتح المنصة الآن</span>`
+                  : `<div style="display:flex;flex-direction:column;gap:2px">
+                      <span style="display:inline-flex;align-items:center;gap:6px;color:#94a3b8;font-size:0.77rem;font-weight:800"><span style="width:7px;height:7px;border-radius:50%;background:#64748b;display:inline-block"></span> قافل المنصة</span>
+                      <span style="font-size:0.69rem;color:var(--text-dim)">${u._lastSeenAt ? `آخر تواجد: ${_formatLastSeenAgo(u._lastSeenAt)}` : 'لم يفتح الجلسة بعد'}</span>
+                    </div>`;
+
               const statusBadge = isDisabled
-                ? '<span style="color:var(--red);font-weight:800">⛔ معطل</span>'
+                ? '<span style="color:var(--red);font-weight:800">⛔ مقفول / معطل</span>'
                 : isPending
                   ? '<span style="color:var(--amber);font-weight:800">⏳ بانتظار تأكيد الإيميل</span>'
                   : '<span style="color:var(--teal);font-weight:800">🟢 نشط ومؤكد</span>';
@@ -10653,9 +10921,10 @@ ESSAY
                 <tr>
                   <td style="font-weight:800">${u.full_name || '—'}</td>
                   <td>${u.email}</td>
-                  <td><span class="role-tag-badge">${u.role}</span></td>
+                  <td><span style="display:inline-block;padding:4px 10px;border-radius:20px;font-size:0.75rem;font-weight:800;background:${roleInfo.bg};color:${roleInfo.color};border:1px solid ${roleInfo.border}">${roleInfo.label}</span></td>
                   <td>${TERM_NAMES[u.term || 1] || 'الترم الأول'}</td>
                   <td style="font-size:0.78rem;color:var(--text-dim)">${scopeStr}</td>
+                  <td>${onlineBadge}</td>
                   <td>${statusBadge}</td>
                   <td>
                     <div style="display:flex;gap:6px;flex-wrap:wrap">
@@ -10706,13 +10975,16 @@ ESSAY
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:10px">
             <div>
               <h4 style="font-size:1.1rem;font-weight:900"><i class="fas fa-user-shield" style="color:var(--teal);margin-left:6px"></i> إدارة الحسابات والمسؤولين والصلاحيات (RBAC) <span style="font-size:0.74rem;color:var(--teal);background:rgba(45,212,191,0.12);padding:3px 9px;border-radius:20px;margin-right:6px">⚡ مزامنة فورية Real-Time</span></h4>
-              <p style="font-size:0.82rem;color:var(--text-dim)">أي تعديل في الصلاحيات أو تفعيل/تعطيل أو حذف حساب يُطبَّق في نفس اللحظة بدون ريفريش</p>
+              <p style="font-size:0.82rem;color:var(--text-dim)">أي طالب يسجل جديد يُعرَّف كـ «طالب» تلقائياً بدون صلاحيات إدارية حتى تمنحه أنت الصلاحيات — اضغط على أي كارت بالأسفل لتصفية الحسابات</p>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap">
               <button class="btn btn-primary" onclick="openAdminAddUserModal()"><i class="fas fa-user-plus"></i> إضافة حساب جديد مباشرة</button>
               <button class="btn btn-blue" onclick="openAssignRoleModal()"><i class="fas fa-user-shield"></i> تخصيص صلاحيات مسؤول</button>
             </div>
           </div>
+
+          <!-- كروت متابعة الحسابات الفورية (الإجمالي / الفاتحة للمنصة الآن Online / القافلة Offline / المعطلة) -->
+          <div id="admin-users-live-stats-grid" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:1.1rem"></div>
 
           <!-- شريط البحث الذكي في الحسابات بالاسم أو الإيميل -->
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:1.1rem;flex-wrap:wrap">
@@ -10752,12 +11024,13 @@ ESSAY
     }
 
     try {
-      const [pRes, permRes, overrides] = await Promise.all([
+      const [pRes, permRes, overrides, presenceMap] = await Promise.all([
         fetch(`${SUPABASE_URL}/rest/v1/profiles?select=*&order=created_at.desc`, {
           headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Cache-Control': 'no-cache' }
         }),
         api('role_permissions?select=*'),
-        window.fetchSystemUserOverrides()
+        window.fetchSystemUserOverrides(),
+        window.fetchSystemUserPresence()
       ]);
       const rawProfiles = pRes.ok ? await pRes.json() : [];
       const perms = permRes.ok ? await permRes.json() : [];
@@ -10787,6 +11060,7 @@ ESSAY
         }
       });
 
+      const nowMs = Date.now();
       const profiles = rawProfiles
         .map(u => {
           const lowerEm = (u.email || '').toLowerCase();
@@ -10794,9 +11068,19 @@ ESSAY
           const ovById = (u.id && overrides[u.id]) ? overrides[u.id] : {};
           const ov = { ...ovByEmail, ...ovById };
           const isActive = typeof ov.is_active === 'boolean' ? ov.is_active : (u.is_active !== false);
-          const resolvedRole = (ov.updated_at && (!u.updated_at || ov.updated_at >= u.updated_at) && ov.role)
+          let resolvedRole = (ov.updated_at && (!u.updated_at || ov.updated_at >= u.updated_at) && ov.role)
             ? ov.role
             : (ov.role || u.role || 'student');
+          const resolvedPerms = resolvedRole === 'student' ? null : (ov.permissions || permMap.get(u.id) || null);
+          // إذا لم يكن الحساب سوبر أدمن ولم يقم السوبر أدمن بتخصيص أي صلاحية فعلية له، يظل طالباً (student) تلقائياً
+          if (resolvedRole !== 'super_admin' && resolvedRole !== 'student' && !window.hasAnyAdminActionPermission(resolvedPerms)) {
+            resolvedRole = 'student';
+          }
+
+          const pres = (lowerEm && presenceMap[lowerEm]) || (u.id && presenceMap[u.id]) || null;
+          const lastSeenAt = Number(pres?.last_seen || 0) || 0;
+          const isOnlineNow = Boolean(isActive && pres && pres.online !== false && (nowMs - lastSeenAt < 20000));
+
           return {
             ...u,
             full_name: ov.full_name || u.full_name,
@@ -10805,13 +11089,15 @@ ESSAY
             is_active: isActive,
             _deleted: !!ov.deleted,
             _pendingConfirmation: !!ov.pending_confirmation,
-            _ovPerms: resolvedRole === 'student' ? null : (ov.permissions || permMap.get(u.id) || null)
+            _ovPerms: resolvedRole === 'student' ? null : resolvedPerms,
+            _isOnlineNow: isOnlineNow,
+            _lastSeenAt: lastSeenAt
           };
         })
         .filter(u => !u._deleted);
 
       const newSig = JSON.stringify(profiles.map(u => ({
-        id: u.id, em: u.email, fn: u.full_name, r: u.role, t: u.term, a: u.is_active, p: u._pendingConfirmation, pm: u._ovPerms
+        id: u.id, em: u.email, fn: u.full_name, r: u.role, t: u.term, a: u.is_active, p: u._pendingConfirmation, pm: u._ovPerms, on: u._isOnlineNow
       })));
 
       if (!silent || newSig !== _lastRenderedUsersSig || !document.getElementById('admin-users-table-body-wrap')) {
@@ -11012,13 +11298,14 @@ ESSAY
     }
   };
 
+  let _rbacListenersBound = false;
   window.openAssignRoleModal = async function (userId = '', userEmail = '') {
     document.getElementById('rbac-user-id').value = userId;
     document.getElementById('rbac-user-email').value = userEmail;
 
     const setCb = (id, val) => { const el = document.getElementById(id); if (el) el.checked = Boolean(val); };
-    // افتراضياً نحدد الترم الأول والثاني لتسهيل التخصيص، مع تفريغ الأقسام والعمليات
-    document.querySelectorAll('.rbac-term-cb').forEach(cb => { cb.checked = true; });
+    // افتراضياً يكون أي طالب يسجل جديد بدور «طالب (student)» مع عدم تحديد أي صلاحيات إدارية إلا إذا اختارها السوبر أدمن
+    document.querySelectorAll('.rbac-term-cb').forEach(cb => { cb.checked = false; });
     document.querySelectorAll('.rbac-sec-cb').forEach(cb => { cb.checked = false; });
     setCb('rbac-can-create', false);
     setCb('rbac-can-edit', false);
@@ -11028,14 +11315,71 @@ ESSAY
     setCb('rbac-can-analytics', false);
 
     const roleSelect = document.getElementById('rbac-role-select');
-    if (roleSelect) roleSelect.value = 'content_manager';
+    if (roleSelect) {
+      if (!roleSelect.dataset.studentDefaultInit) {
+        roleSelect.innerHTML = `
+          <option value="student" selected>🎓 طالب عادي (Student — بدون صلاحيات إدارية)</option>
+          <option value="content_manager">🛠️ Content Manager (مسؤول محتوى مخصص)</option>
+          <option value="admin">🛡️ Admin (مسؤول إدارة محتوى)</option>
+          <option value="super_admin">👑 Super Admin (صلاحيات كاملة شاملة)</option>
+        `;
+        roleSelect.dataset.studentDefaultInit = '1';
+      }
+      roleSelect.value = 'student';
+    }
+
+    // ربط تفاعلي ذكي: بمجرد أن يحدد السوبر أدمن أي قسم أو عملية، يتحول الدور تلقائياً من student إلى content_manager (ويتحدد الترم الأول والثاني تلقائياً لو لم يحددهما)، وإذا أزال كل الصلاحيات أو اختار student يعود طالباً عادياً
+    const rbacModalEl = document.getElementById('rbac-modal');
+    if (rbacModalEl && !_rbacListenersBound) {
+      _rbacListenersBound = true;
+      rbacModalEl.addEventListener('change', (ev) => {
+        const t = ev.target;
+        if (!t || !roleSelect) return;
+        if (t.id === 'rbac-role-select') {
+          if (roleSelect.value === 'student') {
+            document.querySelectorAll('.rbac-term-cb, .rbac-sec-cb').forEach(cb => { cb.checked = false; });
+            ['rbac-can-create', 'rbac-can-edit', 'rbac-can-delete', 'rbac-can-publish', 'rbac-can-owners', 'rbac-can-analytics'].forEach(id => setCb(id, false));
+          } else if (roleSelect.value === 'super_admin') {
+            document.querySelectorAll('.rbac-term-cb, .rbac-sec-cb').forEach(cb => { cb.checked = true; });
+            ['rbac-can-create', 'rbac-can-edit', 'rbac-can-delete', 'rbac-can-publish', 'rbac-can-owners', 'rbac-can-analytics'].forEach(id => setCb(id, true));
+          } else {
+            const anyTerm = Array.from(document.querySelectorAll('.rbac-term-cb')).some(cb => cb.checked);
+            if (!anyTerm) document.querySelectorAll('.rbac-term-cb').forEach(cb => { cb.checked = true; });
+          }
+          return;
+        }
+        const isPermCheckbox = t.classList.contains('rbac-sec-cb') || ['rbac-can-create', 'rbac-can-edit', 'rbac-can-delete', 'rbac-can-publish', 'rbac-can-owners', 'rbac-can-analytics'].includes(t.id);
+        if (isPermCheckbox) {
+          const anySec = Array.from(document.querySelectorAll('.rbac-sec-cb')).some(cb => cb.checked);
+          const anyAct = ['rbac-can-create', 'rbac-can-edit', 'rbac-can-delete', 'rbac-can-publish', 'rbac-can-owners', 'rbac-can-analytics'].some(id => document.getElementById(id)?.checked);
+          if ((anySec || anyAct) && roleSelect.value === 'student') {
+            roleSelect.value = 'content_manager';
+            const anyTerm = Array.from(document.querySelectorAll('.rbac-term-cb')).some(cb => cb.checked);
+            if (!anyTerm) document.querySelectorAll('.rbac-term-cb').forEach(cb => { cb.checked = true; });
+          } else if (!anySec && !anyAct && roleSelect.value !== 'super_admin') {
+            roleSelect.value = 'student';
+            document.querySelectorAll('.rbac-term-cb').forEach(cb => { cb.checked = false; });
+          }
+        }
+      });
+    }
 
     const applyPermsToModal = (roleCode, perms) => {
-      if (roleSelect && ['super_admin', 'admin', 'content_manager', 'student'].includes(roleCode)) {
-        // إذا كان الحساب student حالياً وفتحنا نافذة الصلاحيات لتخصيص صلاحيات له، نجعل الدور المختار content_manager افتراضياً
-        roleSelect.value = (roleCode === 'student') ? 'content_manager' : roleCode;
+      const effectiveRole = (roleCode === 'super_admin' || (roleCode && roleCode !== 'student' && perms && window.hasAnyAdminActionPermission(perms)))
+        ? roleCode
+        : 'student';
+      if (roleSelect && ['super_admin', 'admin', 'content_manager', 'student'].includes(effectiveRole)) {
+        roleSelect.value = effectiveRole;
       }
-      if (perms && roleCode !== 'student' && window.hasAnyAdminActionPermission(perms)) {
+      if (effectiveRole === 'super_admin') {
+        document.querySelectorAll('.rbac-term-cb, .rbac-sec-cb').forEach(cb => { cb.checked = true; });
+        setCb('rbac-can-create', true);
+        setCb('rbac-can-edit', true);
+        setCb('rbac-can-delete', true);
+        setCb('rbac-can-publish', true);
+        setCb('rbac-can-owners', true);
+        setCb('rbac-can-analytics', true);
+      } else if (perms && effectiveRole !== 'student' && window.hasAnyAdminActionPermission(perms)) {
         const terms = Array.isArray(perms.allowed_terms) && perms.allowed_terms.length ? perms.allowed_terms.map(Number) : [1, 2];
         document.querySelectorAll('.rbac-term-cb').forEach(cb => {
           cb.checked = terms.includes(Number(cb.value));
@@ -11050,6 +11394,14 @@ ESSAY
         setCb('rbac-can-publish', perms.can_publish === true);
         setCb('rbac-can-owners', perms.can_manage_owners === true);
         setCb('rbac-can-analytics', perms.can_view_analytics === true);
+      } else {
+        document.querySelectorAll('.rbac-term-cb, .rbac-sec-cb').forEach(cb => { cb.checked = false; });
+        setCb('rbac-can-create', false);
+        setCb('rbac-can-edit', false);
+        setCb('rbac-can-delete', false);
+        setCb('rbac-can-publish', false);
+        setCb('rbac-can-owners', false);
+        setCb('rbac-can-analytics', false);
       }
     };
 
@@ -11057,7 +11409,7 @@ ESSAY
     const emailLower = (userEmail || '').trim().toLowerCase();
     const cachedUser = (window._adminUsersMap && (window._adminUsersMap[userId] || window._adminUsersMap[userEmail] || window._adminUsersMap[emailLower])) || null;
     if (cachedUser) {
-      applyPermsToModal(cachedUser.role || 'content_manager', cachedUser._ovPerms);
+      applyPermsToModal(cachedUser.role || 'student', cachedUser._ovPerms);
     }
 
     document.getElementById('rbac-modal').classList.remove('hidden');
@@ -11066,7 +11418,7 @@ ESSAY
     if (!cachedUser && (userEmail || userId)) {
       try {
         const overrides = await window.fetchSystemUserOverrides();
-        let roleCode = 'content_manager';
+        let roleCode = 'student';
         let perms = null;
 
         if (userId) {
@@ -11080,7 +11432,7 @@ ESSAY
           if (permRows[0]) perms = permRows[0];
         }
         const ov = overrides[userId] || overrides[userEmail] || overrides[emailLower];
-        if (ov?.role && ov.role !== 'student') roleCode = ov.role;
+        if (ov?.role) roleCode = ov.role;
         if (!perms && ov?.permissions) perms = ov.permissions;
         applyPermsToModal(roleCode, perms);
       } catch (e) {}
@@ -11585,23 +11937,45 @@ ESSAY
   } catch (e) {}
 
   window.addEventListener('storage', (e) => {
-    if (e.key === 'bis_realtime_user_sync_ping' || e.key === 'super_admin_user_overrides_v2') {
+    if (e.key === 'bis_realtime_user_sync_ping' || e.key === 'super_admin_user_overrides_v2' || e.key === 'super_admin_user_presence_v1') {
       handleIncomingRealtimeSync();
     }
   });
 
   window.addEventListener('focus', () => {
+    if (!window.IS_STANDALONE_SUPER_ADMIN && window.authSession?.user && typeof window.pingCurrentUserPresence === 'function') {
+      window.pingCurrentUserPresence(true);
+    }
     handleIncomingRealtimeSync();
   });
 
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) {
+      if (!window.IS_STANDALONE_SUPER_ADMIN && window.authSession?.user && typeof window.pingCurrentUserPresence === 'function') {
+        window.pingCurrentUserPresence(true);
+      }
       handleIncomingRealtimeSync();
     }
   });
 
+  window.addEventListener('pagehide', () => {
+    if (!window.IS_STANDALONE_SUPER_ADMIN && window.authSession?.user && typeof window.pingCurrentUserPresence === 'function') {
+      window.pingCurrentUserPresence(false);
+    }
+  });
+
+  window.addEventListener('beforeunload', () => {
+    if (!window.IS_STANDALONE_SUPER_ADMIN && window.authSession?.user && typeof window.pingCurrentUserPresence === 'function') {
+      window.pingCurrentUserPresence(false);
+    }
+  });
+
   document.addEventListener('DOMContentLoaded', () => {
-    restoreSavedAuthSession();
+    restoreSavedAuthSession().then(() => {
+      if (!window.IS_STANDALONE_SUPER_ADMIN && window.authSession?.user && typeof window.pingCurrentUserPresence === 'function') {
+        window.pingCurrentUserPresence(true);
+      }
+    });
     loadStudentNotifications();
 
     // نبض مزامنة سحابي لحظي كل 2.5 ثانية لتطبيق أي تعديل في الصلاحيات أو تعطيل/حذف الحساب فوراً بدون ريفريش
@@ -11609,6 +11983,16 @@ ESSAY
       if (document.hidden) return;
       handleIncomingRealtimeSync();
     }, 2500);
+
+    // نبض اتصال حي (Presence Heartbeat) كل 6 ثوانٍ لإعلام السوبر أدمن بالحسابات التي تفتح المنصة الآن في الوقت الفعلي
+    if (!window.IS_STANDALONE_SUPER_ADMIN) {
+      setInterval(() => {
+        if (document.hidden || !window.authSession?.user) return;
+        if (typeof window.pingCurrentUserPresence === 'function') {
+          window.pingCurrentUserPresence(true);
+        }
+      }, 6000);
+    }
 
     document.addEventListener('click', (e) => {
       const dd = document.getElementById('notif-dropdown');
