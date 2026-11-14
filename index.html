@@ -2901,9 +2901,7 @@
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:8px">
             <p style="color:var(--text-dim);font-size:0.9rem">المواد وOwners — كل واحد فولدر بيدخله لوحده</p>
             <div style="display:flex;gap:8px;flex-wrap:wrap">
-              <button class="btn btn-primary" onclick="showAddLectureOwnerModal()">
-                <i class="fas fa-user-plus"></i> Add Owner
-              </button>
+              
               <button class="btn btn-primary" onclick="showAddSubjectModal('lectures')">
                 <i class="fas fa-folder-plus"></i> إضافة مادة
               </button>
@@ -2989,9 +2987,7 @@
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:8px">
             <p style="color:var(--text-dim);font-size:0.9rem">المواد وOwners — كل واحد فولدر بيدخله لوحده</p>
             <div style="display:flex;gap:8px;flex-wrap:wrap">
-              <button class="btn btn-primary" onclick="showAddOwnerModal()">
-                <i class="fas fa-user-plus"></i> Add Owner
-              </button>
+              
               <button class="btn btn-primary" onclick="showAddSubjectModal('summaries')">
                 <i class="fas fa-folder-plus"></i> إضافة مادة
               </button>
@@ -8730,6 +8726,7 @@ ESSAY
       } catch (e) {}
 
       if (rpcProfile && rpcProfile.id) {
+        // أي حساب جديد يتم إنشاؤه على المنصة يكون دائماً طالب عادي (student) فقط
         const cloudUser = {
           id: rpcProfile.id,
           email: lowerEmail,
@@ -8737,7 +8734,8 @@ ESSAY
           grade: 'bis',
           term: term,
           section_code: 'bis',
-          role: rpcProfile.role || 'student',
+          role: 'student',
+          permissions: null,
           is_active: true,
           deleted: false,
           pw_hash: _encodePass(password),
@@ -8775,7 +8773,7 @@ ESSAY
           });
         }
         closeModal('auth-modal');
-        toast('🎉 تم إنشاء حسابك وتسجيل الدخول بنجاح!');
+        toast('🎉 تم إنشاء حسابك كطالب وتسجيل الدخول بنجاح!');
         return;
       }
 
@@ -8790,7 +8788,7 @@ ESSAY
       });
       const data = await res.json().catch(() => ({}));
 
-      // Save cloud account record in overrides so user can ALWAYS log in even if Supabase email rate limit is exceeded or email confirmation is enabled
+      // Save cloud account record in overrides — always 'student' on new signup
       const uid = data?.user?.id || existingOv?.id || _generateUuid();
       const cloudUser = {
         id: uid,
@@ -8799,7 +8797,8 @@ ESSAY
         grade: 'bis',
         term: term,
         section_code: 'bis',
-        role: (existingOv && existingOv.role && !existingOv.deleted) ? existingOv.role : 'student',
+        role: 'student',
+        permissions: null,
         is_active: true,
         deleted: false,
         pw_hash: _encodePass(password),
@@ -8817,7 +8816,7 @@ ESSAY
           section_code: sectionCode
         });
         closeModal('auth-modal');
-        toast('🎉 تم إنشاء حسابك وتسجيل الدخول بنجاح!');
+        toast('🎉 تم إنشاء حسابك كطالب وتسجيل الدخول بنجاح!');
         return;
       }
 
@@ -8839,7 +8838,7 @@ ESSAY
         section_code: sectionCode
       });
       closeModal('auth-modal');
-      toast('🎉 تم إنشاء حسابك وتسجيل الدخول بنجاح!');
+      toast('🎉 تم إنشاء حسابك كطالب وتسجيل الدخول بنجاح!');
     } catch (err) {
       errEl.textContent = '❌ ' + (err.message || 'خطأ أثناء التسجيل');
     }
@@ -8866,6 +8865,77 @@ ESSAY
     }
   };
 
+  // دالة موحدة لمزامنة دور وصلاحيات المستخدم الحالي من قاعدة البيانات في الوقت الفعلي
+  window.syncUserPermissionsFromDB = async function () {
+    const u = window.authSession?.user;
+    if (!u || (!u.id && !u.email)) return null;
+    const lowerEmail = (u.email || '').toLowerCase();
+    const sbHeaders = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Cache-Control': 'no-cache' };
+
+    try {
+      const [pRes, overrides] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/profiles?select=*&or=(id.eq.${u.id},email.ilike.${encodeURIComponent(lowerEmail)})&limit=1`, { headers: sbHeaders }),
+        window.fetchSystemUserOverrides()
+      ]);
+
+      const pRows = pRes.ok ? await pRes.json() : [];
+      const dbProf = pRows[0] || null;
+      const ovByEmail = (lowerEmail && overrides[lowerEmail]) ? overrides[lowerEmail] : ((u.email && overrides[u.email]) ? overrides[u.email] : {});
+      const ovById = (u.id && overrides[u.id]) ? overrides[u.id] : {};
+      const uOv = { ...ovByEmail, ...ovById };
+
+      // التحقق من وجود الحساب فعلياً في قاعدة البيانات وعدم حذفه أو تعطيله
+      const existsInDb = Boolean(dbProf || uOv.id || uOv.email);
+      const effectiveActive = typeof uOv.is_active === 'boolean'
+        ? uOv.is_active
+        : (dbProf ? dbProf.is_active !== false : false);
+
+      if (!existsInDb || uOv.deleted || !effectiveActive) {
+        window._dbAccountVerified = false;
+        window.authSession = { accessToken: null, refreshToken: null, user: null, profile: null, permissions: null };
+        localStorage.removeItem('supabase_auth_session');
+        updateNavbarAuthUI();
+        return null;
+      }
+
+      window._dbAccountVerified = true;
+      window._dbAccountVerifiedAt = Date.now();
+
+      const resolvedId = dbProf?.id || u.id;
+      const resolvedRole = uOv.role || dbProf?.role || 'student';
+
+      let dbPerms = null;
+      if (resolvedRole !== 'student') {
+        try {
+          const permRes = await fetch(`${SUPABASE_URL}/rest/v1/role_permissions?select=*&user_id=eq.${resolvedId}&limit=1`, { headers: sbHeaders });
+          if (permRes.ok) {
+            const permRows = await permRes.json();
+            dbPerms = permRows[0] || null;
+          }
+        } catch (e) {}
+      }
+
+      const finalPerms = resolvedRole === 'student'
+        ? null
+        : (dbPerms || uOv.permissions || null);
+
+      if (window.authSession.profile) {
+        window.authSession.profile.id = resolvedId;
+        window.authSession.profile.role = resolvedRole;
+        window.authSession.profile.is_active = true;
+        if (dbProf?.full_name) window.authSession.profile.full_name = dbProf.full_name;
+        if (dbProf?.term) window.authSession.profile.term = dbProf.term;
+      }
+      window.authSession.permissions = finalPerms;
+
+      localStorage.setItem('supabase_auth_session', JSON.stringify(window.authSession));
+      updateNavbarAuthUI();
+      return { profile: window.authSession.profile, permissions: finalPerms };
+    } catch (e) {
+      return null;
+    }
+  };
+
   async function establishAuthSession(accessToken, refreshToken, user, fallbackMeta = {}) {
     try { localStorage.removeItem('super_admin_user_overrides'); } catch (e) {}
     window.authSession.accessToken = accessToken;
@@ -8874,10 +8944,11 @@ ESSAY
 
     const meta = { ...(user?.user_metadata || {}), ...fallbackMeta };
     const isNewSignup = Boolean(fallbackMeta && fallbackMeta.full_name);
+    const lowerEmail = (user.email || '').toLowerCase();
 
     // Check real-time Super Admin user overrides (disabled / deleted / role)
     const overrides = await window.fetchSystemUserOverrides();
-    const ovByEmail = (user.email && overrides[user.email]) ? overrides[user.email] : {};
+    const ovByEmail = (lowerEmail && overrides[lowerEmail]) ? overrides[lowerEmail] : ((user.email && overrides[user.email]) ? overrides[user.email] : {});
     const ovById = (user.id && overrides[user.id]) ? overrides[user.id] : {};
     let uOverride = { ...ovByEmail, ...ovById };
 
@@ -8885,11 +8956,13 @@ ESSAY
     if (isNewSignup && uOverride.deleted) {
       delete overrides[user.id];
       if (user.email) delete overrides[user.email];
+      if (lowerEmail) delete overrides[lowerEmail];
       await window.saveSystemUserOverrides(overrides);
       uOverride = {};
     }
 
     if (uOverride.deleted) {
+      window._dbAccountVerified = false;
       window.authSession = { accessToken: null, refreshToken: null, user: null, profile: null, permissions: null };
       localStorage.removeItem('supabase_auth_session');
       updateNavbarAuthUI();
@@ -8897,8 +8970,9 @@ ESSAY
     }
 
     let profile = null;
+    const sbHeaders = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' };
     try {
-      const pRes = await api(`profiles?select=*&id=eq.${user.id}`);
+      const pRes = await fetch(`${SUPABASE_URL}/rest/v1/profiles?select=*&or=(id.eq.${user.id},email.ilike.${encodeURIComponent(lowerEmail)})&limit=1`, { headers: sbHeaders });
       if (pRes.ok) {
         const rows = await pRes.json();
         profile = rows[0] || null;
@@ -8906,7 +8980,7 @@ ESSAY
       if (!profile) {
         const newProf = {
           id: user.id,
-          email: user.email,
+          email: lowerEmail || user.email,
           full_name: meta.full_name || user.email.split('@')[0],
           grade: 'bis',
           term: Number(meta.term) || 1,
@@ -8914,7 +8988,7 @@ ESSAY
           role: 'student',
           is_active: true
         };
-        const insRes = await api('profiles', { method: 'POST', body: JSON.stringify(newProf) });
+        const insRes = await fetch(`${SUPABASE_URL}/rest/v1/profiles`, { method: 'POST', headers: sbHeaders, body: JSON.stringify(newProf) });
         if (insRes.ok) {
           const insRows = await insRes.json();
           profile = insRows[0] || newProf;
@@ -8925,7 +8999,7 @@ ESSAY
     } catch (e) {
       profile = {
         id: user.id,
-        email: user.email,
+        email: lowerEmail || user.email,
         full_name: meta.full_name || user.email.split('@')[0],
         grade: 'bis',
         term: Number(meta.term) || 1,
@@ -8939,34 +9013,45 @@ ESSAY
     if (typeof uOverride.is_active === 'boolean') {
       profile.is_active = uOverride.is_active;
     }
-    if (uOverride.role) {
+    if (isNewSignup) {
+      profile.role = 'student';
+    } else if (uOverride.role) {
       profile.role = uOverride.role;
     }
 
     if (profile && profile.is_active === false) {
+      window._dbAccountVerified = false;
       window.authSession = { accessToken: null, refreshToken: null, user: null, profile: null, permissions: null };
       localStorage.removeItem('supabase_auth_session');
       updateNavbarAuthUI();
       throw new Error('⛔ تم تعطيل هذا الحساب من قِبل إدارة المنصة. تواصل مع المسؤول.');
     }
 
+    window.authSession.user.id = profile.id || user.id;
     window.authSession.profile = profile;
+    window._dbAccountVerified = true;
+    window._dbAccountVerifiedAt = Date.now();
 
     // Load role_permissions if admin / content_manager / super_admin
+    window.authSession.permissions = null;
     if (profile.role && profile.role !== 'student') {
       try {
-        const permRes = await api(`role_permissions?select=*&user_id=eq.${user.id}`);
+        const permRes = await fetch(`${SUPABASE_URL}/rest/v1/role_permissions?select=*&user_id=eq.${profile.id}&limit=1`, { headers: sbHeaders });
         if (permRes.ok) {
           const pRows = await permRes.json();
-          window.authSession.permissions = pRows[0] || null;
+          window.authSession.permissions = pRows[0] || uOverride.permissions || null;
+        } else {
+          window.authSession.permissions = uOverride.permissions || null;
         }
-      } catch (e) {}
+      } catch (e) {
+        window.authSession.permissions = uOverride.permissions || null;
+      }
     }
 
     localStorage.setItem('supabase_auth_session', JSON.stringify({
       accessToken,
       refreshToken,
-      user,
+      user: window.authSession.user,
       profile: window.authSession.profile,
       permissions: window.authSession.permissions
     }));
@@ -8987,6 +9072,7 @@ ESSAY
         }).catch(() => {});
       }
     } catch (e) {}
+    window._dbAccountVerified = false;
     window.authSession = { accessToken: null, refreshToken: null, user: null, profile: null, permissions: null };
     localStorage.removeItem('supabase_auth_session');
     updateNavbarAuthUI();
@@ -8998,49 +9084,18 @@ ESSAY
     try {
       localStorage.removeItem('super_admin_user_overrides');
       const raw = localStorage.getItem('supabase_auth_session');
-      if (!raw) return;
+      if (!raw) {
+        window._dbAccountVerified = false;
+        return;
+      }
       const saved = JSON.parse(raw);
       if (saved && saved.user) {
         window.authSession = saved;
         updateNavbarAuthUI();
-        // Verify from database in real-time that the account has not been disabled or deleted by Super Admin
-        const [pRes, overrides] = await Promise.all([
-          api(`profiles?select=*&id=eq.${saved.user.id}`),
-          window.fetchSystemUserOverrides()
-        ]);
-        const ovByEmail = (saved.user.email && overrides[saved.user.email]) ? overrides[saved.user.email] : {};
-        const ovById = (saved.user.id && overrides[saved.user.id]) ? overrides[saved.user.id] : {};
-        const uOv = { ...ovByEmail, ...ovById };
-
-        if (uOv.deleted || uOv.is_active === false) {
-          window.authSession = { accessToken: null, refreshToken: null, user: null, profile: null, permissions: null };
-          localStorage.removeItem('supabase_auth_session');
-          updateNavbarAuthUI();
+        const synced = await window.syncUserPermissionsFromDB();
+        if (!synced) {
           showGradeSelection();
-          toast('⛔ تم إيقاف أو تعطيل هذا الحساب من قِبل إدارة المنصة', 'error');
-          return;
-        }
-        if (pRes.ok) {
-          const rows = await pRes.json();
-          const freshProfile = rows[0];
-          const effectiveActive = typeof uOv.is_active === 'boolean'
-            ? uOv.is_active
-            : (freshProfile ? freshProfile.is_active !== false : true);
-          if (!effectiveActive) {
-            window.authSession = { accessToken: null, refreshToken: null, user: null, profile: null, permissions: null };
-            localStorage.removeItem('supabase_auth_session');
-            updateNavbarAuthUI();
-            showGradeSelection();
-            toast('⛔ تم إيقاف أو تعطيل هذا الحساب من قِبل إدارة المنصة', 'error');
-            return;
-          }
-          if (freshProfile) {
-            freshProfile.is_active = true;
-            if (uOv.role) freshProfile.role = uOv.role;
-            window.authSession.profile = freshProfile;
-            localStorage.setItem('supabase_auth_session', JSON.stringify(window.authSession));
-            updateNavbarAuthUI();
-          }
+          toast('⛔ يرجى تسجيل الدخول بحسابك للوصول إلى المنصة', 'error');
         }
       }
     } catch (e) {}
@@ -9218,21 +9273,24 @@ ESSAY
     can_manage_users: true
   };
 
-  window.checkAdminPermission = function (action = 'edit', section = null, grade = null, term = null) {
-    if (window.currentAdminRole === 'super_admin') return true;
+  window.checkAdminPermission = function (action = 'view', section = null, grade = null, term = null) {
+    if (window.IS_STANDALONE_SUPER_ADMIN || window.currentAdminRole === 'super_admin') return true;
     const perms = window.currentAdminPermissions;
     if (!perms) return false;
 
     const t = term || currentTerm;
     const s = section || adminCurrentSection;
 
-    if (t && Array.isArray(perms.allowed_terms) && !perms.allowed_terms.includes(Number(t))) {
+    if (t && Array.isArray(perms.allowed_terms) && perms.allowed_terms.length > 0 && !perms.allowed_terms.map(Number).includes(Number(t))) {
       return false;
     }
-    if (s && Array.isArray(perms.allowed_sections) && !perms.allowed_sections.includes('*') && !perms.allowed_sections.includes(s)) {
-      return false;
+    if (s && ['exams', 'lectures', 'lecture-quizzes', 'summaries'].includes(s) && Array.isArray(perms.allowed_sections)) {
+      if (!perms.allowed_sections.includes('*') && !perms.allowed_sections.includes(s)) {
+        return false;
+      }
     }
 
+    if (action === 'view') return true;
     if (action === 'create') return Boolean(perms.can_create);
     if (action === 'edit') return Boolean(perms.can_edit);
     if (action === 'delete') return Boolean(perms.can_delete);
@@ -9243,9 +9301,72 @@ ESSAY
     return true;
   };
 
-  // Override promptAdmin to allow direct RBAC entry for authenticated admins OR password verification
+  // تطبيق الصلاحيات بصرياً على أزرار لوحة التحكم (إخفاء الأزرار غير المسموح بها للمسؤول الحالي)
+  window.applyAdminActionButtonsVisibility = function () {
+    const adminPage = document.getElementById('admin-page');
+    if (!adminPage || adminPage.classList.contains('hidden')) return;
+    const isSuper = Boolean(window.IS_STANDALONE_SUPER_ADMIN || window.currentAdminRole === 'super_admin');
+
+    // 1. على منصة الطلاب: إخفاء زر Add Owner دائماً من قسمي المحاضرات والملخصات
+    const addOwnerBtns = adminPage.querySelectorAll('button[onclick*="showAddLectureOwnerModal"], button[onclick*="showAddOwnerModal"]');
+    addOwnerBtns.forEach(btn => {
+      if (window.IS_PUBLIC_OWNER_DASHBOARD || (!isSuper && !checkAdminPermission('owners'))) {
+        btn.style.display = 'none';
+      } else {
+        btn.style.display = '';
+      }
+    });
+
+    // إخفاء أزرار حذف أو تعديل صورة الـ Owners إذا لم يكن لديه صلاحية owners أو على منصة الطلاب
+    const ownerDelBtns = adminPage.querySelectorAll('.owner-leader-delete, .owner-leader-photo-edit');
+    ownerDelBtns.forEach(el => {
+      el.style.display = (!window.IS_PUBLIC_OWNER_DASHBOARD && (isSuper || checkAdminPermission('owners'))) ? '' : 'none';
+    });
+
+    if (isSuper) return;
+
+    const canCreate = checkAdminPermission('create');
+    const canEdit = checkAdminPermission('edit');
+    const canDelete = checkAdminPermission('delete');
+    const canPublish = checkAdminPermission('publish');
+
+    // أزرار الإضافة
+    adminPage.querySelectorAll('button[onclick*="showAddQuizModal"], button[onclick*="showAddSubjectModal"], button[onclick*="showAddLectureModal"], button[onclick*="showAddSummaryModal"], button[onclick*="showAddResourceModal"], button[onclick*="openAddQuestionModal"], button[onclick*="openImportModal"], #admin-add-exam-btn').forEach(btn => {
+      if (btn.id === 'admin-add-exam-btn') {
+        btn.style.display = (adminCurrentSection === 'exams' && canCreate && checkAdminPermission('view', 'exams')) ? '' : 'none';
+      } else {
+        btn.style.display = canCreate ? '' : 'none';
+      }
+    });
+
+    // أزرار التعديل
+    adminPage.querySelectorAll('button[onclick*="openEditQuiz("], button[onclick*="openEditQuizSettingsModal("], button[onclick*="openEditResourceModal("], button[onclick*="openEditQuestionModal("]').forEach(btn => {
+      btn.style.display = canEdit ? '' : 'none';
+    });
+
+    // أزرار النشر والإخفاء
+    adminPage.querySelectorAll('button[onclick*="togglePublish("], button[onclick*="toggleResourcePublish("]').forEach(btn => {
+      btn.style.display = canPublish ? '' : 'none';
+    });
+
+    // أزرار الحذف والتحديد للحذف
+    adminPage.querySelectorAll('button[onclick*="confirmDeleteQuiz("], button[onclick*="deleteSelectedQuizzes("], button[onclick*="deleteLectureAdmin("], button[onclick*="deleteSubjectAdmin("], button[onclick*="deleteLqFolderAdmin("], button[onclick*="deleteResourceAdmin("], button[onclick*="_deleteSelectedAdmin"], button[onclick*="toggleSelectMode("], button[onclick*="_toggleAdminLectureSelect("], button[onclick*="_toggleAdminSummarySelect("]').forEach(btn => {
+      btn.style.display = canDelete ? '' : 'none';
+    });
+  };
+
+  // Override promptAdmin to sync latest DB permissions first & allow direct RBAC entry for authorized users
   const _origPromptAdmin = window.promptAdmin;
-  window.promptAdmin = function () {
+  window.promptAdmin = async function () {
+    // في ملف السوبر أدمن المستقل: يطلب باسورد السوبر أدمن دائماً
+    if (window.IS_STANDALONE_SUPER_ADMIN) {
+      _origPromptAdmin();
+      return;
+    }
+
+    // مزامنة الصلاحيات الحقيقية من قاعدة البيانات أولاً قبل فحص الدور
+    await window.syncUserPermissionsFromDB();
+
     const prof = window.authSession?.profile;
     if (prof && ['super_admin', 'admin', 'content_manager'].includes(prof.role) && prof.is_active !== false) {
       window.currentAdminRole = prof.role;
@@ -9257,15 +9378,22 @@ ESSAY
           can_create: true, can_edit: true, can_delete: true, can_publish: true,
           can_manage_owners: true, can_view_analytics: true, can_manage_users: true
         };
-      } else if (window.authSession.permissions) {
-        window.currentAdminPermissions = window.authSession.permissions;
+      } else {
+        window.currentAdminPermissions = window.authSession.permissions || {
+          allowed_grades: ['*'],
+          allowed_terms: [1, 2],
+          allowed_sections: ['exams', 'lectures', 'lecture-quizzes', 'summaries'],
+          can_create: true, can_edit: true, can_delete: false, can_publish: true,
+          can_manage_owners: false, can_view_analytics: false, can_manage_users: false
+        };
       }
-      enterAdminDashboard('bis', prof.term || currentTerm || 1);
+      const allowedTerms = (window.currentAdminPermissions?.allowed_terms || [1, 2]).map(Number);
+      const initialTerm = allowedTerms.includes(Number(currentTerm)) ? Number(currentTerm) : (allowedTerms[0] || 1);
+      enterAdminDashboard('bis', initialTerm);
       return;
     }
-    if (prof && prof.role === 'student') {
-      return toast('⛔ عفواً، حسابات الطلاب غير مصرح لها بالدخول للوحة التحكم الإدارية!', 'error');
-    }
+
+    // إذا كان طالباً عادياً ويريد الدخول كـ Owner لبروفايله الخاص بالباسورد
     _origPromptAdmin();
   };
 
@@ -9300,32 +9428,76 @@ ESSAY
     }
 
     window.currentAdminRole = 'super_admin';
+    window.currentAdminPermissions = {
+      allowed_grades: ['*'],
+      allowed_terms: [1, 2],
+      allowed_sections: ['exams', 'lectures', 'lecture-quizzes', 'summaries'],
+      can_create: true, can_edit: true, can_delete: true, can_publish: true,
+      can_manage_owners: true, can_view_analytics: true, can_manage_users: true
+    };
     closeModal('pwd-modal');
     enterAdminDashboard('bis', currentTerm || 1);
   };
 
+  // Override switchAdminTerm to enforce allowed_terms permission
+  const _origSwitchAdminTerm = window.switchAdminTerm;
+  window.switchAdminTerm = function (term) {
+    if (!checkAdminPermission('view', adminCurrentSection, 'bis', term)) {
+      return toast('⛔ ليس لديك صلاحية لإدارة هذا الفصل الدراسي!', 'error');
+    }
+    _origSwitchAdminTerm(term);
+    setTimeout(window.applyAdminActionButtonsVisibility, 120);
+  };
+
   function enterAdminDashboard(grade, term) {
     currentGrade = 'bis';
-    currentTerm = term || 1;
+    const isSuper = Boolean(window.IS_STANDALONE_SUPER_ADMIN || window.currentAdminRole === 'super_admin');
+    const perms = window.currentAdminPermissions || {};
+    const allowedTerms = isSuper ? [1, 2] : ((perms.allowed_terms || [1, 2]).map(Number));
+    const allowedSecs = isSuper
+      ? ['exams', 'lectures', 'lecture-quizzes', 'summaries']
+      : (perms.allowed_sections || ['exams']);
+
+    currentTerm = allowedTerms.includes(Number(term)) ? Number(term) : (allowedTerms[0] || 1);
     showPage('admin-page');
 
+    // إظهار الترمات المسموح بها فقط
     [1, 2].forEach(t => {
       const btn = document.getElementById(`admin-term-${t}`);
-      if (btn) btn.classList.toggle('active', t === currentTerm);
+      if (btn) {
+        btn.style.display = (isSuper || allowedTerms.includes(t)) ? '' : 'none';
+        btn.classList.toggle('active', t === currentTerm);
+      }
+    });
+
+    // إظهار الأقسام المسموح بها فقط للمسؤول الحالي
+    ['exams', 'lectures', 'lecture-quizzes', 'summaries'].forEach(sec => {
+      const tBtn = document.getElementById(`admin-tab-${sec}`);
+      if (tBtn) {
+        const canSeeSec = isSuper || allowedSecs.includes('*') || allowedSecs.includes(sec);
+        tBtn.style.display = canSeeSec ? '' : 'none';
+      }
     });
 
     // Apply RBAC visibility to Super Admin tabs
-    const isSuper = window.currentAdminRole === 'super_admin';
-    ['users', 'analytics', 'logs'].forEach(tabName => {
+    ['overview', 'users', 'analytics', 'logs'].forEach(tabName => {
       const tBtn = document.getElementById(`admin-tab-${tabName}`);
       if (tBtn) {
-        const allowed = isSuper || (tabName === 'analytics' && checkAdminPermission('analytics'));
+        const allowed = window.IS_STANDALONE_SUPER_ADMIN || (isSuper && !window.IS_PUBLIC_OWNER_DASHBOARD) || (tabName === 'analytics' && checkAdminPermission('analytics') && !window.IS_PUBLIC_OWNER_DASHBOARD);
         tBtn.style.display = allowed ? '' : 'none';
       }
     });
 
     updateAdminLabel();
-    switchAdminSection('overview');
+
+    // فتح أول قسم مسموح للمسؤول تلقائياً
+    if (window.IS_STANDALONE_SUPER_ADMIN) {
+      switchAdminSection('overview');
+    } else {
+      const firstAllowedSec = ['exams', 'lectures', 'lecture-quizzes', 'summaries'].find(s => isSuper || allowedSecs.includes('*') || allowedSecs.includes(s)) || 'exams';
+      switchAdminSection(firstAllowedSec);
+    }
+    setTimeout(window.applyAdminActionButtonsVisibility, 150);
   }
 
   // ─── 13. EXTENDED ADMIN SECTION SWITCHER (Overview, Users/RBAC, Analytics, Logs) ───
@@ -9333,7 +9505,13 @@ ESSAY
   window.switchAdminSection = function (section) {
     const allSections = ['overview', 'exams', 'lectures', 'lecture-quizzes', 'summaries', 'users', 'analytics', 'logs'];
     if (['exams', 'lectures', 'lecture-quizzes', 'summaries'].includes(section)) {
-      if (!checkAdminPermission('edit', section)) {
+      if (!checkAdminPermission('view', section)) {
+        // إذا كان القسم غير مسموح، انتقل تلقائياً لأول قسم مسموح
+        const perms = window.currentAdminPermissions || {};
+        const fallbackSec = (perms.allowed_sections || []).find(s => ['exams', 'lectures', 'lecture-quizzes', 'summaries'].includes(s));
+        if (fallbackSec && fallbackSec !== section) {
+          return window.switchAdminSection(fallbackSec);
+        }
         return toast('⛔ ليس لديك صلاحية للوصول إلى هذا القسم!', 'error');
       }
     }
@@ -9360,6 +9538,8 @@ ESSAY
     } else {
       _origSwitchAdminSection(section);
     }
+    setTimeout(window.applyAdminActionButtonsVisibility, 150);
+    setTimeout(window.applyAdminActionButtonsVisibility, 500);
   };
 
   // ─── 14. ADMIN DASHBOARD OVERVIEW (Section 10) ───
@@ -9920,46 +10100,125 @@ ESSAY
   }
   window.loadAdminUsersAndRoles = loadAdminUsersAndRoles;
 
-  window.openAssignRoleModal = function (userId = '', userEmail = '') {
+  window.openAssignRoleModal = async function (userId = '', userEmail = '') {
     document.getElementById('rbac-user-id').value = userId;
     document.getElementById('rbac-user-email').value = userEmail;
     document.getElementById('rbac-modal').classList.remove('hidden');
+
+    if (userEmail || userId) {
+      try {
+        const overrides = await window.fetchSystemUserOverrides();
+        const emailLower = (userEmail || '').trim().toLowerCase();
+        let roleCode = 'exams_admin';
+        let perms = null;
+
+        if (userId) {
+          const [pRes, permRes] = await Promise.all([
+            api(`profiles?select=role&id=eq.${userId}`),
+            api(`role_permissions?select=*&user_id=eq.${userId}`)
+          ]);
+          const pRows = pRes.ok ? await pRes.json() : [];
+          const permRows = permRes.ok ? await permRes.json() : [];
+          if (pRows[0]?.role && pRows[0].role !== 'student') roleCode = pRows[0].role;
+          if (permRows[0]) perms = permRows[0];
+        }
+        const ov = overrides[userId] || overrides[userEmail] || overrides[emailLower];
+        if (ov?.role && ov.role !== 'student') roleCode = ov.role;
+        if (ov?.permissions) perms = { ...(perms || {}), ...ov.permissions };
+
+        const roleSelect = document.getElementById('rbac-role-select');
+        if (roleSelect && roleCode) roleSelect.value = roleCode;
+
+        if (perms) {
+          const terms = Array.isArray(perms.allowed_terms) ? perms.allowed_terms.map(Number) : [1, 2];
+          document.querySelectorAll('.rbac-term-cb').forEach(cb => {
+            cb.checked = terms.includes(Number(cb.value));
+          });
+          const secs = Array.isArray(perms.allowed_sections) ? perms.allowed_sections : ['exams'];
+          document.querySelectorAll('.rbac-sec-cb').forEach(cb => {
+            cb.checked = secs.includes('*') || secs.includes(cb.value);
+          });
+          const setCb = (id, val) => { const el = document.getElementById(id); if (el) el.checked = !!val; };
+          setCb('rbac-can-create', perms.can_create !== false);
+          setCb('rbac-can-edit', perms.can_edit !== false);
+          setCb('rbac-can-delete', !!perms.can_delete);
+          setCb('rbac-can-publish', perms.can_publish !== false);
+          setCb('rbac-can-owners', !!perms.can_manage_owners);
+          setCb('rbac-can-analytics', !!perms.can_view_analytics);
+        }
+      } catch (e) {}
+    }
   };
 
   window.saveUserRoleAndPermissions = async function () {
-    const email = document.getElementById('rbac-user-email').value.trim();
+    const rawEmail = document.getElementById('rbac-user-email').value.trim();
+    const email = rawEmail.toLowerCase();
     const roleCode = document.getElementById('rbac-role-select').value;
     if (!email) return toast('أدخل البريد الإلكتروني للمستخدم!', 'error');
 
     const selectedTerms = Array.from(document.querySelectorAll('.rbac-term-cb:checked')).map(cb => parseInt(cb.value));
     const selectedSections = Array.from(document.querySelectorAll('.rbac-sec-cb:checked')).map(cb => cb.value);
 
+    const isSuper = roleCode === 'super_admin';
     const permPayload = {
       role_code: roleCode,
       allowed_grades: ['*'],
-      allowed_terms: selectedTerms.length ? selectedTerms : [1, 2],
-      allowed_sections: selectedSections.length ? selectedSections : ['exams'],
-      can_create: document.getElementById('rbac-can-create').checked,
-      can_edit: document.getElementById('rbac-can-edit').checked,
-      can_delete: document.getElementById('rbac-can-delete').checked,
-      can_publish: document.getElementById('rbac-can-publish').checked,
-      can_manage_owners: document.getElementById('rbac-can-owners').checked,
-      can_view_analytics: document.getElementById('rbac-can-analytics').checked,
-      can_manage_users: roleCode === 'super_admin'
+      allowed_terms: isSuper ? [1, 2] : (selectedTerms.length ? selectedTerms : [1, 2]),
+      allowed_sections: isSuper ? ['*'] : (selectedSections.length ? selectedSections : ['exams']),
+      can_create: isSuper ? true : document.getElementById('rbac-can-create').checked,
+      can_edit: isSuper ? true : document.getElementById('rbac-can-edit').checked,
+      can_delete: isSuper ? true : document.getElementById('rbac-can-delete').checked,
+      can_publish: isSuper ? true : document.getElementById('rbac-can-publish').checked,
+      can_manage_owners: isSuper ? true : document.getElementById('rbac-can-owners').checked,
+      can_view_analytics: isSuper ? true : document.getElementById('rbac-can-analytics').checked,
+      can_manage_users: isSuper
     };
 
     try {
-      const pRes = await api(`profiles?select=id&email=eq.${encodeURIComponent(email)}`);
-      const rows = pRes.ok ? await pRes.json() : [];
-      const uid = rows[0]?.id || document.getElementById('rbac-user-id').value || email;
+      // 1. Call Supabase RPC admin_save_user_permissions to atomically update profiles + role_permissions
+      let rpcUid = null;
+      try {
+        const rpcRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/admin_save_user_permissions`, {
+          method: 'POST',
+          headers: {
+            'apikey': SUPABASE_KEY,
+            'Authorization': `Bearer ${SUPABASE_KEY}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            p_email: email,
+            p_role_code: roleCode,
+            p_allowed_terms: permPayload.allowed_terms,
+            p_allowed_sections: permPayload.allowed_sections,
+            p_can_create: permPayload.can_create,
+            p_can_edit: permPayload.can_edit,
+            p_can_delete: permPayload.can_delete,
+            p_can_publish: permPayload.can_publish,
+            p_can_manage_owners: permPayload.can_manage_owners,
+            p_can_view_analytics: permPayload.can_view_analytics,
+            p_can_manage_users: permPayload.can_manage_users
+          })
+        });
+        if (rpcRes.ok) {
+          const rpcData = await rpcRes.json();
+          if (rpcData?.user_id) rpcUid = rpcData.user_id;
+        }
+      } catch (e) {}
 
-      // Save in real-time overrides + profiles table
+      const pRes = await api(`profiles?select=id,email&email=ilike.${encodeURIComponent(email)}`);
+      const rows = pRes.ok ? await pRes.json() : [];
+      const uid = rpcUid || rows[0]?.id || document.getElementById('rbac-user-id').value || email;
+
+      // 2. Save in real-time overrides + profiles table + role_permissions table
       const overrides = await window.fetchSystemUserOverrides();
       overrides[uid] = { ...(overrides[uid] || {}), role: roleCode, permissions: permPayload };
       overrides[email] = { ...(overrides[email] || {}), role: roleCode, permissions: permPayload };
+      if (rawEmail && rawEmail !== email) {
+        overrides[rawEmail] = { ...(overrides[rawEmail] || {}), role: roleCode, permissions: permPayload };
+      }
       await window.saveSystemUserOverrides(overrides);
 
-      if (rows.length) {
+      if (rows.length || rpcUid) {
         await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${uid}`, {
           method: 'PATCH',
           headers: {
@@ -9977,9 +10236,13 @@ ESSAY
         }).catch(() => {});
       }
 
+      if (window.authSession?.user && (window.authSession.user.id === uid || (window.authSession.user.email || '').toLowerCase() === email)) {
+        await window.syncUserPermissionsFromDB();
+      }
+
       await logAdminActivity('تغيير صلاحيات مسؤول', 'user', `${email} -> ${roleCode}`, uid);
       closeModal('rbac-modal');
-      toast('✅ تم حفظ دور وصلاحيات المسؤول بنجاح!');
+      toast('✅ تم حفظ دور وصلاحيات المسؤول وتفعيلها فوراً!');
       loadAdminUsersAndRoles();
     } catch (e) {
       toast('خطأ أثناء حفظ الصلاحيات!', 'error');
@@ -10553,12 +10816,318 @@ ESSAY
     });
   };
 
+  // 4. Comprehensive RBAC Action Guards & Remove Add Owner from Student Platform Dashboard
+  const isSuperAdminPage = !!document.getElementById('admin-tab-users');
+
+  function wrapAdminGuard(fnName, action, secResolver) {
+    const orig = window[fnName];
+    if (typeof orig !== 'function') return;
+    window[fnName] = function (...args) {
+      const sec = typeof secResolver === 'function' ? secResolver(...args) : secResolver;
+      if (!window.checkAdminPermission(action, sec)) {
+        toast('⛔ ليس لديك صلاحية لتنفيذ هذا الإجراء حسب الصلاحيات الممنوحة لحسابك', 'error');
+        return;
+      }
+      return orig.apply(this, args);
+    };
+  }
+
+  // Create guards
+  wrapAdminGuard('showAddSubjectModal', 'create', (type) => type === 'lectures' ? 'lectures' : 'summaries');
+  wrapAdminGuard('showAddLectureModal', 'create', 'lectures');
+  wrapAdminGuard('showAddSummaryModal', 'create', 'summaries');
+  wrapAdminGuard('showAddResourceModal', 'create', (type) => type === 'lectures' ? 'lectures' : 'summaries');
+  wrapAdminGuard('showAddOwnerSummaryModal', 'create', 'summaries');
+  wrapAdminGuard('showAddLectureOwnerItemModal', 'create', 'lectures');
+  wrapAdminGuard('promptAddLectureOwnerFolder', 'create', 'lectures');
+  wrapAdminGuard('promptAddSummaryOwnerFolder', 'create', 'summaries');
+  wrapAdminGuard('openAddQuestionModal', 'edit', 'exams');
+  wrapAdminGuard('openImportModal', 'edit', 'exams');
+
+  // Edit guards
+  wrapAdminGuard('openEditQuiz', 'edit', 'exams');
+  wrapAdminGuard('openEditQuestionModal', 'edit', 'exams');
+  wrapAdminGuard('saveEditedQuestion', 'edit', 'exams');
+
+  // Delete guards
+  wrapAdminGuard('confirmDeleteQuiz', 'delete', 'exams');
+  wrapAdminGuard('deleteSelectedQuizzes', 'delete', 'exams');
+  wrapAdminGuard('deleteQuestion', 'delete', 'exams');
+  wrapAdminGuard('deleteLqFolderAdmin', 'delete', 'lectures');
+  wrapAdminGuard('deleteLectureAdmin', 'delete', 'lectures');
+  wrapAdminGuard('_deleteSelectedAdminLectures', 'delete', 'lectures');
+  wrapAdminGuard('deleteSubjectAdmin', 'delete', 'summaries');
+  wrapAdminGuard('deleteResourceAdmin', 'delete', 'summaries');
+  wrapAdminGuard('_deleteSelectedAdminSummaries', 'delete', 'summaries');
+  wrapAdminGuard('deleteOwnerSummary', 'delete', 'summaries');
+  wrapAdminGuard('deleteLectureOwnerItem', 'delete', 'lectures');
+
+  // Publish guards
+  wrapAdminGuard('togglePublish', 'publish', 'exams');
+
+  // Owners management guards (and completely disabled on student platform for Add Owner)
+  const _origShowAddOwnerModal = window.showAddOwnerModal;
+  window.showAddOwnerModal = function (...args) {
+    if (!isSuperAdminPage) {
+      toast('⛔ إضافة Owner متاحة فقط من لوحة السوبر أدمن الرئيسية', 'error');
+      return;
+    }
+    if (!window.checkAdminPermission('owners', 'summaries')) {
+      toast('⛔ ليس لديك صلاحية إدارة أصحاب الملخصات (Owners)', 'error');
+      return;
+    }
+    if (typeof _origShowAddOwnerModal === 'function') return _origShowAddOwnerModal.apply(this, args);
+  };
+
+  const _origShowAddLectureOwnerModal = window.showAddLectureOwnerModal;
+  window.showAddLectureOwnerModal = function (...args) {
+    if (!isSuperAdminPage) {
+      toast('⛔ إضافة Owner متاحة فقط من لوحة السوبر أدمن الرئيسية', 'error');
+      return;
+    }
+    if (!window.checkAdminPermission('owners', 'lectures')) {
+      toast('⛔ ليس لديك صلاحية إدارة أصحاب المحاضرات (Owners)', 'error');
+      return;
+    }
+    if (typeof _origShowAddLectureOwnerModal === 'function') return _origShowAddLectureOwnerModal.apply(this, args);
+  };
+
+  wrapAdminGuard('deleteOwnerAdmin', 'owners', 'summaries');
+  wrapAdminGuard('deleteLectureOwnerAdmin', 'owners', 'lectures');
+
+  // Hook admin render functions so unauthorized buttons are immediately hidden after rendering
+  [
+    'renderAdminQuizzes',
+    'renderAdminLectureMain',
+    'renderAdminLecturesList',
+    'renderAdminSummariesMain',
+    'renderAdminSubjects',
+    'renderAdminSubjectSummaries',
+    'renderAdminOwnerSummaries',
+    'renderAdminLectureOwnerItems'
+  ].forEach(fnName => {
+    const orig = window[fnName];
+    if (typeof orig === 'function') {
+      window[fnName] = function (...args) {
+        const res = orig.apply(this, args);
+        if (typeof window.applyAdminActionButtonsVisibility === 'function') {
+          window.applyAdminActionButtonsVisibility();
+        }
+        if (!isSuperAdminPage) {
+          document.querySelectorAll('[onclick*="showAddLectureOwnerModal"], [onclick*="showAddOwnerModal"]').forEach(btn => {
+            btn.style.display = 'none';
+          });
+        }
+        return res;
+      };
+    }
+  });
+
+  // Remove Add Owner buttons from Student Platform Dashboard on load
+  if (!isSuperAdminPage) {
+    document.querySelectorAll('[onclick*="showAddLectureOwnerModal"], [onclick*="showAddOwnerModal"]').forEach(btn => {
+      btn.remove();
+    });
+  }
+
+  // 5. Strict Database Account Gate: Require an active account in Supabase DB to load content, open exams, or view questions
+  let _lastDbVerifyTs = 0;
+  window.verifyActiveDatabaseAccount = async function (force = false) {
+    const uid = window.authSession?.user?.id;
+    const email = (window.authSession?.user?.email || '').trim().toLowerCase();
+    if (!uid) {
+      window._dbAccountVerified = false;
+      return false;
+    }
+    if (!force && window._dbAccountVerified && (Date.now() - _lastDbVerifyTs < 20000)) {
+      return true;
+    }
+    try {
+      const [pRes, overrides] = await Promise.all([
+        api(`profiles?select=id,email,role,is_active&id=eq.${uid}`),
+        window.fetchSystemUserOverrides()
+      ]);
+      let rows = pRes.ok ? await pRes.json() : [];
+      if (!rows.length && email) {
+        const pResEmail = await api(`profiles?select=id,email,role,is_active&email=ilike.${encodeURIComponent(email)}`);
+        if (pResEmail.ok) rows = await pResEmail.json();
+      }
+      if (!rows.length) {
+        window._dbAccountVerified = false;
+        return false;
+      }
+      const profileRow = rows[0];
+      const ov = overrides[uid] || (email ? overrides[email] : null);
+      if (ov?.deleted === true || ov?.is_active === false || (profileRow.is_active === false && ov?.is_active !== true)) {
+        window._dbAccountVerified = false;
+        window.authSession = { accessToken: null, refreshToken: null, user: null, profile: null, permissions: null };
+        localStorage.removeItem('supabase_auth_session');
+        if (typeof updateNavbarAuthUI === 'function') updateNavbarAuthUI();
+        return false;
+      }
+      window._dbAccountVerified = true;
+      _lastDbVerifyTs = Date.now();
+      return true;
+    } catch (e) {
+      return !!window._dbAccountVerified;
+    }
+  };
+
+  window.requireDatabaseAccount = function (promptMessage) {
+    if (isSuperAdminPage) return true;
+    const uid = window.authSession?.user?.id;
+    if (!uid || window._dbAccountVerified === false) {
+      toast(promptMessage || '🔒 يجب تسجيل الدخول بحساب مسجل في قاعدة البيانات أولاً لعرض المحتوى أو فتح الاختبارات والأسئلة', 'error');
+      if (typeof openAuthModal === 'function') openAuthModal('login');
+      return false;
+    }
+    // Trigger background verification against DB
+    window.verifyActiveDatabaseAccount(false).then(valid => {
+      if (!valid) {
+        toast('🔒 يجب أن يكون لديك حساب مسجل ومفعل في قاعدة البيانات للوصول إلى محتوى المنصة', 'error');
+        if (typeof goHome === 'function') goHome();
+        if (typeof openAuthModal === 'function') openAuthModal('login');
+      }
+    });
+    return true;
+  };
+
+  // Gate navigation & content loading functions on student platform
+  if (!isSuperAdminPage) {
+    const _origSelectTerm = window.selectTerm;
+    if (typeof _origSelectTerm === 'function') {
+      window.selectTerm = async function (term) {
+        if (!window.authSession?.user?.id) {
+          toast('🔒 يجب تسجيل الدخول بحسابك المسجل في المنصة أولاً لفتح الترم وعرض المحتوى', 'error');
+          if (typeof openAuthModal === 'function') openAuthModal('login');
+          return;
+        }
+        const ok = await window.verifyActiveDatabaseAccount(true);
+        if (!ok) {
+          toast('🔒 هذا الحساب غير موجود أو غير مفعل في قاعدة البيانات — سجل حساباً جديداً أو تواصل مع الإدارة', 'error');
+          if (typeof openAuthModal === 'function') openAuthModal('login');
+          return;
+        }
+        return _origSelectTerm.apply(this, arguments);
+      };
+    }
+
+    const _origShowSectionsPage = window.showSectionsPage;
+    if (typeof _origShowSectionsPage === 'function') {
+      window.showSectionsPage = function () {
+        if (!window.requireDatabaseAccount('🔒 يجب تسجيل الدخول بحسابك المسجل في قاعدة البيانات أولاً')) return;
+        return _origShowSectionsPage.apply(this, arguments);
+      };
+    }
+
+    const _origOpenSection = window.openSection;
+    if (typeof _origOpenSection === 'function') {
+      window.openSection = async function (section) {
+        if (!window.requireDatabaseAccount('🔒 يجب تسجيل الدخول بحسابك المسجل في قاعدة البيانات أولاً لفتح هذا القسم')) return;
+        const ok = await window.verifyActiveDatabaseAccount(false);
+        if (!ok) {
+          toast('🔒 الحساب غير مسجل أو غير مفعل في قاعدة البيانات', 'error');
+          if (typeof openAuthModal === 'function') openAuthModal('login');
+          return;
+        }
+        return _origOpenSection.apply(this, arguments);
+      };
+    }
+
+    const _origStartQuiz = window.startQuiz;
+    if (typeof _origStartQuiz === 'function') {
+      window.startQuiz = async function (id) {
+        if (!window.requireDatabaseAccount('🔒 لا يمكن فتح أي امتحان أو أسئلة إلا بعد تسجيل الدخول بحساب مسجل في قاعدة البيانات')) return;
+        const ok = await window.verifyActiveDatabaseAccount(true);
+        if (!ok) {
+          toast('🔒 لا يمكن فتح الاختبار — يجب أن يكون حسابك مسجلاً ومفعلاً في قاعدة البيانات', 'error');
+          if (typeof openAuthModal === 'function') openAuthModal('login');
+          return;
+        }
+        return _origStartQuiz.apply(this, arguments);
+      };
+    }
+
+    const _origLoadQuizzes = window.loadQuizzes;
+    if (typeof _origLoadQuizzes === 'function') {
+      window.loadQuizzes = async function () {
+        const isAdminView = !document.getElementById('admin-page')?.classList.contains('hidden');
+        if (!isAdminView && !window.requireDatabaseAccount('🔒 سجل الدخول بحسابك أولاً لتحميل وعرض الاختبارات')) {
+          const grid = document.getElementById('quizzes-grid');
+          if (grid) grid.innerHTML = '';
+          return;
+        }
+        return _origLoadQuizzes.apply(this, arguments);
+      };
+    }
+
+    const _origLoadResources = window.loadResources;
+    if (typeof _origLoadResources === 'function') {
+      window.loadResources = async function (type) {
+        const isAdminView = !document.getElementById('admin-page')?.classList.contains('hidden');
+        if (!isAdminView && !window.requireDatabaseAccount('🔒 سجل الدخول بحسابك أولاً لتحميل وعرض المحاضرات والملخصات')) {
+          const lList = document.getElementById('lectures-list');
+          const sList = document.getElementById('summaries-list');
+          if (lList) lList.innerHTML = '';
+          if (sList) sList.innerHTML = '';
+          return;
+        }
+        return _origLoadResources.apply(this, arguments);
+      };
+    }
+
+    [
+      'showLecturesList',
+      'openPublicLectureOwner',
+      'openPublicOwner',
+      'openPublicLectureOwnerFolder',
+      'openPublicSummaryOwnerFolder',
+      'showSubjectSummaries'
+    ].forEach(fnName => {
+      const orig = window[fnName];
+      if (typeof orig === 'function') {
+        window[fnName] = async function (...args) {
+          if (!window.requireDatabaseAccount('🔒 يجب تسجيل الدخول بحساب مسجل في قاعدة البيانات أولاً لعرض أو تحميل المحتوى')) return;
+          const ok = await window.verifyActiveDatabaseAccount(false);
+          if (!ok) {
+            if (typeof openAuthModal === 'function') openAuthModal('login');
+            return;
+          }
+          return orig.apply(this, args);
+        };
+      }
+    });
+
+    const _origOnGlobalSearchInput = window.onGlobalSearchInput;
+    if (typeof _origOnGlobalSearchInput === 'function') {
+      window.onGlobalSearchInput = function (val) {
+        if (val && val.trim().length > 0 && !window.requireDatabaseAccount('🔒 يجب تسجيل الدخول بحسابك أولاً للبحث في محتوى المنصة')) {
+          const resBox = document.getElementById('global-search-results');
+          if (resBox) resBox.classList.add('hidden');
+          return;
+        }
+        return _origOnGlobalSearchInput.apply(this, arguments);
+      };
+    }
+
+    // Intercept clicks on any resource/lecture/summary download link if not logged in with a verified DB account
+    document.addEventListener('click', (e) => {
+      const link = e.target.closest('.resource-card a[href], #lectures-list a[href], #summaries-list a[href]');
+      if (link) {
+        if (!window.requireDatabaseAccount('🔒 لا يمكن تحميل أي محتوى إلا بعد تسجيل الدخول بحساب مسجل في قاعدة البيانات')) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      }
+    }, true);
+  }
+
 })();
 
   </script>
 
   <style>
-    /* على المنصة العادية: إخفاء تبويبات السوبر أدمن الحصرية لتبقى في صفحة super-admin.html المستقلة فقط */
+    /* على المنصة العادية: إخفاء تبويبات السوبر أدمن الحصرية وأزرار Add Owner لتبقى في صفحة super-admin.html المستقلة فقط */
     #admin-tab-overview,
     #admin-tab-users,
     #admin-tab-analytics,
@@ -10566,23 +11135,14 @@ ESSAY
     #admin-section-overview,
     #admin-section-users,
     #admin-section-analytics,
-    #admin-section-logs {
+    #admin-section-logs,
+    button[onclick*="showAddLectureOwnerModal"],
+    button[onclick*="showAddOwnerModal"] {
       display: none !important;
     }
   </style>
   <script>
     window.IS_PUBLIC_OWNER_DASHBOARD = true;
-    window.addEventListener('DOMContentLoaded', function() {
-      const origShowAdmin = window.showAdminPage;
-      if (typeof origShowAdmin === 'function') {
-        window.showAdminPage = function() {
-          origShowAdmin.apply(this, arguments);
-          if (typeof switchAdminSection === 'function') {
-            switchAdminSection('exams');
-          }
-        };
-      }
-    });
   </script>
 </body>
 </html>
