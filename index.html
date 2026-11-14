@@ -2424,6 +2424,7 @@
 }
 
   </style>
+  <script>window.IS_PUBLIC_OWNER_DASHBOARD = true; window.IS_STANDALONE_SUPER_ADMIN = false;</script>
 </head>
 <body data-theme="dark">
 
@@ -3724,20 +3725,20 @@ ESSAY
     <div class="form-group">
       <label>الأقسام المسموح بإدارتها</label>
       <div style="display:flex;gap:12px;flex-wrap:wrap;padding:6px 0">
-        <label style="display:inline-flex;align-items:center;gap:5px;color:var(--text)"><input type="checkbox" class="rbac-sec-cb" value="exams" checked> الامتحانات</label>
-        <label style="display:inline-flex;align-items:center;gap:5px;color:var(--text)"><input type="checkbox" class="rbac-sec-cb" value="lectures" checked> المحاضرات</label>
-        <label style="display:inline-flex;align-items:center;gap:5px;color:var(--text)"><input type="checkbox" class="rbac-sec-cb" value="lecture-quizzes" checked> اختبارات المحاضرات</label>
-        <label style="display:inline-flex;align-items:center;gap:5px;color:var(--text)"><input type="checkbox" class="rbac-sec-cb" value="summaries" checked> الملخصات</label>
+        <label style="display:inline-flex;align-items:center;gap:5px;color:var(--text)"><input type="checkbox" class="rbac-sec-cb" value="exams"> الامتحانات</label>
+        <label style="display:inline-flex;align-items:center;gap:5px;color:var(--text)"><input type="checkbox" class="rbac-sec-cb" value="lectures"> المحاضرات</label>
+        <label style="display:inline-flex;align-items:center;gap:5px;color:var(--text)"><input type="checkbox" class="rbac-sec-cb" value="lecture-quizzes"> أسئلة المحاضرات</label>
+        <label style="display:inline-flex;align-items:center;gap:5px;color:var(--text)"><input type="checkbox" class="rbac-sec-cb" value="summaries"> الملخصات</label>
       </div>
     </div>
 
     <div class="form-group">
       <label>الصلاحيات التفصيلية للعمليات</label>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;padding:6px 0">
-        <label style="display:inline-flex;align-items:center;gap:6px;color:var(--text)"><input type="checkbox" id="rbac-can-create" checked> إضافة محتوى</label>
-        <label style="display:inline-flex;align-items:center;gap:6px;color:var(--text)"><input type="checkbox" id="rbac-can-edit" checked> تعديل محتوى</label>
+        <label style="display:inline-flex;align-items:center;gap:6px;color:var(--text)"><input type="checkbox" id="rbac-can-create"> إضافة محتوى</label>
+        <label style="display:inline-flex;align-items:center;gap:6px;color:var(--text)"><input type="checkbox" id="rbac-can-edit"> تعديل محتوى</label>
         <label style="display:inline-flex;align-items:center;gap:6px;color:var(--text)"><input type="checkbox" id="rbac-can-delete"> حذف محتوى</label>
-        <label style="display:inline-flex;align-items:center;gap:6px;color:var(--text)"><input type="checkbox" id="rbac-can-publish" checked> نشر / إخفاء</label>
+        <label style="display:inline-flex;align-items:center;gap:6px;color:var(--text)"><input type="checkbox" id="rbac-can-publish"> نشر / إخفاء</label>
         <label style="display:inline-flex;align-items:center;gap:6px;color:var(--text)"><input type="checkbox" id="rbac-can-owners"> إدارة الـ Owners</label>
         <label style="display:inline-flex;align-items:center;gap:6px;color:var(--text)"><input type="checkbox" id="rbac-can-analytics"> الاطلاع على الإحصائيات</label>
       </div>
@@ -8869,20 +8870,28 @@ ESSAY
   window.syncUserPermissionsFromDB = async function () {
     const u = window.authSession?.user;
     if (!u || (!u.id && !u.email)) return null;
-    const lowerEmail = (u.email || '').toLowerCase();
+    const lowerEmail = (u.email || '').trim().toLowerCase();
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(u.id || ''));
     const sbHeaders = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Cache-Control': 'no-cache' };
 
     try {
-      const [pRes, overrides] = await Promise.all([
-        fetch(`${SUPABASE_URL}/rest/v1/profiles?select=*&or=(id.eq.${u.id},email.ilike.${encodeURIComponent(lowerEmail)})&limit=1`, { headers: sbHeaders }),
-        window.fetchSystemUserOverrides()
-      ]);
+      const overridesPromise = window.fetchSystemUserOverrides();
+      let pRows = [];
+      if (isUuid) {
+        const pRes = await fetch(`${SUPABASE_URL}/rest/v1/profiles?select=*&id=eq.${u.id}&limit=1`, { headers: sbHeaders });
+        if (pRes.ok) pRows = await pRes.json();
+      }
+      if (!pRows.length && lowerEmail) {
+        const pResEmail = await fetch(`${SUPABASE_URL}/rest/v1/profiles?select=*&email=ilike.${encodeURIComponent(lowerEmail)}&limit=1`, { headers: sbHeaders });
+        if (pResEmail.ok) pRows = await pResEmail.json();
+      }
+      const overrides = await overridesPromise;
 
-      const pRows = pRes.ok ? await pRes.json() : [];
       const dbProf = pRows[0] || null;
       const ovByEmail = (lowerEmail && overrides[lowerEmail]) ? overrides[lowerEmail] : ((u.email && overrides[u.email]) ? overrides[u.email] : {});
       const ovById = (u.id && overrides[u.id]) ? overrides[u.id] : {};
-      const uOv = { ...ovByEmail, ...ovById };
+      const ovByDbId = (dbProf?.id && overrides[dbProf.id]) ? overrides[dbProf.id] : {};
+      const uOv = { ...ovByEmail, ...ovById, ...ovByDbId };
 
       // التحقق من وجود الحساب فعلياً في قاعدة البيانات وعدم حذفه أو تعطيله
       const existsInDb = Boolean(dbProf || uOv.id || uOv.email);
@@ -8902,7 +8911,7 @@ ESSAY
       window._dbAccountVerifiedAt = Date.now();
 
       const resolvedId = dbProf?.id || u.id;
-      const resolvedRole = uOv.role || dbProf?.role || 'student';
+      const resolvedRole = dbProf?.role || uOv.role || 'student';
 
       let dbPerms = null;
       if (resolvedRole !== 'student') {
@@ -8915,9 +8924,23 @@ ESSAY
         } catch (e) {}
       }
 
-      const finalPerms = resolvedRole === 'student'
+      const rawPerms = resolvedRole === 'student'
         ? null
         : (dbPerms || uOv.permissions || null);
+
+      const finalPerms = rawPerms ? {
+        role_code: resolvedRole,
+        allowed_grades: ['*'],
+        allowed_terms: Array.isArray(rawPerms.allowed_terms) ? rawPerms.allowed_terms.map(Number) : [],
+        allowed_sections: Array.isArray(rawPerms.allowed_sections) ? rawPerms.allowed_sections : [],
+        can_create: Boolean(rawPerms.can_create),
+        can_edit: Boolean(rawPerms.can_edit),
+        can_delete: Boolean(rawPerms.can_delete),
+        can_publish: Boolean(rawPerms.can_publish),
+        can_manage_owners: Boolean(rawPerms.can_manage_owners),
+        can_view_analytics: Boolean(rawPerms.can_view_analytics),
+        can_manage_users: resolvedRole === 'super_admin'
+      } : null;
 
       if (window.authSession.profile) {
         window.authSession.profile.id = resolvedId;
@@ -8926,7 +8949,19 @@ ESSAY
         if (dbProf?.full_name) window.authSession.profile.full_name = dbProf.full_name;
         if (dbProf?.term) window.authSession.profile.term = dbProf.term;
       }
+      window.authSession.user.id = resolvedId;
       window.authSession.permissions = finalPerms;
+
+      if (!window.IS_STANDALONE_SUPER_ADMIN) {
+        window.currentAdminRole = resolvedRole;
+        window.currentAdminPermissions = resolvedRole === 'super_admin' ? {
+          allowed_grades: ['*'],
+          allowed_terms: [1, 2],
+          allowed_sections: ['exams', 'lectures', 'lecture-quizzes', 'summaries'],
+          can_create: true, can_edit: true, can_delete: true, can_publish: true,
+          can_manage_owners: true, can_view_analytics: true, can_manage_users: true
+        } : finalPerms;
+      }
 
       localStorage.setItem('supabase_auth_session', JSON.stringify(window.authSession));
       updateNavbarAuthUI();
@@ -9259,8 +9294,8 @@ ESSAY
   }
 
   // ─── 12. ROLE-BASED ACCESS CONTROL (RBAC) & SECURE ADMIN ACCESS (Sections 11 & 12) ───
-  window.currentAdminRole = 'super_admin'; // 'super_admin' | 'admin' | 'content_manager'
-  window.currentAdminPermissions = {
+  window.currentAdminRole = window.IS_STANDALONE_SUPER_ADMIN ? 'super_admin' : 'student';
+  window.currentAdminPermissions = window.IS_STANDALONE_SUPER_ADMIN ? {
     allowed_grades: ['*'],
     allowed_terms: [1, 2],
     allowed_sections: ['exams', 'lectures', 'lecture-quizzes', 'summaries'],
@@ -9271,20 +9306,41 @@ ESSAY
     can_manage_owners: true,
     can_view_analytics: true,
     can_manage_users: true
+  } : null;
+
+  window.hasAnyAdminActionPermission = function (perms) {
+    if (!perms) return false;
+    return Boolean(
+      perms.can_create ||
+      perms.can_edit ||
+      perms.can_delete ||
+      perms.can_publish ||
+      perms.can_manage_owners ||
+      perms.can_view_analytics ||
+      perms.can_manage_users
+    );
   };
 
   window.checkAdminPermission = function (action = 'view', section = null, grade = null, term = null) {
     if (window.IS_STANDALONE_SUPER_ADMIN || window.currentAdminRole === 'super_admin') return true;
     const perms = window.currentAdminPermissions;
-    if (!perms) return false;
+    if (!perms || window.currentAdminRole === 'student') return false;
+    if (!window.hasAnyAdminActionPermission(perms)) return false;
 
     const t = term || currentTerm;
     const s = section || adminCurrentSection;
 
-    if (t && Array.isArray(perms.allowed_terms) && perms.allowed_terms.length > 0 && !perms.allowed_terms.map(Number).includes(Number(t))) {
+    if (!Array.isArray(perms.allowed_terms) || perms.allowed_terms.length === 0) {
       return false;
     }
-    if (s && ['exams', 'lectures', 'lecture-quizzes', 'summaries'].includes(s) && Array.isArray(perms.allowed_sections)) {
+    if (t && !perms.allowed_terms.map(Number).includes(Number(t))) {
+      return false;
+    }
+
+    if (!Array.isArray(perms.allowed_sections) || perms.allowed_sections.length === 0) {
+      return false;
+    }
+    if (s && ['exams', 'lectures', 'lecture-quizzes', 'summaries'].includes(s)) {
       if (!perms.allowed_sections.includes('*') && !perms.allowed_sections.includes(s)) {
         return false;
       }
@@ -9298,7 +9354,7 @@ ESSAY
     if (action === 'owners') return Boolean(perms.can_manage_owners);
     if (action === 'analytics') return Boolean(perms.can_view_analytics);
     if (action === 'users') return Boolean(perms.can_manage_users);
-    return true;
+    return false;
   };
 
   // تطبيق الصلاحيات بصرياً على أزرار لوحة التحكم (إخفاء الأزرار غير المسموح بها للمسؤول الحالي)
@@ -9310,7 +9366,7 @@ ESSAY
     // 1. على منصة الطلاب: إخفاء زر Add Owner دائماً من قسمي المحاضرات والملخصات
     const addOwnerBtns = adminPage.querySelectorAll('button[onclick*="showAddLectureOwnerModal"], button[onclick*="showAddOwnerModal"]');
     addOwnerBtns.forEach(btn => {
-      if (window.IS_PUBLIC_OWNER_DASHBOARD || (!isSuper && !checkAdminPermission('owners'))) {
+      if (!window.IS_STANDALONE_SUPER_ADMIN || (!isSuper && !checkAdminPermission('owners'))) {
         btn.style.display = 'none';
       } else {
         btn.style.display = '';
@@ -9320,42 +9376,48 @@ ESSAY
     // إخفاء أزرار حذف أو تعديل صورة الـ Owners إذا لم يكن لديه صلاحية owners أو على منصة الطلاب
     const ownerDelBtns = adminPage.querySelectorAll('.owner-leader-delete, .owner-leader-photo-edit');
     ownerDelBtns.forEach(el => {
-      el.style.display = (!window.IS_PUBLIC_OWNER_DASHBOARD && (isSuper || checkAdminPermission('owners'))) ? '' : 'none';
+      el.style.display = (window.IS_STANDALONE_SUPER_ADMIN || (isSuper || checkAdminPermission('owners'))) ? '' : 'none';
     });
 
     if (isSuper) return;
 
-    const canCreate = checkAdminPermission('create');
-    const canEdit = checkAdminPermission('edit');
-    const canDelete = checkAdminPermission('delete');
-    const canPublish = checkAdminPermission('publish');
+    const sec = adminCurrentSection;
+    const canCreate = checkAdminPermission('create', sec);
+    const canEdit = checkAdminPermission('edit', sec);
+    const canDelete = checkAdminPermission('delete', sec);
+    const canPublish = checkAdminPermission('publish', sec);
 
     // أزرار الإضافة
-    adminPage.querySelectorAll('button[onclick*="showAddQuizModal"], button[onclick*="showAddSubjectModal"], button[onclick*="showAddLectureModal"], button[onclick*="showAddSummaryModal"], button[onclick*="showAddResourceModal"], button[onclick*="openAddQuestionModal"], button[onclick*="openImportModal"], #admin-add-exam-btn').forEach(btn => {
+    adminPage.querySelectorAll('button[onclick*="showAddQuizModal"], button[onclick*="showAddSubjectModal"], button[onclick*="showAddLectureModal"], button[onclick*="showAddSummaryModal"], button[onclick*="showAddResourceModal"], button[onclick*="openAddQuestionModal"], button[onclick*="openImportModal"], button[onclick*="showAddOwnerFolderModal"], button[onclick*="showAddOwnerLectureModal"], button[onclick*="showAddOwnerSummaryModal"], button[onclick*="promptAddSummaryOwnerFolder"], #admin-add-exam-btn').forEach(btn => {
       if (btn.id === 'admin-add-exam-btn') {
         btn.style.display = (adminCurrentSection === 'exams' && canCreate && checkAdminPermission('view', 'exams')) ? '' : 'none';
+      } else if (btn.getAttribute('onclick')?.includes('openAddQuestionModal') || btn.getAttribute('onclick')?.includes('openImportModal')) {
+        btn.style.display = (canCreate || canEdit) ? '' : 'none';
       } else {
         btn.style.display = canCreate ? '' : 'none';
       }
     });
 
-    // أزرار التعديل
-    adminPage.querySelectorAll('button[onclick*="openEditQuiz("], button[onclick*="openEditQuizSettingsModal("], button[onclick*="openEditResourceModal("], button[onclick*="openEditQuestionModal("]').forEach(btn => {
+    // أزرار التعديل (أو فتح الأسئلة للإخفاء والإظهار إذا كان يملك صلاحية publish)
+    adminPage.querySelectorAll('button[onclick*="openEditQuizSettingsModal("], button[onclick*="openEditResourceModal("], button[onclick*="openEditQuestionModal("]').forEach(btn => {
       btn.style.display = canEdit ? '' : 'none';
     });
+    adminPage.querySelectorAll('button[onclick*="openEditQuiz("]').forEach(btn => {
+      btn.style.display = (canEdit || canPublish) ? '' : 'none';
+    });
 
-    // أزرار النشر والإخفاء
-    adminPage.querySelectorAll('button[onclick*="togglePublish("], button[onclick*="toggleResourcePublish("]').forEach(btn => {
+    // أزرار النشر والإخفاء (للامتحانات، المجلدات، الأسئلة، المحاضرات والملخصات)
+    adminPage.querySelectorAll('button[onclick*="togglePublish("], button[onclick*="toggleSelectAll("], button[onclick*="toggleLqFolderPublish("], button[onclick*="toggleQuestionPublish("], button[onclick*="toggleResourcePublish("]').forEach(btn => {
       btn.style.display = canPublish ? '' : 'none';
     });
 
     // أزرار الحذف والتحديد للحذف
-    adminPage.querySelectorAll('button[onclick*="confirmDeleteQuiz("], button[onclick*="deleteSelectedQuizzes("], button[onclick*="deleteLectureAdmin("], button[onclick*="deleteSubjectAdmin("], button[onclick*="deleteLqFolderAdmin("], button[onclick*="deleteResourceAdmin("], button[onclick*="_deleteSelectedAdmin"], button[onclick*="toggleSelectMode("], button[onclick*="_toggleAdminLectureSelect("], button[onclick*="_toggleAdminSummarySelect("]').forEach(btn => {
+    adminPage.querySelectorAll('button[onclick*="confirmDeleteQuiz("], button[onclick*="deleteSelectedQuizzes("], button[onclick*="deleteQuestion("], button[onclick*="deleteLectureAdmin("], button[onclick*="deleteSubjectAdmin("], button[onclick*="deleteLqFolderAdmin("], button[onclick*="deleteResourceAdmin("], button[onclick*="deleteOwnerSummary("], button[onclick*="deleteOwnerLecture("], button[onclick*="deleteOwnerFolder("], button[onclick*="_deleteSelectedAdmin"], button[onclick*="toggleSelectMode("], button[onclick*="_toggleAdminLectureSelect("], button[onclick*="_toggleAdminSummarySelect("]').forEach(btn => {
       btn.style.display = canDelete ? '' : 'none';
     });
   };
 
-  // Override promptAdmin to sync latest DB permissions first & allow direct RBAC entry for authorized users
+  // Override promptAdmin to sync latest DB permissions first & allow direct RBAC entry ONLY for authorized users
   const _origPromptAdmin = window.promptAdmin;
   window.promptAdmin = async function () {
     // في ملف السوبر أدمن المستقل: يطلب باسورد السوبر أدمن دائماً
@@ -9364,40 +9426,51 @@ ESSAY
       return;
     }
 
+    if (!window.authSession?.user?.id) {
+      toast('🔒 يجب تسجيل الدخول بحسابك أولاً لفتح لوحة التحكم', 'error');
+      if (typeof openAuthModal === 'function') openAuthModal('login');
+      return;
+    }
+
     // مزامنة الصلاحيات الحقيقية من قاعدة البيانات أولاً قبل فحص الدور
     await window.syncUserPermissionsFromDB();
 
     const prof = window.authSession?.profile;
-    if (prof && ['super_admin', 'admin', 'content_manager'].includes(prof.role) && prof.is_active !== false) {
+    const perms = window.authSession?.permissions;
+    const isSuper = prof?.role === 'super_admin';
+    const hasValidAdminAccess = prof && prof.is_active !== false && (
+      isSuper || (
+        ['admin', 'content_manager'].includes(prof.role) &&
+        perms &&
+        Array.isArray(perms.allowed_terms) && perms.allowed_terms.length > 0 &&
+        Array.isArray(perms.allowed_sections) && perms.allowed_sections.length > 0 &&
+        window.hasAnyAdminActionPermission(perms)
+      )
+    );
+
+    if (hasValidAdminAccess) {
       window.currentAdminRole = prof.role;
-      if (prof.role === 'super_admin') {
-        window.currentAdminPermissions = {
-          allowed_grades: ['*'],
-          allowed_terms: [1, 2],
-          allowed_sections: ['exams', 'lectures', 'lecture-quizzes', 'summaries'],
-          can_create: true, can_edit: true, can_delete: true, can_publish: true,
-          can_manage_owners: true, can_view_analytics: true, can_manage_users: true
-        };
-      } else {
-        window.currentAdminPermissions = window.authSession.permissions || {
-          allowed_grades: ['*'],
-          allowed_terms: [1, 2],
-          allowed_sections: ['exams', 'lectures', 'lecture-quizzes', 'summaries'],
-          can_create: true, can_edit: true, can_delete: false, can_publish: true,
-          can_manage_owners: false, can_view_analytics: false, can_manage_users: false
-        };
-      }
-      const allowedTerms = (window.currentAdminPermissions?.allowed_terms || [1, 2]).map(Number);
+      window.currentAdminPermissions = isSuper ? {
+        allowed_grades: ['*'],
+        allowed_terms: [1, 2],
+        allowed_sections: ['exams', 'lectures', 'lecture-quizzes', 'summaries'],
+        can_create: true, can_edit: true, can_delete: true, can_publish: true,
+        can_manage_owners: true, can_view_analytics: true, can_manage_users: true
+      } : perms;
+      const allowedTerms = (window.currentAdminPermissions?.allowed_terms || [1]).map(Number);
       const initialTerm = allowedTerms.includes(Number(currentTerm)) ? Number(currentTerm) : (allowedTerms[0] || 1);
       enterAdminDashboard('bis', initialTerm);
       return;
     }
 
-    // إذا كان طالباً عادياً ويريد الدخول كـ Owner لبروفايله الخاص بالباسورد
-    _origPromptAdmin();
+    // إذا كان طالباً عادياً أو لم يُمنح أي صلاحيات من السوبر أدمن
+    if (!document.getElementById('admin-page')?.classList.contains('hidden')) {
+      if (typeof showGradeSelection === 'function') showGradeSelection();
+    }
+    toast('⛔ ليس لديك صلاحيات إدارية لفتح لوحة التحكم — يجب أن يمنحك السوبر أدمن الصلاحيات أولاً', 'error');
   };
 
-  // Upgrade submitPwd to use secure RPC verify_admin_key first, then fallback to gradePasswords
+  // Upgrade submitPwd to use secure RPC verify_admin_key first, then fallback to gradePasswords (Super Admin page only)
   window.submitPwd = async function () {
     const val = document.getElementById('pwd-input').value.trim();
     if (!val) return;
@@ -9453,10 +9526,15 @@ ESSAY
     currentGrade = 'bis';
     const isSuper = Boolean(window.IS_STANDALONE_SUPER_ADMIN || window.currentAdminRole === 'super_admin');
     const perms = window.currentAdminPermissions || {};
-    const allowedTerms = isSuper ? [1, 2] : ((perms.allowed_terms || [1, 2]).map(Number));
+    const allowedTerms = isSuper ? [1, 2] : ((perms.allowed_terms || []).map(Number));
     const allowedSecs = isSuper
       ? ['exams', 'lectures', 'lecture-quizzes', 'summaries']
-      : (perms.allowed_sections || ['exams']);
+      : (perms.allowed_sections || []);
+
+    if (!isSuper && (!allowedTerms.length || !allowedSecs.length || !window.hasAnyAdminActionPermission(perms))) {
+      toast('⛔ لم يتم منح هذا الحساب أي صلاحيات أو أقسام إدارية بعد', 'error');
+      return;
+    }
 
     currentTerm = allowedTerms.includes(Number(term)) ? Number(term) : (allowedTerms[0] || 1);
     showPage('admin-page');
@@ -9490,12 +9568,14 @@ ESSAY
 
     updateAdminLabel();
 
-    // فتح أول قسم مسموح للمسؤول تلقائياً
+    // فتح أول قسم مسموح للمسؤول تلقائياً (دون إجبار الامتحانات إذا لم تكن مسموحة)
     if (window.IS_STANDALONE_SUPER_ADMIN) {
       switchAdminSection('overview');
     } else {
-      const firstAllowedSec = ['exams', 'lectures', 'lecture-quizzes', 'summaries'].find(s => isSuper || allowedSecs.includes('*') || allowedSecs.includes(s)) || 'exams';
-      switchAdminSection(firstAllowedSec);
+      const firstAllowedSec = ['exams', 'lectures', 'lecture-quizzes', 'summaries'].find(s => isSuper || allowedSecs.includes('*') || allowedSecs.includes(s));
+      if (firstAllowedSec) {
+        switchAdminSection(firstAllowedSec);
+      }
     }
     setTimeout(window.applyAdminActionButtonsVisibility, 150);
   }
@@ -9506,10 +9586,9 @@ ESSAY
     const allSections = ['overview', 'exams', 'lectures', 'lecture-quizzes', 'summaries', 'users', 'analytics', 'logs'];
     if (['exams', 'lectures', 'lecture-quizzes', 'summaries'].includes(section)) {
       if (!checkAdminPermission('view', section)) {
-        // إذا كان القسم غير مسموح، انتقل تلقائياً لأول قسم مسموح
         const perms = window.currentAdminPermissions || {};
         const fallbackSec = (perms.allowed_sections || []).find(s => ['exams', 'lectures', 'lecture-quizzes', 'summaries'].includes(s));
-        if (fallbackSec && fallbackSec !== section) {
+        if (fallbackSec && fallbackSec !== section && checkAdminPermission('view', fallbackSec)) {
           return window.switchAdminSection(fallbackSec);
         }
         return toast('⛔ ليس لديك صلاحية للوصول إلى هذا القسم!', 'error');
@@ -10103,13 +10182,25 @@ ESSAY
   window.openAssignRoleModal = async function (userId = '', userEmail = '') {
     document.getElementById('rbac-user-id').value = userId;
     document.getElementById('rbac-user-email').value = userEmail;
+
+    // تفريغ جميع الاختيارات أولاً لمنع بقاء أي اختيار افتراضي غير مقصود
+    const setCb = (id, val) => { const el = document.getElementById(id); if (el) el.checked = Boolean(val); };
+    document.querySelectorAll('.rbac-term-cb').forEach(cb => { cb.checked = false; });
+    document.querySelectorAll('.rbac-sec-cb').forEach(cb => { cb.checked = false; });
+    setCb('rbac-can-create', false);
+    setCb('rbac-can-edit', false);
+    setCb('rbac-can-delete', false);
+    setCb('rbac-can-publish', false);
+    setCb('rbac-can-owners', false);
+    setCb('rbac-can-analytics', false);
+
     document.getElementById('rbac-modal').classList.remove('hidden');
 
     if (userEmail || userId) {
       try {
         const overrides = await window.fetchSystemUserOverrides();
         const emailLower = (userEmail || '').trim().toLowerCase();
-        let roleCode = 'exams_admin';
+        let roleCode = 'content_manager';
         let perms = null;
 
         if (userId) {
@@ -10124,27 +10215,28 @@ ESSAY
         }
         const ov = overrides[userId] || overrides[userEmail] || overrides[emailLower];
         if (ov?.role && ov.role !== 'student') roleCode = ov.role;
-        if (ov?.permissions) perms = { ...(perms || {}), ...ov.permissions };
+        if (!perms && ov?.permissions) perms = ov.permissions;
 
         const roleSelect = document.getElementById('rbac-role-select');
-        if (roleSelect && roleCode) roleSelect.value = roleCode;
+        if (roleSelect && ['super_admin', 'admin', 'content_manager', 'student'].includes(roleCode)) {
+          roleSelect.value = roleCode;
+        }
 
-        if (perms) {
-          const terms = Array.isArray(perms.allowed_terms) ? perms.allowed_terms.map(Number) : [1, 2];
+        if (perms && window.hasAnyAdminActionPermission(perms)) {
+          const terms = Array.isArray(perms.allowed_terms) ? perms.allowed_terms.map(Number) : [];
           document.querySelectorAll('.rbac-term-cb').forEach(cb => {
             cb.checked = terms.includes(Number(cb.value));
           });
-          const secs = Array.isArray(perms.allowed_sections) ? perms.allowed_sections : ['exams'];
+          const secs = Array.isArray(perms.allowed_sections) ? perms.allowed_sections : [];
           document.querySelectorAll('.rbac-sec-cb').forEach(cb => {
             cb.checked = secs.includes('*') || secs.includes(cb.value);
           });
-          const setCb = (id, val) => { const el = document.getElementById(id); if (el) el.checked = !!val; };
-          setCb('rbac-can-create', perms.can_create !== false);
-          setCb('rbac-can-edit', perms.can_edit !== false);
-          setCb('rbac-can-delete', !!perms.can_delete);
-          setCb('rbac-can-publish', perms.can_publish !== false);
-          setCb('rbac-can-owners', !!perms.can_manage_owners);
-          setCb('rbac-can-analytics', !!perms.can_view_analytics);
+          setCb('rbac-can-create', perms.can_create === true);
+          setCb('rbac-can-edit', perms.can_edit === true);
+          setCb('rbac-can-delete', perms.can_delete === true);
+          setCb('rbac-can-publish', perms.can_publish === true);
+          setCb('rbac-can-owners', perms.can_manage_owners === true);
+          setCb('rbac-can-analytics', perms.can_view_analytics === true);
         }
       } catch (e) {}
     }
@@ -10153,24 +10245,49 @@ ESSAY
   window.saveUserRoleAndPermissions = async function () {
     const rawEmail = document.getElementById('rbac-user-email').value.trim();
     const email = rawEmail.toLowerCase();
-    const roleCode = document.getElementById('rbac-role-select').value;
+    let roleCode = document.getElementById('rbac-role-select').value;
     if (!email) return toast('أدخل البريد الإلكتروني للمستخدم!', 'error');
 
     const selectedTerms = Array.from(document.querySelectorAll('.rbac-term-cb:checked')).map(cb => parseInt(cb.value));
     const selectedSections = Array.from(document.querySelectorAll('.rbac-sec-cb:checked')).map(cb => cb.value);
 
+    const canCreate = document.getElementById('rbac-can-create').checked;
+    const canEdit = document.getElementById('rbac-can-edit').checked;
+    const canDelete = document.getElementById('rbac-can-delete').checked;
+    const canPublish = document.getElementById('rbac-can-publish').checked;
+    const canOwners = document.getElementById('rbac-can-owners').checked;
+    const canAnalytics = document.getElementById('rbac-can-analytics').checked;
+    const hasAnyAction = canCreate || canEdit || canDelete || canPublish || canOwners || canAnalytics;
+
     const isSuper = roleCode === 'super_admin';
+
+    // إذا اختار السوبر أدمن عملية (مثل: نشر/إخفاء) ولم يحدد أي قسم أو ترم، ننبّهه بدلاً من اختيار الامتحانات تلقائياً
+    if (!isSuper && roleCode !== 'student' && hasAnyAction) {
+      if (selectedTerms.length === 0) {
+        return toast('⚠️ يرجى تحديد الترم المسموح بإدارته (الترم الأول أو الثاني)!', 'error');
+      }
+      if (selectedSections.length === 0 && !canAnalytics) {
+        return toast('⚠️ يرجى تحديد القسم المسموح بإدارته من الأعلى (مثل: الامتحانات أو أسئلة المحاضرات)!', 'error');
+      }
+    }
+
+    // إذا لم يتم تحديد أي صلاحية للعمليات أو لم يتم تحديد أي قسم، يتحول الحساب لطالب عادي بدون أي صلاحيات
+    if (!isSuper && (!hasAnyAction || (selectedSections.length === 0 && !canAnalytics))) {
+      roleCode = 'student';
+    }
+
+    const isStudent = roleCode === 'student';
     const permPayload = {
       role_code: roleCode,
       allowed_grades: ['*'],
-      allowed_terms: isSuper ? [1, 2] : (selectedTerms.length ? selectedTerms : [1, 2]),
-      allowed_sections: isSuper ? ['*'] : (selectedSections.length ? selectedSections : ['exams']),
-      can_create: isSuper ? true : document.getElementById('rbac-can-create').checked,
-      can_edit: isSuper ? true : document.getElementById('rbac-can-edit').checked,
-      can_delete: isSuper ? true : document.getElementById('rbac-can-delete').checked,
-      can_publish: isSuper ? true : document.getElementById('rbac-can-publish').checked,
-      can_manage_owners: isSuper ? true : document.getElementById('rbac-can-owners').checked,
-      can_view_analytics: isSuper ? true : document.getElementById('rbac-can-analytics').checked,
+      allowed_terms: isSuper ? [1, 2] : (isStudent ? [] : selectedTerms),
+      allowed_sections: isSuper ? ['*'] : (isStudent ? [] : selectedSections),
+      can_create: isSuper ? true : (isStudent ? false : canCreate),
+      can_edit: isSuper ? true : (isStudent ? false : canEdit),
+      can_delete: isSuper ? true : (isStudent ? false : canDelete),
+      can_publish: isSuper ? true : (isStudent ? false : canPublish),
+      can_manage_owners: isSuper ? true : (isStudent ? false : canOwners),
+      can_view_analytics: isSuper ? true : (isStudent ? false : canAnalytics),
       can_manage_users: isSuper
     };
 
@@ -10816,8 +10933,8 @@ ESSAY
     });
   };
 
-  // 4. Comprehensive RBAC Action Guards & Remove Add Owner from Student Platform Dashboard
-  const isSuperAdminPage = !!document.getElementById('admin-tab-users');
+  // 4. Comprehensive RBAC Action Guards, Exam/Question Publish Controls & Remove Add Owner from Student Platform
+  const quizSectionResolver = () => (adminCurrentSection === 'lecture-quizzes' ? 'lecture-quizzes' : 'exams');
 
   function wrapAdminGuard(fnName, action, secResolver) {
     const orig = window[fnName];
@@ -10833,42 +10950,369 @@ ESSAY
   }
 
   // Create guards
-  wrapAdminGuard('showAddSubjectModal', 'create', (type) => type === 'lectures' ? 'lectures' : 'summaries');
+  wrapAdminGuard('showAddSubjectModal', 'create', (type) => type === 'lq' ? 'lecture-quizzes' : (type === 'lectures' ? 'lectures' : 'summaries'));
   wrapAdminGuard('showAddLectureModal', 'create', 'lectures');
   wrapAdminGuard('showAddSummaryModal', 'create', 'summaries');
   wrapAdminGuard('showAddResourceModal', 'create', (type) => type === 'lectures' ? 'lectures' : 'summaries');
   wrapAdminGuard('showAddOwnerSummaryModal', 'create', 'summaries');
   wrapAdminGuard('showAddLectureOwnerItemModal', 'create', 'lectures');
+  wrapAdminGuard('showAddOwnerFolderModal', 'create', 'lectures');
+  wrapAdminGuard('showAddOwnerLectureModal', 'create', 'lectures');
   wrapAdminGuard('promptAddLectureOwnerFolder', 'create', 'lectures');
   wrapAdminGuard('promptAddSummaryOwnerFolder', 'create', 'summaries');
-  wrapAdminGuard('openAddQuestionModal', 'edit', 'exams');
-  wrapAdminGuard('openImportModal', 'edit', 'exams');
 
-  // Edit guards
-  wrapAdminGuard('openEditQuiz', 'edit', 'exams');
-  wrapAdminGuard('openEditQuestionModal', 'edit', 'exams');
-  wrapAdminGuard('saveEditedQuestion', 'edit', 'exams');
+  // Edit guards (for both exams and lecture-quizzes)
+  wrapAdminGuard('openEditQuizSettingsModal', 'edit', quizSectionResolver);
+  wrapAdminGuard('openAddQuestionModal', 'edit', quizSectionResolver);
+  wrapAdminGuard('openImportModal', 'edit', quizSectionResolver);
+  wrapAdminGuard('openEditQuestionModal', 'edit', quizSectionResolver);
+  wrapAdminGuard('saveEditedQuestion', 'edit', quizSectionResolver);
 
-  // Delete guards
-  wrapAdminGuard('confirmDeleteQuiz', 'delete', 'exams');
-  wrapAdminGuard('deleteSelectedQuizzes', 'delete', 'exams');
-  wrapAdminGuard('deleteQuestion', 'delete', 'exams');
-  wrapAdminGuard('deleteLqFolderAdmin', 'delete', 'lectures');
+  // Delete guards (for both exams and lecture-quizzes)
+  wrapAdminGuard('confirmDeleteQuiz', 'delete', quizSectionResolver);
+  wrapAdminGuard('deleteSelectedQuizzes', 'delete', quizSectionResolver);
+  wrapAdminGuard('toggleSelectMode', 'delete', quizSectionResolver);
+  wrapAdminGuard('deleteQuestion', 'delete', quizSectionResolver);
+  wrapAdminGuard('deleteLqFolderAdmin', 'delete', 'lecture-quizzes');
   wrapAdminGuard('deleteLectureAdmin', 'delete', 'lectures');
   wrapAdminGuard('_deleteSelectedAdminLectures', 'delete', 'lectures');
-  wrapAdminGuard('deleteSubjectAdmin', 'delete', 'summaries');
-  wrapAdminGuard('deleteResourceAdmin', 'delete', 'summaries');
+  wrapAdminGuard('deleteSubjectAdmin', 'delete', (sub, type) => type === 'lectures' ? 'lectures' : 'summaries');
+  wrapAdminGuard('deleteResourceAdmin', 'delete', (id, type) => type === 'lectures' ? 'lectures' : 'summaries');
   wrapAdminGuard('_deleteSelectedAdminSummaries', 'delete', 'summaries');
   wrapAdminGuard('deleteOwnerSummary', 'delete', 'summaries');
+  wrapAdminGuard('deleteOwnerLecture', 'delete', 'lectures');
+  wrapAdminGuard('deleteOwnerFolder', 'delete', 'lectures');
   wrapAdminGuard('deleteLectureOwnerItem', 'delete', 'lectures');
 
-  // Publish guards
-  wrapAdminGuard('togglePublish', 'publish', 'exams');
+  // Publish guards (for both exams and lecture-quizzes)
+  wrapAdminGuard('togglePublish', 'publish', quizSectionResolver);
+  wrapAdminGuard('toggleSelectAll', 'publish', quizSectionResolver);
+
+  // Override _renderAdminQuizCard so buttons are strictly rendered according to permissions
+  window._renderAdminQuizCard = function (q, idx) {
+    const sec = quizSectionResolver();
+    const canEdit = window.checkAdminPermission('edit', sec);
+    const canPublish = window.checkAdminPermission('publish', sec);
+    const canDelete = window.checkAdminPermission('delete', sec);
+    const isChecked = selectedQuizIds.has(q.id);
+    const totalQ = (q.questions || []).length;
+    const visibleQ = (q.questions || []).filter(item => !item.hidden).length;
+    const qCountLabel = visibleQ < totalQ ? `${visibleQ}/${totalQ} سؤال معروض` : `${totalQ} سؤال`;
+
+    return `
+      <div class="admin-quiz-card ${isChecked ? 'selected-card' : ''}"
+        style="border-color:${isChecked ? 'var(--green)' : q.published ? 'rgba(0,245,212,0.25)' : 'var(--border)'};animation-delay:${idx * 0.05}s;cursor:${(selectMode && canDelete) ? 'pointer' : 'default'}"
+        onclick="${(selectMode && canDelete) ? `toggleQuizCheck(${q.id})` : 'void(0)'}">
+        ${(selectMode && canDelete) ? `
+        <div class="quiz-checkbox ${isChecked ? 'checked' : ''}" onclick="event.stopPropagation();toggleQuizCheck(${q.id})"></div>
+        ` : ''}
+        <div style="flex:1">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+            <span style="width:8px;height:8px;border-radius:50%;background:${q.published ? 'var(--green)' : 'var(--text-muted)'};display:inline-block;box-shadow:${q.published ? '0 0 6px var(--green)' : 'none'};flex-shrink:0"></span>
+            <h4>${q.title}</h4>
+          </div>
+          <p style="margin-right:16px">
+            ${qCountLabel} &nbsp;•&nbsp;
+            <span style="color:${q.published ? 'var(--green)' : 'var(--text-dim)'}">
+              ${q.published ? '🟢 معروض للطلاب' : '⚫ مخفي'}
+            </span>
+          </p>
+        </div>
+        ${!selectMode ? `
+        <div class="admin-actions">
+          ${canEdit ? `
+          <button class="btn btn-ghost" onclick="openEditQuizSettingsModal(${q.id})" title="إعدادات الامتحان (المؤقت، الخلط، المحاولات)">
+            <i class="fas fa-sliders-h"></i>
+          </button>` : ''}
+          ${(canEdit || canPublish) ? `
+          <button class="btn btn-blue" onclick="openEditQuiz(${q.id})" title="${canEdit ? 'تعديل الأسئلة' : 'عرض وإخفاء الأسئلة'}">
+            <i class="fas fa-${canEdit ? 'edit' : 'list-ul'}"></i> ${!canEdit && canPublish ? 'الأسئلة' : ''}
+          </button>` : ''}
+          ${canPublish ? `
+          <button onclick="togglePublish(${q.id})"
+            class="btn"
+            style="background:${q.published ? 'var(--surface3)' : 'var(--green)'};color:${q.published ? 'var(--text-dim)' : '#050509'};border-color:transparent"
+            title="${q.published ? 'إخفاء' : 'عرض'}">
+            <i class="fas fa-${q.published ? 'eye-slash' : 'eye'}"></i>
+            ${q.published ? 'إخفاء' : 'عرض'}
+          </button>` : ''}
+          ${canDelete ? `
+          <button class="btn btn-danger" onclick="confirmDeleteQuiz(${q.id})" title="حذف">
+            <i class="fas fa-trash"></i>
+          </button>` : ''}
+        </div>` : ''}
+      </div>`;
+  };
+
+  // Override renderAdminQuizzes so top bulk buttons ("عرض الكل / إخفاء الكل" and "تحديد") respect RBAC permissions
+  window.renderAdminQuizzes = function () {
+    const isLQ = adminCurrentSection === 'lecture-quizzes';
+    const sec = isLQ ? 'lecture-quizzes' : 'exams';
+    const container = isLQ
+      ? document.getElementById('admin-lq-list')
+      : document.getElementById('admin-quizzes-list');
+    if (!container) return;
+
+    const canCreate = window.checkAdminPermission('create', sec);
+    const canPublish = window.checkAdminPermission('publish', sec);
+    const canDelete = window.checkAdminPermission('delete', sec);
+
+    const addExamBtn = document.getElementById('admin-add-exam-btn');
+    if (addExamBtn) {
+      addExamBtn.style.display = (!isLQ && canCreate && window.checkAdminPermission('view', 'exams')) ? '' : 'none';
+    }
+
+    const displayQuizzes = (isLQ && adminLqCurrentFolder)
+      ? quizzes.filter(q => (q.lq_folder || 'عام') === adminLqCurrentFolder)
+      : quizzes;
+
+    if (displayQuizzes.length === 0) {
+      container.innerHTML = `<div class="empty"><i class="fas fa-plus-circle"></i><p>${isLQ ? 'لا توجد امتحانات في هذا الفولدر' : 'لا توجد امتحانات حالياً'}</p></div>`;
+      if (typeof updateBulkBar === 'function') updateBulkBar();
+      return;
+    }
+
+    const allPublished = displayQuizzes.every(q => q.published);
+    const allChecked = displayQuizzes.length > 0 && displayQuizzes.every(q => selectedQuizIds.has(q.id));
+
+    let html = '';
+    if (canPublish || canDelete) {
+      html += `
+        <div style="display:flex;gap:8px;margin-bottom:1.2rem;flex-wrap:wrap;align-items:center" class="animate-up">
+          ${canPublish ? `
+          <button class="btn btn-blue" onclick="toggleSelectAll()" style="flex:1">
+            <i class="fas fa-${allPublished ? 'eye-slash' : 'eye'}"></i>
+            ${allPublished ? 'إخفاء الكل' : 'عرض الكل'}
+          </button>` : ''}
+          ${canDelete ? `
+          <button class="btn btn-select-mode ${selectMode ? 'active' : ''}" onclick="toggleSelectMode()">
+            <i class="fas fa-${selectMode ? 'times' : 'check-square'}"></i>
+            ${selectMode ? 'إلغاء التحديد' : 'تحديد'}
+          </button>` : ''}
+          ${(selectMode && canDelete) ? `
+          <button class="btn btn-ghost" onclick="selectAllQuizzes()" style="font-size:0.85rem;padding:9px 12px">
+            <i class="fas fa-${allChecked ? 'square' : 'check-double'}"></i>
+            ${allChecked ? 'إلغاء الكل' : 'تحديد الكل'}
+          </button>` : ''}
+        </div>`;
+    }
+
+    html += displayQuizzes.map((q, idx) => window._renderAdminQuizCard(q, idx)).join('');
+    container.innerHTML = html;
+    if (typeof updateBulkBar === 'function') updateBulkBar();
+    if (typeof window.applyAdminActionButtonsVisibility === 'function') window.applyAdminActionButtonsVisibility();
+  };
+
+  // Override renderAdminLqFolders to support folder-level Show/Hide & respect RBAC permissions
+  window.renderAdminLqFolders = function () {
+    document.getElementById('admin-lq-subjects-view').style.display = '';
+    document.getElementById('admin-lq-inside-view').style.display = 'none';
+    adminLqCurrentFolder = null;
+
+    const canCreate = window.checkAdminPermission('create', 'lecture-quizzes');
+    const canPublish = window.checkAdminPermission('publish', 'lecture-quizzes');
+    const canDelete = window.checkAdminPermission('delete', 'lecture-quizzes');
+
+    document.querySelectorAll('button[onclick*="showAddSubjectModal(\'lq\')"]').forEach(btn => {
+      btn.style.display = canCreate ? '' : 'none';
+    });
+
+    const container = document.getElementById('admin-lq-subjects-list');
+    const lqQuizzes = quizzes;
+
+    if (!lqQuizzes || lqQuizzes.length === 0) {
+      container.innerHTML = `
+        <div class="empty">
+          <i class="fas fa-folder-open" style="font-size:2.5rem;opacity:0.3;margin-bottom:1rem"></i>
+          <p>لا توجد فولدرات بعد</p>
+        </div>`;
+      return;
+    }
+
+    const folders = {};
+    lqQuizzes.forEach(q => {
+      const folder = q.lq_folder || 'عام';
+      if (!folders[folder]) folders[folder] = [];
+      folders[folder].push(q);
+    });
+
+    container.innerHTML = Object.entries(folders).map(([folder, items], i) => {
+      const allPub = items.every(q => q.published);
+      const safeFolder = folder.replace(/'/g, "\\'");
+      return `
+        <div class="admin-subject-card" style="animation-delay:${i * 0.06}s"
+          onclick="openAdminLqFolder('${safeFolder}')">
+          <div class="admin-subject-folder-icon">
+            <i class="fas fa-folder" style="color:#ce93d8"></i>
+          </div>
+          <div class="admin-subject-info">
+            <h4 style="color:#ce93d8">${folder}</h4>
+            <p>${items.length} امتحان • <span style="color:${allPub ? 'var(--green)' : 'var(--text-dim)'}">${allPub ? '🟢 معروض' : '⚫ بعضه/كله مخفي'}</span></p>
+          </div>
+          <div class="admin-subject-actions" onclick="event.stopPropagation()" style="display:flex;gap:6px">
+            ${canPublish ? `
+            <button class="btn" style="background:${allPub ? 'var(--surface3)' : 'var(--green)'};color:${allPub ? 'var(--text-dim)' : '#050509'};padding:6px 12px;font-size:0.8rem"
+              onclick="toggleLqFolderPublish('${safeFolder}')" title="${allPub ? 'إخفاء كل امتحانات الفولدر' : 'عرض كل امتحانات الفولدر'}">
+              <i class="fas fa-${allPub ? 'eye-slash' : 'eye'}"></i> ${allPub ? 'إخفاء' : 'عرض'}
+            </button>` : ''}
+            ${canDelete ? `
+            <button class="btn btn-danger" title="حذف الفولدر كله"
+              onclick="deleteLqFolderAdmin('${safeFolder}')">
+              <i class="fas fa-trash"></i>
+            </button>` : ''}
+          </div>
+          <i class="fas fa-chevron-left" style="color:var(--text-muted);font-size:0.85rem;margin-right:4px"></i>
+        </div>`;
+    }).join('');
+  };
+
+  window.toggleLqFolderPublish = async function (folder) {
+    if (!window.checkAdminPermission('publish', 'lecture-quizzes')) {
+      return toast('⛔ ليس لديك صلاحية النشر أو الإخفاء!', 'error');
+    }
+    const items = quizzes.filter(q => (q.lq_folder || 'عام') === folder);
+    if (!items.length) return;
+    const allPub = items.every(q => q.published);
+    const newVal = !allPub;
+    try {
+      await Promise.all(items.map(q => updateQuiz(q.id, { published: newVal })));
+      items.forEach(q => { q.published = newVal; });
+      window.renderAdminLqFolders();
+      toast(newVal ? `✅ تم إظهار جميع اختبارات فولدر "${folder}"` : `🔒 تم إخفاء جميع اختبارات فولدر "${folder}"`);
+    } catch (e) {
+      toast('خطأ في تحديث حالة النشر!', 'error');
+    }
+  };
+
+  // Override openEditQuiz to support showing/hiding individual questions (toggleQuestionPublish) & respect RBAC permissions
+  window.openEditQuiz = function (id) {
+    const sec = quizSectionResolver();
+    const canCreate = window.checkAdminPermission('create', sec);
+    const canEdit = window.checkAdminPermission('edit', sec);
+    const canPublish = window.checkAdminPermission('publish', sec);
+    const canDelete = window.checkAdminPermission('delete', sec);
+
+    if (!canEdit && !canPublish) {
+      return toast('⛔ ليس لديك صلاحية لتعديل أو إظهار/إخفاء الأسئلة!', 'error');
+    }
+
+    addingQuestionToQuizId = id;
+    const quiz = quizzes.find(q => q.id === id);
+    if (!quiz) return;
+    const container = adminCurrentSection === 'lecture-quizzes'
+      ? document.getElementById('admin-lq-list')
+      : document.getElementById('admin-quizzes-list');
+    if (!container) return;
+
+    const qList = quiz.questions || [];
+    const allQuestionsVisible = qList.length > 0 && qList.every(q => !q.hidden);
+
+    let html = `
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:1.5rem;flex-wrap:wrap" class="animate-up">
+        <button class="btn btn-ghost" onclick="renderAdminQuizzes()">
+          <i class="fas fa-arrow-right"></i> رجوع
+        </button>
+        <h3 style="font-size:1.3rem;font-weight:900;flex:1">${quiz.title}</h3>
+        ${(canPublish && qList.length > 0) ? `
+        <button class="btn btn-blue" onclick="toggleAllQuestionsPublish(${quiz.id})">
+          <i class="fas fa-${allQuestionsVisible ? 'eye-slash' : 'eye'}"></i>
+          ${allQuestionsVisible ? 'إخفاء كل الأسئلة' : 'إظهار كل الأسئلة'}
+        </button>` : ''}
+      </div>
+      ${(canCreate || canEdit) ? `
+      <div style="display:flex;gap:10px;margin-bottom:1.2rem;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="openAddQuestionModal()">
+          <i class="fas fa-plus"></i> إضافة سؤال
+        </button>
+        <button class="btn btn-blue" onclick="openImportModal()">
+          <i class="fas fa-file-import"></i> استيراد من TXT
+        </button>
+      </div>` : ''}
+      <div>
+    `;
+
+    qList.forEach((q, i) => {
+      const isHidden = Boolean(q.hidden);
+      html += `
+        <div class="admin-quiz-card" style="animation-delay:${i * 0.04}s;opacity:${isHidden ? '0.65' : '1'}">
+          <div style="flex:1;margin-left:1rem">
+            <p style="font-weight:700;line-height:1.5">${i + 1}. ${(q.question || '').substring(0, 90)}${(q.question || '').length > 90 ? '...' : ''}</p>
+            <p style="margin-top:4px;font-size:0.82rem;color:var(--text-dim)">
+              ${q.type === 'mcq' ? '📝 اختيار من متعدد' : q.type === 'tf' ? '✅ صح أو خطأ' : '✍️ مقالي'}
+              &nbsp;•&nbsp;
+              <span style="color:${isHidden ? 'var(--amber)' : 'var(--green)'};font-weight:700">
+                ${isHidden ? '⚫ سؤال مخفي عن الطلاب' : '🟢 سؤال معروض للطلاب'}
+              </span>
+            </p>
+          </div>
+          <div class="admin-actions">
+            ${canPublish ? `
+            <button class="btn" style="background:${isHidden ? 'var(--green)' : 'var(--surface3)'};color:${isHidden ? '#050509' : 'var(--text-dim)'}"
+              onclick="toggleQuestionPublish(${quiz.id}, ${i})" title="${isHidden ? 'إظهار السؤال' : 'إخفاء السؤال'}">
+              <i class="fas fa-${isHidden ? 'eye' : 'eye-slash'}"></i> ${isHidden ? 'عرض' : 'إخفاء'}
+            </button>` : ''}
+            ${canEdit ? `
+            <button class="btn btn-blue" onclick="openEditQuestionModal(${quiz.id}, ${i})" title="تعديل السؤال">
+              <i class="fas fa-edit"></i>
+            </button>` : ''}
+            ${canDelete ? `
+            <button class="btn btn-danger" onclick="deleteQuestion(${quiz.id}, ${i})" title="حذف السؤال">
+              <i class="fas fa-trash"></i>
+            </button>` : ''}
+          </div>
+        </div>`;
+    });
+
+    if (qList.length === 0) {
+      html += `<div class="empty"><i class="fas fa-question-circle"></i><p>لا توجد أسئلة في هذا الامتحان بعد</p></div>`;
+    }
+
+    html += `</div>`;
+    container.innerHTML = html;
+  };
+
+  window.toggleQuestionPublish = async function (quizId, qIndex) {
+    const sec = quizSectionResolver();
+    if (!window.checkAdminPermission('publish', sec)) {
+      return toast('⛔ ليس لديك صلاحية إظهار أو إخفاء الأسئلة!', 'error');
+    }
+    const quiz = quizzes.find(q => q.id === quizId);
+    if (!quiz || !quiz.questions || !quiz.questions[qIndex]) return;
+    const newHidden = !quiz.questions[qIndex].hidden;
+    quiz.questions[qIndex].hidden = newHidden;
+    try {
+      await updateQuiz(quizId, { questions: quiz.questions });
+      window.openEditQuiz(quizId);
+      toast(newHidden ? '🔒 تم إخفاء السؤال عن الطلاب' : '✅ تم إظهار السؤال للطلاب');
+    } catch (e) {
+      quiz.questions[qIndex].hidden = !newHidden;
+      toast('خطأ في تحديث حالة السؤال!', 'error');
+    }
+  };
+
+  window.toggleAllQuestionsPublish = async function (quizId) {
+    const sec = quizSectionResolver();
+    if (!window.checkAdminPermission('publish', sec)) {
+      return toast('⛔ ليس لديك صلاحية إظهار أو إخفاء الأسئلة!', 'error');
+    }
+    const quiz = quizzes.find(q => q.id === quizId);
+    if (!quiz || !quiz.questions || !quiz.questions.length) return;
+    const allVisible = quiz.questions.every(q => !q.hidden);
+    const targetHidden = allVisible; // if all visible -> hide all; otherwise -> show all
+    quiz.questions.forEach(q => { q.hidden = targetHidden; });
+    try {
+      await updateQuiz(quizId, { questions: quiz.questions });
+      window.openEditQuiz(quizId);
+      toast(targetHidden ? '🔒 تم إخفاء جميع أسئلة الامتحان' : '✅ تم إظهار جميع أسئلة الامتحان');
+    } catch (e) {
+      toast('خطأ في تحديث حالة الأسئلة!', 'error');
+    }
+  };
 
   // Owners management guards (and completely disabled on student platform for Add Owner)
   const _origShowAddOwnerModal = window.showAddOwnerModal;
   window.showAddOwnerModal = function (...args) {
-    if (!isSuperAdminPage) {
+    if (!window.IS_STANDALONE_SUPER_ADMIN) {
       toast('⛔ إضافة Owner متاحة فقط من لوحة السوبر أدمن الرئيسية', 'error');
       return;
     }
@@ -10881,7 +11325,7 @@ ESSAY
 
   const _origShowAddLectureOwnerModal = window.showAddLectureOwnerModal;
   window.showAddLectureOwnerModal = function (...args) {
-    if (!isSuperAdminPage) {
+    if (!window.IS_STANDALONE_SUPER_ADMIN) {
       toast('⛔ إضافة Owner متاحة فقط من لوحة السوبر أدمن الرئيسية', 'error');
       return;
     }
@@ -10898,13 +11342,17 @@ ESSAY
   // Hook admin render functions so unauthorized buttons are immediately hidden after rendering
   [
     'renderAdminQuizzes',
-    'renderAdminLectureMain',
-    'renderAdminLecturesList',
-    'renderAdminSummariesMain',
-    'renderAdminSubjects',
-    'renderAdminSubjectSummaries',
+    'renderAdminLqFolders',
+    'renderAdminLecturesGrouped',
+    'renderAdminLecturesInside',
+    '_renderAdminLecturesInsideUI',
+    'renderAdminSummariesGrouped',
+    'renderAdminSummaries',
+    '_renderAdminSummariesUI',
+    'renderAdminOwners',
+    'renderAdminLectureOwners',
     'renderAdminOwnerSummaries',
-    'renderAdminLectureOwnerItems'
+    'renderAdminOwnerLectures'
   ].forEach(fnName => {
     const orig = window[fnName];
     if (typeof orig === 'function') {
@@ -10913,7 +11361,7 @@ ESSAY
         if (typeof window.applyAdminActionButtonsVisibility === 'function') {
           window.applyAdminActionButtonsVisibility();
         }
-        if (!isSuperAdminPage) {
+        if (!window.IS_STANDALONE_SUPER_ADMIN) {
           document.querySelectorAll('[onclick*="showAddLectureOwnerModal"], [onclick*="showAddOwnerModal"]').forEach(btn => {
             btn.style.display = 'none';
           });
@@ -10924,7 +11372,7 @@ ESSAY
   });
 
   // Remove Add Owner buttons from Student Platform Dashboard on load
-  if (!isSuperAdminPage) {
+  if (!window.IS_STANDALONE_SUPER_ADMIN) {
     document.querySelectorAll('[onclick*="showAddLectureOwnerModal"], [onclick*="showAddOwnerModal"]').forEach(btn => {
       btn.remove();
     });
@@ -10943,21 +11391,24 @@ ESSAY
       return true;
     }
     try {
-      const [pRes, overrides] = await Promise.all([
-        api(`profiles?select=id,email,role,is_active&id=eq.${uid}`),
-        window.fetchSystemUserOverrides()
-      ]);
-      let rows = pRes.ok ? await pRes.json() : [];
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(uid || ''));
+      const overridesPromise = window.fetchSystemUserOverrides();
+      let rows = [];
+      if (isUuid) {
+        const pRes = await api(`profiles?select=id,email,role,is_active&id=eq.${uid}`);
+        if (pRes.ok) rows = await pRes.json();
+      }
       if (!rows.length && email) {
         const pResEmail = await api(`profiles?select=id,email,role,is_active&email=ilike.${encodeURIComponent(email)}`);
         if (pResEmail.ok) rows = await pResEmail.json();
       }
+      const overrides = await overridesPromise;
       if (!rows.length) {
         window._dbAccountVerified = false;
         return false;
       }
       const profileRow = rows[0];
-      const ov = overrides[uid] || (email ? overrides[email] : null);
+      const ov = overrides[uid] || overrides[profileRow.id] || (email ? overrides[email] : null);
       if (ov?.deleted === true || ov?.is_active === false || (profileRow.is_active === false && ov?.is_active !== true)) {
         window._dbAccountVerified = false;
         window.authSession = { accessToken: null, refreshToken: null, user: null, profile: null, permissions: null };
@@ -10974,7 +11425,7 @@ ESSAY
   };
 
   window.requireDatabaseAccount = function (promptMessage) {
-    if (isSuperAdminPage) return true;
+    if (window.IS_STANDALONE_SUPER_ADMIN) return true;
     const uid = window.authSession?.user?.id;
     if (!uid || window._dbAccountVerified === false) {
       toast(promptMessage || '🔒 يجب تسجيل الدخول بحساب مسجل في قاعدة البيانات أولاً لعرض المحتوى أو فتح الاختبارات والأسئلة', 'error');
@@ -10985,7 +11436,7 @@ ESSAY
     window.verifyActiveDatabaseAccount(false).then(valid => {
       if (!valid) {
         toast('🔒 يجب أن يكون لديك حساب مسجل ومفعل في قاعدة البيانات للوصول إلى محتوى المنصة', 'error');
-        if (typeof goHome === 'function') goHome();
+        if (typeof showGradeSelection === 'function') showGradeSelection();
         if (typeof openAuthModal === 'function') openAuthModal('login');
       }
     });
@@ -10993,36 +11444,37 @@ ESSAY
   };
 
   // Gate navigation & content loading functions on student platform
-  if (!isSuperAdminPage) {
-    const _origSelectTerm = window.selectTerm;
-    if (typeof _origSelectTerm === 'function') {
-      window.selectTerm = async function (term) {
-        if (!window.authSession?.user?.id) {
-          toast('🔒 يجب تسجيل الدخول بحسابك المسجل في المنصة أولاً لفتح الترم وعرض المحتوى', 'error');
-          if (typeof openAuthModal === 'function') openAuthModal('login');
-          return;
-        }
-        const ok = await window.verifyActiveDatabaseAccount(true);
-        if (!ok) {
-          toast('🔒 هذا الحساب غير موجود أو غير مفعل في قاعدة البيانات — سجل حساباً جديداً أو تواصل مع الإدارة', 'error');
-          if (typeof openAuthModal === 'function') openAuthModal('login');
-          return;
-        }
-        return _origSelectTerm.apply(this, arguments);
-      };
-    }
+  const _origSelectTerm = window.selectTerm;
+  if (typeof _origSelectTerm === 'function') {
+    window.selectTerm = async function (term) {
+      if (window.IS_STANDALONE_SUPER_ADMIN) return _origSelectTerm.apply(this, arguments);
+      if (!window.authSession?.user?.id) {
+        toast('🔒 يجب تسجيل الدخول بحسابك المسجل في المنصة أولاً لفتح الترم وعرض المحتوى', 'error');
+        if (typeof openAuthModal === 'function') openAuthModal('login');
+        return;
+      }
+      const ok = await window.verifyActiveDatabaseAccount(true);
+      if (!ok) {
+        toast('🔒 هذا الحساب غير موجود أو غير مفعل في قاعدة البيانات — سجل حساباً جديداً أو تواصل مع الإدارة', 'error');
+        if (typeof openAuthModal === 'function') openAuthModal('login');
+        return;
+      }
+      return _origSelectTerm.apply(this, arguments);
+    };
+  }
 
-    const _origShowSectionsPage = window.showSectionsPage;
-    if (typeof _origShowSectionsPage === 'function') {
-      window.showSectionsPage = function () {
-        if (!window.requireDatabaseAccount('🔒 يجب تسجيل الدخول بحسابك المسجل في قاعدة البيانات أولاً')) return;
-        return _origShowSectionsPage.apply(this, arguments);
-      };
-    }
+  const _origShowSectionsPage = window.showSectionsPage;
+  if (typeof _origShowSectionsPage === 'function') {
+    window.showSectionsPage = function () {
+      if (!window.IS_STANDALONE_SUPER_ADMIN && !window.requireDatabaseAccount('🔒 يجب تسجيل الدخول بحسابك المسجل في قاعدة البيانات أولاً')) return;
+      return _origShowSectionsPage.apply(this, arguments);
+    };
+  }
 
-    const _origOpenSection = window.openSection;
-    if (typeof _origOpenSection === 'function') {
-      window.openSection = async function (section) {
+  const _origOpenSection = window.openSection;
+  if (typeof _origOpenSection === 'function') {
+    window.openSection = async function (section) {
+      if (!window.IS_STANDALONE_SUPER_ADMIN) {
         if (!window.requireDatabaseAccount('🔒 يجب تسجيل الدخول بحسابك المسجل في قاعدة البيانات أولاً لفتح هذا القسم')) return;
         const ok = await window.verifyActiveDatabaseAccount(false);
         if (!ok) {
@@ -11030,13 +11482,15 @@ ESSAY
           if (typeof openAuthModal === 'function') openAuthModal('login');
           return;
         }
-        return _origOpenSection.apply(this, arguments);
-      };
-    }
+      }
+      return _origOpenSection.apply(this, arguments);
+    };
+  }
 
-    const _origStartQuiz = window.startQuiz;
-    if (typeof _origStartQuiz === 'function') {
-      window.startQuiz = async function (id) {
+  const _origStartQuiz = window.startQuiz;
+  if (typeof _origStartQuiz === 'function') {
+    window.startQuiz = async function (id) {
+      if (!window.IS_STANDALONE_SUPER_ADMIN) {
         if (!window.requireDatabaseAccount('🔒 لا يمكن فتح أي امتحان أو أسئلة إلا بعد تسجيل الدخول بحساب مسجل في قاعدة البيانات')) return;
         const ok = await window.verifyActiveDatabaseAccount(true);
         if (!ok) {
@@ -11044,83 +11498,101 @@ ESSAY
           if (typeof openAuthModal === 'function') openAuthModal('login');
           return;
         }
-        return _origStartQuiz.apply(this, arguments);
-      };
-    }
-
-    const _origLoadQuizzes = window.loadQuizzes;
-    if (typeof _origLoadQuizzes === 'function') {
-      window.loadQuizzes = async function () {
-        const isAdminView = !document.getElementById('admin-page')?.classList.contains('hidden');
-        if (!isAdminView && !window.requireDatabaseAccount('🔒 سجل الدخول بحسابك أولاً لتحميل وعرض الاختبارات')) {
-          const grid = document.getElementById('quizzes-grid');
-          if (grid) grid.innerHTML = '';
+      }
+      const quizObj = quizzes.find(q => q.id === id);
+      if (quizObj && Array.isArray(quizObj.questions)) {
+        const visibleQuestions = quizObj.questions.filter(q => !q.hidden);
+        if (visibleQuestions.length === 0) {
+          toast('⚠️ جميع أسئلة هذا الاختبار مخفية حالياً', 'error');
           return;
         }
-        return _origLoadQuizzes.apply(this, arguments);
-      };
-    }
-
-    const _origLoadResources = window.loadResources;
-    if (typeof _origLoadResources === 'function') {
-      window.loadResources = async function (type) {
-        const isAdminView = !document.getElementById('admin-page')?.classList.contains('hidden');
-        if (!isAdminView && !window.requireDatabaseAccount('🔒 سجل الدخول بحسابك أولاً لتحميل وعرض المحاضرات والملخصات')) {
-          const lList = document.getElementById('lectures-list');
-          const sList = document.getElementById('summaries-list');
-          if (lList) lList.innerHTML = '';
-          if (sList) sList.innerHTML = '';
-          return;
+        const origQuestions = quizObj.questions;
+        quizObj.questions = visibleQuestions;
+        try {
+          return await _origStartQuiz.apply(this, arguments);
+        } finally {
+          quizObj.questions = origQuestions;
         }
-        return _origLoadResources.apply(this, arguments);
-      };
-    }
+      }
+      return _origStartQuiz.apply(this, arguments);
+    };
+  }
 
-    [
-      'showLecturesList',
-      'openPublicLectureOwner',
-      'openPublicOwner',
-      'openPublicLectureOwnerFolder',
-      'openPublicSummaryOwnerFolder',
-      'showSubjectSummaries'
-    ].forEach(fnName => {
-      const orig = window[fnName];
-      if (typeof orig === 'function') {
-        window[fnName] = async function (...args) {
+  const _origLoadQuizzes = window.loadQuizzes;
+  if (typeof _origLoadQuizzes === 'function') {
+    window.loadQuizzes = async function () {
+      const isAdminView = !document.getElementById('admin-page')?.classList.contains('hidden');
+      if (!window.IS_STANDALONE_SUPER_ADMIN && !isAdminView && !window.requireDatabaseAccount('🔒 سجل الدخول بحسابك أولاً لتحميل وعرض الاختبارات')) {
+        const grid = document.getElementById('quizzes-grid');
+        if (grid) grid.innerHTML = '';
+        return;
+      }
+      return _origLoadQuizzes.apply(this, arguments);
+    };
+  }
+
+  const _origLoadResources = window.loadResources;
+  if (typeof _origLoadResources === 'function') {
+    window.loadResources = async function (type) {
+      const isAdminView = !document.getElementById('admin-page')?.classList.contains('hidden');
+      if (!window.IS_STANDALONE_SUPER_ADMIN && !isAdminView && !window.requireDatabaseAccount('🔒 سجل الدخول بحسابك أولاً لتحميل وعرض المحاضرات والملخصات')) {
+        const lList = document.getElementById('lectures-list');
+        const sList = document.getElementById('summaries-list');
+        if (lList) lList.innerHTML = '';
+        if (sList) sList.innerHTML = '';
+        return [];
+      }
+      return _origLoadResources.apply(this, arguments);
+    };
+  }
+
+  [
+    'showLecturesList',
+    'openPublicLectureOwner',
+    'openPublicOwner',
+    'openPublicLectureOwnerFolder',
+    'openPublicSummaryOwnerFolder',
+    'showSubjectSummaries'
+  ].forEach(fnName => {
+    const orig = window[fnName];
+    if (typeof orig === 'function') {
+      window[fnName] = async function (...args) {
+        if (!window.IS_STANDALONE_SUPER_ADMIN) {
           if (!window.requireDatabaseAccount('🔒 يجب تسجيل الدخول بحساب مسجل في قاعدة البيانات أولاً لعرض أو تحميل المحتوى')) return;
           const ok = await window.verifyActiveDatabaseAccount(false);
           if (!ok) {
             if (typeof openAuthModal === 'function') openAuthModal('login');
             return;
           }
-          return orig.apply(this, args);
-        };
-      }
-    });
-
-    const _origOnGlobalSearchInput = window.onGlobalSearchInput;
-    if (typeof _origOnGlobalSearchInput === 'function') {
-      window.onGlobalSearchInput = function (val) {
-        if (val && val.trim().length > 0 && !window.requireDatabaseAccount('🔒 يجب تسجيل الدخول بحسابك أولاً للبحث في محتوى المنصة')) {
-          const resBox = document.getElementById('global-search-results');
-          if (resBox) resBox.classList.add('hidden');
-          return;
         }
-        return _origOnGlobalSearchInput.apply(this, arguments);
+        return orig.apply(this, args);
       };
     }
+  });
 
-    // Intercept clicks on any resource/lecture/summary download link if not logged in with a verified DB account
-    document.addEventListener('click', (e) => {
-      const link = e.target.closest('.resource-card a[href], #lectures-list a[href], #summaries-list a[href]');
-      if (link) {
-        if (!window.requireDatabaseAccount('🔒 لا يمكن تحميل أي محتوى إلا بعد تسجيل الدخول بحساب مسجل في قاعدة البيانات')) {
-          e.preventDefault();
-          e.stopPropagation();
-        }
+  const _origOnGlobalSearchInput = window.onGlobalSearchInput;
+  if (typeof _origOnGlobalSearchInput === 'function') {
+    window.onGlobalSearchInput = function (val) {
+      if (!window.IS_STANDALONE_SUPER_ADMIN && val && val.trim().length > 0 && !window.requireDatabaseAccount('🔒 يجب تسجيل الدخول بحسابك أولاً للبحث في محتوى المنصة')) {
+        const resBox = document.getElementById('global-search-results');
+        if (resBox) resBox.classList.add('hidden');
+        return;
       }
-    }, true);
+      return _origOnGlobalSearchInput.apply(this, arguments);
+    };
   }
+
+  // Intercept clicks on any resource/lecture/summary download link if not logged in with a verified DB account
+  document.addEventListener('click', (e) => {
+    if (window.IS_STANDALONE_SUPER_ADMIN) return;
+    const link = e.target.closest('.resource-card a[href], #lectures-list a[href], #summaries-list a[href]');
+    if (link) {
+      if (!window.requireDatabaseAccount('🔒 لا يمكن تحميل أي محتوى إلا بعد تسجيل الدخول بحساب مسجل في قاعدة البيانات')) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }
+  }, true);
 
 })();
 
