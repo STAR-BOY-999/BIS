@@ -9729,6 +9729,52 @@ ESSAY
     }
   };
 
+  // نافذة نجاح تفعيل الحساب (Confirmation Success Screen)
+  window.showAccountConfirmedModal = function () {
+    let modal = document.getElementById('account-confirmed-modal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'account-confirmed-modal';
+      modal.className = 'modal-overlay';
+      modal.innerHTML = `
+        <div class="modal" style="max-width:460px;text-align:center;padding:2.2rem 1.8rem">
+          <div style="width:72px;height:72px;border-radius:50%;background:rgba(0,230,118,0.16);color:#00e676;display:flex;align-items:center;justify-content:center;font-size:2.2rem;margin:0 auto 1.2rem auto;box-shadow:0 0 24px rgba(0,230,118,0.3)">
+            <i class="fas fa-check-circle"></i>
+          </div>
+          <h3 style="font-size:1.4rem;font-weight:900;color:var(--text);margin-bottom:0.6rem">🎉 لقد تم تفعيل حسابك في المنصة بنجاح</h3>
+          <p style="font-size:0.9rem;color:var(--text-dim);line-height:1.6;margin-bottom:1.5rem">
+            أهلاً بك! تم التحقق من بريدك الإلكتروني وتنشيط حسابك بنجاح. يمكنك الآن الدخول وتصفح كافة محاضراتك وامتحاناتك.
+          </p>
+          <button type="button" class="btn btn-primary" style="width:100%;justify-content:center;padding:12px;font-size:1rem;font-weight:900" onclick="closeModal('account-confirmed-modal');showGradeSelection();">
+            <i class="fas fa-external-link-alt"></i> اضغط هنا لفتح المنصة
+          </button>
+        </div>
+      `;
+      document.body.appendChild(modal);
+    }
+    document.querySelectorAll('.modal-overlay').forEach(m => m.classList.add('hidden'));
+    modal.classList.remove('hidden');
+  };
+
+  // توليد كود عشوائي قوي وتعبئته مباشرة
+  window.fillRandomPasswordForReset = function () {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%';
+    let randCode = '';
+    for (let i = 0; i < 8; i++) {
+      randCode += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    const codeDisplay = document.getElementById('reset-random-code-display');
+    const p1 = document.getElementById('reset-new-password');
+    const p2 = document.getElementById('reset-confirm-password');
+    if (codeDisplay) {
+      codeDisplay.textContent = randCode;
+      codeDisplay.parentElement.style.display = 'flex';
+    }
+    if (p1) p1.value = randCode;
+    if (p2) p2.value = randCode;
+    toast('🎲 تم توليد الكود وتعبئته تلقائياً! اضغط تأكيد وحفظ.');
+  };
+
   // نافذة تعيين كلمة المرور الجديدة بعد الضغط على رابط الاستعادة في الإيميل
   window.openResetPasswordModal = function (recoveryAccessToken, userEmail = '') {
     window._recoveryAccessToken = recoveryAccessToken;
@@ -9739,24 +9785,36 @@ ESSAY
       modal.id = 'reset-password-modal';
       modal.className = 'modal-overlay';
       modal.innerHTML = `
-        <div class="modal" style="max-width:430px">
+        <div class="modal" style="max-width:440px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
-            <h3 style="margin:0"><i class="fas fa-key" style="color:var(--teal);margin-left:8px"></i> تعيين كلمة المرور الجديدة</h3>
+            <h3 style="margin:0"><i class="fas fa-key" style="color:var(--teal);margin-left:8px"></i> استعادة وتعيين كلمة المرور</h3>
             <button class="btn btn-ghost" onclick="closeModal('reset-password-modal')" style="padding:6px 10px"><i class="fas fa-times"></i></button>
           </div>
-          <p style="font-size:0.84rem;color:var(--text-dim);margin-bottom:1rem">أدخل كلمة المرور الجديدة لحسابك <strong id="reset-pwd-email-label" style="color:var(--teal)"></strong> ثم أكدها لحفظ التعديل.</p>
+          <p style="font-size:0.84rem;color:var(--text-dim);margin-bottom:1rem">أدخل كلمة المرور الجديدة لحسابك <strong id="reset-pwd-email-label" style="color:var(--teal)"></strong> أو استخدم الكود العشوائي.</p>
           <div id="reset-pwd-error" style="color:var(--red);font-size:0.84rem;margin-bottom:0.8rem;min-height:18px;font-weight:700"></div>
+
+          <!-- كود التفعيل العشوائي (Random Code Box) -->
+          <div style="background:var(--surface2);border:1px dashed rgba(45,212,191,0.4);border-radius:14px;padding:12px;margin-bottom:1rem;display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span style="font-size:0.8rem;color:var(--text-dim);font-weight:700"><i class="fas fa-dice" style="color:var(--teal)"></i> كود كلمة المرور المقترح:</span>
+              <span id="reset-random-code-display" style="font-family:monospace;font-size:1.05rem;font-weight:900;color:#00e676;background:rgba(0,230,118,0.12);padding:2px 8px;border-radius:8px;letter-spacing:1px">••••••••</span>
+            </div>
+            <button type="button" class="btn btn-blue" onclick="fillRandomPasswordForReset()" style="width:100%;justify-content:center;padding:8px;font-size:0.82rem;font-weight:800">
+              <i class="fas fa-random"></i> توليد وتفعيل كود عشوائي (Random) مباشرة
+            </button>
+          </div>
+
           <div class="form-group">
-            <label>كلمة المرور الجديدة (6 أحرف على الأقل)</label>
-            <input type="password" id="reset-new-password" placeholder="••••••••">
+            <label>كلمة المرور الجديدة / الكود</label>
+            <input type="text" id="reset-new-password" placeholder="اكتب الباسورد أو اضغط الزر العشوائي">
           </div>
           <div class="form-group">
-            <label>تأكيد كلمة المرور الجديدة</label>
-            <input type="password" id="reset-confirm-password" placeholder="••••••••" onkeydown="if(event.key==='Enter') submitNewRecoveredPassword()">
+            <label>تأكيد كلمة المرور</label>
+            <input type="text" id="reset-confirm-password" placeholder="تأكيد الباسورد" onkeydown="if(event.key==='Enter') submitNewRecoveredPassword()">
           </div>
-          <div class="modal-actions">
+          <div class="modal-actions" style="margin-top:1.2rem">
             <button class="btn btn-ghost" onclick="closeModal('reset-password-modal')">إلغاء</button>
-            <button class="btn btn-primary" onclick="submitNewRecoveredPassword()"><i class="fas fa-check-circle"></i> تأكيد وحفظ كلمة المرور</button>
+            <button class="btn btn-primary" onclick="submitNewRecoveredPassword()"><i class="fas fa-check-circle"></i> تأكيد وحفظ وتفعيل المنصة</button>
           </div>
         </div>
       `;
@@ -9768,6 +9826,7 @@ ESSAY
     document.getElementById('reset-confirm-password').value = '';
     document.getElementById('reset-pwd-error').textContent = '';
     modal.classList.remove('hidden');
+    window.fillRandomPasswordForReset();
   };
 
   window.submitNewRecoveredPassword = async function () {
@@ -10302,7 +10361,11 @@ ESSAY
                 return;
               }
               await establishAuthSession(vData.access_token, vData.refresh_token, vData.user);
-              toast('🎉 تم تأكيد بريدك الإلكتروني وتفعيل حسابك بنجاح!');
+              if (typeof window.showAccountConfirmedModal === 'function') {
+                window.showAccountConfirmedModal();
+              } else {
+                toast('🎉 تم تأكيد بريدك الإلكتروني وتفعيل حسابك بنجاح!');
+              }
               return;
             }
           } catch (e) {}
@@ -10343,7 +10406,12 @@ ESSAY
                 }
 
                 await establishAuthSession(accessToken, refreshToken, userObj);
-                toast('🎉 تم تأكيد بريدك الإلكتروني وتفعيل حسابك بنجاح!');
+                if (typeof window.showAccountConfirmedModal === 'function') {
+                  window.showAccountConfirmedModal();
+                } else {
+                  toast('🎉 تم تأكيد بريدك الإلكتروني وتفعيل حسابك بنجاح!');
+                }
+                return;
                 return;
               }
             }
