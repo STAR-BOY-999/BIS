@@ -1,13 +1,20 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-  <!-- Google Tag Manager -->
+  <!-- Google Analytics (GA4) + GTM -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-9W4GM477TK"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-9W4GM477TK');
+  </script>
   <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
   new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
   j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
   'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
   })(window,document,'script','dataLayer','GTM-M7KS3N9C');</script>
-  <!-- End Google Tag Manager -->
+  <!-- End Google Analytics (GA4) + GTM -->
 
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -12768,7 +12775,7 @@ ESSAY
   };
 
   // ─── 20. SUPER ADMIN ANALYTICS ENGINE + GOOGLE ANALYTICS / GTM LIVE INTEGRATION (Section 17) ───
-  window._currentGA4MeasurementId = localStorage.getItem('bis_ga4_measurement_id_v1') || 'GTM-M7KS3N9C';
+  window._currentGA4MeasurementId = localStorage.getItem('bis_ga4_measurement_id_v1') || 'G-9W4GM477TK';
 
   window.initGoogleAnalyticsGA4 = function (measurementId) {
     const cleanId = String(measurementId || '').trim();
