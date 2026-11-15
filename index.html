@@ -11416,15 +11416,17 @@ ESSAY
 
   window.applyPlatformGlobalLockState = function (isLocked, incomingTs = 0) {
     const numTs = Number(incomingTs || 0);
+    const locked = Boolean(isLocked);
+
+    // إذا كانت الحالة المطلوبة هي القفل ولكن الختم الزمني قديم جداً، نتجاهلها
+    if (locked && numTs > 0 && window._lastPlatformLockTs && numTs < window._lastPlatformLockTs) {
+      return;
+    }
     if (numTs > 0) {
-      if (window._lastPlatformLockTs && numTs < window._lastPlatformLockTs) {
-        return; // تجاهل أي استجابة قديمة أقدم من آخر ضغطة قفل/فتح
-      }
-      window._lastPlatformLockTs = numTs;
-      try { localStorage.setItem('bis_platform_lock_ts_v1', String(numTs)); } catch (e) {}
+      window._lastPlatformLockTs = Math.max(window._lastPlatformLockTs || 0, numTs);
+      try { localStorage.setItem('bis_platform_lock_ts_v1', String(window._lastPlatformLockTs)); } catch (e) {}
     }
 
-    const locked = Boolean(isLocked);
     const prevLocked = Boolean(window._isPlatformLockedGlobal);
     window._isPlatformLockedGlobal = locked;
     try { localStorage.setItem('bis_platform_lock_state_v1', locked ? 'true' : 'false'); } catch (e) {}
@@ -11433,10 +11435,9 @@ ESSAY
       window.renderSuperAdminPlatformLockBar();
     }
 
-    // فقط ملف السوبر أدمن المستقل (super-admin.html) يظل مفتوحاً للتحكم، أما منصة الطلاب فتُقفل بالكامل على الجميع بدون استثناء!
+    // ملف السوبر أدمن المستقل لا يُقفل أبداً
     if (window.IS_STANDALONE_SUPER_ADMIN) {
-      const existingOverlay = document.getElementById('platform-global-lock-overlay');
-      if (existingOverlay) existingOverlay.remove();
+      document.querySelectorAll('#platform-global-lock-overlay, [id="platform-global-lock-overlay"]').forEach(el => el.remove());
       document.body.style.overflow = '';
       return;
     }
@@ -11485,8 +11486,7 @@ ESSAY
             </div>
           </div>
         `;
-        // عزل كامل لجميع النقرات والضغطات المتكررة على شاشة القفل حتى لا تتأثر أي نافذة خلفها أبداً
-        ['click', 'dblclick', 'mousedown', 'mouseup', ' pointerdown', 'pointerup', 'touchstart', 'touchend', 'contextmenu'].forEach(evType => {
+        ['click', 'dblclick', 'mousedown', 'mouseup', 'pointerdown', 'pointerup', 'touchstart', 'touchend', 'contextmenu'].forEach(evType => {
           overlay.addEventListener(evType.trim(), (ev) => {
             if (ev.target && ev.target.closest && ev.target.closest('a[href*="wa.me"]')) {
               ev.stopPropagation();
@@ -11502,26 +11502,37 @@ ESSAY
       }
       document.body.style.overflow = 'hidden';
     } else {
-      if (overlay) {
-        overlay.remove();
-        document.body.style.overflow = '';
-        if (prevLocked) {
-          toast('🟢 تم إعادة فتح المنصة الآن! يمكنك المتابعة بحرية');
-        }
+      document.querySelectorAll('#platform-global-lock-overlay, [id="platform-global-lock-overlay"]').forEach(el => el.remove());
+      document.body.style.overflow = '';
+      if (prevLocked) {
+        toast('🟢 تم فتح المنصة الآن! يمكنك المتابعة بحرية');
       }
     }
   };
 
-  // حارس مستمر (Lock Guardian): يمنع إزالة أو إخفاء شاشة القفل بأي شكل طالما المنصة مقفولة
+  // حارس مستمر (Lock Guardian): يتأكد من مطابقة شاشة القفل لحالة القفل الحقيقية دائماً
   if (!window.IS_STANDALONE_SUPER_ADMIN) {
     setInterval(() => {
-      if (window._isPlatformLockedGlobal) {
-        const ov = document.getElementById('platform-global-lock-overlay');
-        if (!ov || ov.classList.contains('hidden') || ov.style.display === 'none') {
+      const isLocked = Boolean(window._isPlatformLockedGlobal);
+      const overlays = document.querySelectorAll('#platform-global-lock-overlay, [id="platform-global-lock-overlay"]');
+      if (isLocked) {
+        if (overlays.length === 0) {
           window.applyPlatformGlobalLockState(true);
+        } else {
+          overlays.forEach(ov => {
+            if (ov.classList.contains('hidden') || ov.style.display === 'none') {
+              ov.classList.remove('hidden');
+              ov.style.display = 'flex';
+            }
+          });
+        }
+      } else {
+        if (overlays.length > 0) {
+          overlays.forEach(ov => ov.remove());
+          document.body.style.overflow = '';
         }
       }
-    }, 600);
+    }, 400);
   }
 
   window.togglePlatformGlobalLock = async function (forceState = null) {
@@ -11533,7 +11544,7 @@ ESSAY
     const nowIso = new Date(nowTs).toISOString();
     _lockToggleInFlight = true;
 
-    // 1. تطبيق فوري (0ms Optimistic UI) مع ختم زمني صارم يمنع أي استجابة قديمة من إلغاء القفل
+    // 1. تطبيق فوري (0ms Optimistic UI)
     window.applyPlatformGlobalLockState(nextLocked, nowTs);
     try {
       const localCached = JSON.parse(localStorage.getItem('super_admin_user_overrides_v2') || '{}');
@@ -11584,17 +11595,13 @@ ESSAY
           const remoteOv = JSON.parse(rows[0].url);
           const remoteLockObj = remoteOv?.__platform_status__;
           const remoteTs = Number(remoteLockObj?.ts || (remoteLockObj?.updated_at ? new Date(remoteLockObj.updated_at).getTime() : 0) || 0);
-          const localTs = Number(window._lastPlatformLockTs || localStorage.getItem('bis_platform_lock_ts_v1') || 0);
 
-          // إذا كان الختم الزمني المحلي أحدث (بسبب ضغطة قفل/فتح حديثة لم تنتهِ مزامنتها بعد)، نحافظ على الحالة المحلية الأحدث
-          if (localTs > remoteTs && (_lockToggleInFlight || (Date.now() - localTs < 8000))) {
-            remoteOv.__platform_status__ = {
-              locked: Boolean(window._isPlatformLockedGlobal),
-              ts: localTs,
-              updated_at: new Date(localTs).toISOString()
-            };
-          } else if (!opts?.skipApplyLock && remoteLockObj && typeof remoteLockObj.locked === 'boolean') {
-            window.applyPlatformGlobalLockState(remoteLockObj.locked, remoteTs);
+          if (!opts?.skipApplyLock && remoteLockObj && typeof remoteLockObj.locked === 'boolean') {
+            if (remoteLockObj.locked === false) {
+              window.applyPlatformGlobalLockState(false, remoteTs || Date.now());
+            } else {
+              window.applyPlatformGlobalLockState(true, remoteTs || Date.now());
+            }
           }
 
           if (remoteOv?.__ga4_config__?.measurement_id && typeof window.initGoogleAnalyticsGA4 === 'function') {
@@ -13772,9 +13779,8 @@ ESSAY
     }
     if (window.authSession?.user) {
       window.syncUserPermissionsFromDB({ realtime: true });
-    } else {
-      window.fetchSystemUserOverrides();
     }
+    window.fetchSystemUserOverrides();
   }
 
   try {
@@ -13785,10 +13791,6 @@ ESSAY
           const lockTs = Number(msg.uid || msg.ts || Date.now());
           window.applyPlatformGlobalLockState(msg.action === 'platform_locked', lockTs);
           return;
-        }
-        if (!window.IS_STANDALONE_SUPER_ADMIN && localStorage.getItem('bis_platform_lock_state_v1') !== null) {
-          const savedTs = Number(localStorage.getItem('bis_platform_lock_ts_v1') || 0);
-          window.applyPlatformGlobalLockState(localStorage.getItem('bis_platform_lock_state_v1') === 'true', savedTs);
         }
         handleIncomingRealtimeSync();
       };
