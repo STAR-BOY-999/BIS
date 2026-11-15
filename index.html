@@ -8827,6 +8827,11 @@ ESSAY
     updateLiveScore();
     showCurrentQuestion();
     autoSaveCurrentQuizProgress();
+    try {
+      if (typeof window.logAdminActivity === 'function') {
+        window.logAdminActivity('بدء حل امتحان', 'quiz', currentQuiz.title, currentQuiz.id, { student_email: window.authSession?.user?.email || 'طالب' });
+      }
+    } catch (e) {}
   };
 
   function autoSaveCurrentQuizProgress() {
@@ -9121,6 +9126,17 @@ ESSAY
         }
       } catch (e) {}
     }
+
+    try {
+      if (typeof window.logAdminActivity === 'function') {
+        window.logAdminActivity('إنهاء وتسليم امتحان', 'quiz', `${currentQuiz?.title || 'امتحان'} (النتيجة: ${pct}%)`, currentQuiz?.id || '', {
+          score_pct: pct,
+          correct_count: correct,
+          wrong_count: wrong,
+          student_email: window.authSession?.user?.email || 'طالب'
+        });
+      }
+    } catch (e) {}
   }
 
   // Trigger recordAttemptToDatabase whenever quiz finishes via nextQuestion or skipQuestion
@@ -9526,9 +9542,41 @@ ESSAY
       overrides[lowerEmail] = { ...(overrides[lowerEmail] || {}), ...cloudUser };
       window.bindDeviceToEmail(lowerEmail, overrides);
       await window.saveSystemUserOverrides(overrides);
-      if (typeof window.broadcastRealtimeUserSync === 'function') {
-        window.broadcastRealtimeUserSync('register', lowerEmail, uid);
-      }
+
+      // حفظ فوري في جدول profiles في Supabase لضمان ظهوره الفوري في قاعدة البيانات والسوبر أدمن
+      try {
+        await fetch(`${SUPABASE_URL}/rest/v1/profiles`, {
+          method: 'POST',
+          headers: {
+            'apikey': SUPABASE_KEY,
+            'Authorization': `Bearer ${SUPABASE_KEY}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'resolution=merge-duplicates'
+          },
+          body: JSON.stringify({
+            id: uid,
+            email: lowerEmail,
+            full_name: fullName,
+            role: 'student',
+            academic_year: 'bis',
+            term: term,
+            is_active: true
+          })
+        });
+      } catch (e) {}
+
+      // تسجيل نشاط فوري وإرسال نبض اتصال حي ومزامنة فورية مع السوبر أدمن
+      try {
+        if (typeof window.logAdminActivity === 'function') {
+          window.logAdminActivity('تسجيل حساب جديد', 'user', `${fullName} (${lowerEmail})`, uid, { role: 'student', term: term });
+        }
+        if (typeof window.pingCurrentUserPresence === 'function') {
+          window.pingCurrentUserPresence(true, { uid, email: lowerEmail, full_name: fullName, role: 'student' });
+        }
+        if (typeof window.broadcastRealtimeUserSync === 'function') {
+          window.broadcastRealtimeUserSync('register', lowerEmail, uid);
+        }
+      } catch (e) {}
 
       if (isRateLimited) {
         switchAuthTab('login');
@@ -10311,10 +10359,19 @@ ESSAY
     if (!window.IS_STANDALONE_SUPER_ADMIN && typeof window.pingCurrentUserPresence === 'function') {
       window.pingCurrentUserPresence(true);
     }
+    try {
+      if (typeof window.logAdminActivity === 'function') {
+        window.logAdminActivity('تسجيل دخول طالب', 'user', `${profile.full_name || user.email} (${lowerEmail})`, profile.id || user.id);
+      }
+    } catch (e) {}
   }
 
   window.handleLogout = async function () {
     try {
+      if (typeof window.logAdminActivity === 'function') {
+        const actorDesc = `${window.authSession?.profile?.full_name || window.authSession?.user?.email || 'طالب'}`;
+        window.logAdminActivity('تسجيل خروج', 'user', actorDesc, window.authSession?.user?.id || '');
+      }
       if (!window.IS_STANDALONE_SUPER_ADMIN && typeof window.pingCurrentUserPresence === 'function') {
         await window.pingCurrentUserPresence(false);
       }
@@ -10926,10 +10983,12 @@ ESSAY
   };
 
   // ─── 14. ADMIN DASHBOARD OVERVIEW (Section 10) ───
-  async function loadAdminDashboardOverview() {
+  async function loadAdminDashboardOverview(silent = false) {
     const container = document.getElementById('admin-section-overview');
     if (!container) return;
-    container.innerHTML = renderSkeletonCards(5);
+    if (!silent && !container.querySelector('.kpi-grid')) {
+      container.innerHTML = renderSkeletonCards(5);
+    }
 
     try {
       const [qRes, rRes, pRes, aRes, overrides, presenceMap] = await Promise.all([
@@ -10974,7 +11033,7 @@ ESSAY
         const isAct = typeof ov.is_active === 'boolean' ? ov.is_active : (u.is_active !== false);
         if (!isAct) return false;
         const pres = (em && presenceMap[em]) || (u.id && presenceMap[u.id]) || null;
-        return Boolean(pres && pres.online !== false && (nowMs - Number(pres.last_seen || 0) < 20000));
+        return Boolean(pres && pres.online !== false && (nowMs - Number(pres.last_seen || 0) < 15000));
       }).length;
       const offlineAccountsCount = Math.max(0, totalAccountsCount - onlineAccountsCount);
 
@@ -11061,6 +11120,7 @@ ESSAY
       container.innerHTML = `<div class="empty"><p>تعذر تحميل الإحصائيات</p></div>`;
     }
   }
+  window.loadAdminDashboardOverview = loadAdminDashboardOverview;
 
   window.sendQuickAdminNotification = async function () {
     const title = document.getElementById('quick-notif-title')?.value.trim();
@@ -11401,7 +11461,7 @@ ESSAY
       </div>
       <button
         type="button"
-        onclick="togglePlatformGlobalLock()"
+        onclick="togglePlatformGlobalLock(${!locked})"
         class="btn ${locked ? 'btn-primary' : 'btn-danger'}"
         style="padding:11px 20px;font-size:0.9rem;font-weight:900;border-radius:12px;display:inline-flex;align-items:center;gap:8px;box-shadow:${locked ? '0 0 18px rgba(0,230,118,0.35)' : '0 0 18px rgba(248,113,113,0.35)'};background:${locked ? '#00e676' : 'var(--red)'};color:${locked ? '#050509' : '#fff'};border:none;cursor:pointer"
       >
@@ -11414,12 +11474,12 @@ ESSAY
   window._lastPlatformLockTs = Number(localStorage.getItem('bis_platform_lock_ts_v1') || 0);
   let _lockToggleInFlight = false;
 
-  window.applyPlatformGlobalLockState = function (isLocked, incomingTs = 0) {
+  window.applyPlatformGlobalLockState = function (isLocked, incomingTs = 0, isServerAuthoritative = false) {
     const numTs = Number(incomingTs || 0);
     const locked = Boolean(isLocked);
 
-    // إذا كانت الحالة المطلوبة هي القفل ولكن الختم الزمني قديم جداً، نتجاهلها
-    if (locked && numTs > 0 && window._lastPlatformLockTs && numTs < window._lastPlatformLockTs) {
+    // إذا كانت الحالة المطلوبة هي القفل ولكن الختم الزمني قديم، نتجاهلها فقط إذا لم تكن قادمة رسمياً من السيرفر
+    if (!isServerAuthoritative && locked && numTs > 0 && window._lastPlatformLockTs && numTs < window._lastPlatformLockTs) {
       return;
     }
     if (numTs > 0) {
@@ -11545,7 +11605,7 @@ ESSAY
     _lockToggleInFlight = true;
 
     // 1. تطبيق فوري (0ms Optimistic UI)
-    window.applyPlatformGlobalLockState(nextLocked, nowTs);
+    window.applyPlatformGlobalLockState(nextLocked, nowTs, true);
     try {
       const localCached = JSON.parse(localStorage.getItem('super_admin_user_overrides_v2') || '{}');
       localCached.__platform_status__ = { locked: nextLocked, ts: nowTs, updated_at: nowIso };
@@ -11566,7 +11626,9 @@ ESSAY
         ts: nowTs,
         updated_at: nowIso
       };
-      await window.saveSystemUserOverrides(overrides);
+      await window.saveSystemUserOverrides(overrides, {
+        explicitLockStatus: { locked: nextLocked, ts: nowTs, updated_at: nowIso }
+      });
       if (typeof window.broadcastRealtimeUserSync === 'function') {
         window.broadcastRealtimeUserSync(nextLocked ? 'platform_locked' : 'platform_unlocked', '__platform__', String(nowTs));
       }
@@ -11598,11 +11660,7 @@ ESSAY
           const remoteTs = Number(remoteLockObj?.ts || (remoteLockObj?.updated_at ? new Date(remoteLockObj.updated_at).getTime() : 0) || 0);
 
           if (!opts?.skipApplyLock && remoteLockObj && typeof remoteLockObj.locked === 'boolean') {
-            if (remoteLockObj.locked === false) {
-              window.applyPlatformGlobalLockState(false, remoteTs || Date.now());
-            } else {
-              window.applyPlatformGlobalLockState(true, remoteTs || Date.now());
-            }
+            window.applyPlatformGlobalLockState(remoteLockObj.locked, remoteTs || Date.now(), true);
           }
 
           if (remoteOv?.__ga4_config__?.measurement_id && typeof window.initGoogleAnalyticsGA4 === 'function') {
@@ -11613,14 +11671,14 @@ ESSAY
           return remoteOv;
         }
         localStorage.setItem('super_admin_user_overrides_v2', '{}');
-        if (!opts?.skipApplyLock && !_lockToggleInFlight) window.applyPlatformGlobalLockState(false);
+        if (!opts?.skipApplyLock && !_lockToggleInFlight) window.applyPlatformGlobalLockState(false, 0, true);
         return {};
       }
     } catch (e) {}
     try {
       const cachedOv = JSON.parse(localStorage.getItem('super_admin_user_overrides_v2') || '{}');
       if (!opts?.skipApplyLock && cachedOv && cachedOv.__platform_status__?.locked === false) {
-        window.applyPlatformGlobalLockState(false);
+        window.applyPlatformGlobalLockState(false, 0, true);
       }
       return cachedOv;
     } catch (e) {
@@ -11628,19 +11686,13 @@ ESSAY
     }
   };
 
-  window.saveSystemUserOverrides = async function (overrides) {
+  window.saveSystemUserOverrides = async function (overrides, opts = {}) {
     try { localStorage.removeItem('super_admin_user_overrides'); } catch (e) {}
     // الحفاظ دائماً على أحدث حالة قفل للمنصة وإعدادات Google Analytics عند حفظ أي تعديلات أخرى
     try {
       const prevCached = JSON.parse(localStorage.getItem('super_admin_user_overrides_v2') || '{}');
-      const localLockTs = Number(window._lastPlatformLockTs || localStorage.getItem('bis_platform_lock_ts_v1') || 0);
-      const ovLockTs = Number(overrides?.__platform_status__?.ts || 0);
-      if (localLockTs >= ovLockTs && localStorage.getItem('bis_platform_lock_state_v1') !== null) {
-        overrides.__platform_status__ = {
-          locked: localStorage.getItem('bis_platform_lock_state_v1') === 'true',
-          ts: localLockTs || Date.now(),
-          updated_at: new Date(localLockTs || Date.now()).toISOString()
-        };
+      if (opts?.explicitLockStatus) {
+        overrides.__platform_status__ = opts.explicitLockStatus;
       } else if (!overrides.__platform_status__ && prevCached.__platform_status__) {
         overrides.__platform_status__ = prevCached.__platform_status__;
       }
@@ -11718,18 +11770,18 @@ ESSAY
   };
 
   let _presencePingInFlight = false;
-  window.pingCurrentUserPresence = async function (isOnline = true) {
+  window.pingCurrentUserPresence = async function (isOnline = true, explicitMeta = null) {
     if (window.IS_STANDALONE_SUPER_ADMIN) return;
-    const uid = window.authSession?.user?.id || window.authSession?.profile?.id;
-    const email = (window.authSession?.user?.email || window.authSession?.profile?.email || '').trim().toLowerCase();
+    const uid = explicitMeta?.uid || explicitMeta?.id || window.authSession?.user?.id || window.authSession?.profile?.id;
+    const email = (explicitMeta?.email || window.authSession?.user?.email || window.authSession?.profile?.email || '').trim().toLowerCase();
     if (!uid && !email) return;
 
     const nowMs = Date.now();
     const entry = {
       id: uid || email,
       email: email,
-      full_name: window.authSession?.profile?.full_name || '',
-      role: window.authSession?.profile?.role || 'student',
+      full_name: explicitMeta?.full_name || window.authSession?.profile?.full_name || '',
+      role: explicitMeta?.role || window.authSession?.profile?.role || 'student',
       online: Boolean(isOnline),
       last_seen: nowMs,
       updated_at: new Date(nowMs).toISOString()
@@ -11795,6 +11847,27 @@ ESSAY
     } finally {
       _presencePingInFlight = false;
     }
+  };
+
+  // نغمة صوتية ترحيبية فورية ناعمة (Web Audio API) لتنبيه السوبر أدمن عند تسجيل طالب جديد بالوقت الفعلي
+  window.playRealtimeChime = function () {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.15); // A5
+      gain.gain.setValueAtTime(0.001, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.2, ctx.currentTime + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.36);
+    } catch (e) {}
   };
 
   window._adminUsersList = [];
@@ -12158,7 +12231,7 @@ ESSAY
 
           const pres = (lowerEm && presenceMap[lowerEm]) || (u.id && presenceMap[u.id]) || null;
           const lastSeenAt = Number(pres?.last_seen || 0) || 0;
-          const isOnlineNow = Boolean(isActive && pres && pres.online !== false && (nowMs - lastSeenAt < 20000));
+          const isOnlineNow = Boolean(isActive && pres && pres.online !== false && (nowMs - lastSeenAt < 15000));
 
           return {
             ...u,
@@ -12180,6 +12253,22 @@ ESSAY
           if (normEm) uniqueEmailsFinal.add(normEm);
           return true;
         });
+
+      // إشعار فوري صوتي وبصري للسوبر أدمن عند تسجيل أي طالب جديد لأول مرة
+      try {
+        if (window._prevKnownUserIds && window._prevKnownUserIds.size > 0) {
+          profiles.forEach(p => {
+            const pKey = p.id || p.email;
+            if (!window._prevKnownUserIds.has(pKey)) {
+              if (typeof window.playRealtimeChime === 'function') {
+                window.playRealtimeChime();
+              }
+              toast(`🎉 طالب جديد سجل الآن: ${p.full_name || p.email} (${p.email})`);
+            }
+          });
+        }
+        window._prevKnownUserIds = new Set(profiles.map(p => p.id || p.email));
+      } catch (e) {}
 
       const newSig = JSON.stringify(profiles.map(u => ({
         id: u.id, em: u.email, fn: u.full_name, r: u.role, t: u.term, a: u.is_active, p: u._pendingConfirmation, pm: u._ovPerms, on: u._isOnlineNow
@@ -13762,6 +13851,10 @@ ESSAY
       if (typeof window.renderSuperAdminPlatformLockBar === 'function') {
         window.renderSuperAdminPlatformLockBar();
       }
+      const overviewPanel = document.getElementById('admin-section-overview');
+      if (overviewPanel && !overviewPanel.classList.contains('hidden') && typeof window.loadAdminDashboardOverview === 'function') {
+        window.loadAdminDashboardOverview(true);
+      }
       const usersPanel = document.getElementById('admin-section-users');
       const rbacModal = document.getElementById('rbac-modal');
       const addUserModal = document.getElementById('admin-add-user-modal');
@@ -13852,20 +13945,21 @@ ESSAY
     });
     loadStudentNotifications();
 
-    // نبض مزامنة سحابي لحظي كل 2.5 ثانية لتطبيق أي تعديل في الصلاحيات أو تعطيل/حذف الحساب فوراً بدون ريفريش
+    // نبض مزامنة سحابي لحظي فائق السرعة كل 1.5 ثانية في السوبر أدمن و 2 ثانية في المنصة
+    const syncIntervalMs = window.IS_STANDALONE_SUPER_ADMIN ? 1500 : 2000;
     setInterval(() => {
-      if (document.hidden) return;
+      if (document.hidden && !window._isPlatformLockedGlobal) return;
       handleIncomingRealtimeSync();
-    }, 2500);
+    }, syncIntervalMs);
 
-    // نبض اتصال حي (Presence Heartbeat) كل 6 ثوانٍ لإعلام السوبر أدمن بالحسابات التي تفتح المنصة الآن في الوقت الفعلي
+    // نبض اتصال حي (Presence Heartbeat) كل 3.5 ثانية لإعلام السوبر أدمن بالحسابات المتصلة حالياً في الوقت الفعلي
     if (!window.IS_STANDALONE_SUPER_ADMIN) {
       setInterval(() => {
         if (document.hidden || !window.authSession?.user) return;
         if (typeof window.pingCurrentUserPresence === 'function') {
           window.pingCurrentUserPresence(true);
         }
-      }, 6000);
+      }, 3500);
     }
 
     document.addEventListener('click', (e) => {
