@@ -11343,7 +11343,7 @@ ESSAY
   };
 
   // ─── 19. SUPER ADMIN RBAC & USERS MANAGEMENT + GLOBAL PLATFORM LOCK (Section 11) ───
-  window._isPlatformLockedGlobal = localStorage.getItem('bis_platform_lock_state_v1') === 'true';
+  window._isPlatformLockedGlobal = false;
 
   window.renderSuperAdminPlatformLockBar = function () {
     const adminPage = document.getElementById('admin-page');
@@ -11581,11 +11581,12 @@ ESSAY
   window.fetchSystemUserOverrides = async function (opts = {}) {
     try { localStorage.removeItem('super_admin_user_overrides'); } catch (e) {}
     try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/resources?select=id,url&type=eq.user_overrides&grade=eq.sys&order=id.desc&limit=1&_t=${Date.now()}`, {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/resources?select=id,url&type=eq.user_overrides&grade=eq.sys&order=id.desc&limit=1`, {
         headers: {
           'apikey': SUPABASE_KEY,
           'Authorization': `Bearer ${SUPABASE_KEY}`,
-          'Cache-Control': 'no-cache, no-store, must-revalidate'
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
         },
         cache: 'no-store'
       });
@@ -11618,9 +11619,8 @@ ESSAY
     } catch (e) {}
     try {
       const cachedOv = JSON.parse(localStorage.getItem('super_admin_user_overrides_v2') || '{}');
-      if (!opts?.skipApplyLock && cachedOv && typeof cachedOv.__platform_status__?.locked === 'boolean') {
-        const cTs = Number(cachedOv.__platform_status__?.ts || 0);
-        window.applyPlatformGlobalLockState(cachedOv.__platform_status__.locked, cTs);
+      if (!opts?.skipApplyLock && cachedOv && cachedOv.__platform_status__?.locked === false) {
+        window.applyPlatformGlobalLockState(false);
       }
       return cachedOv;
     } catch (e) {
