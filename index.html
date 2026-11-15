@@ -1,6 +1,14 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
+  <!-- Google Tag Manager -->
+  <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+  new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+  j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+  'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+  })(window,document,'script','dataLayer','GTM-M7KS3N9C');</script>
+  <!-- End Google Tag Manager -->
+
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>كلية نظم ومعلومات</title>
@@ -12759,12 +12767,12 @@ ESSAY
     }
   };
 
-  // ─── 20. SUPER ADMIN ANALYTICS ENGINE + GOOGLE ANALYTICS (GA4) LIVE INTEGRATION (Section 17) ───
-  window._currentGA4MeasurementId = localStorage.getItem('bis_ga4_measurement_id_v1') || '';
+  // ─── 20. SUPER ADMIN ANALYTICS ENGINE + GOOGLE ANALYTICS / GTM LIVE INTEGRATION (Section 17) ───
+  window._currentGA4MeasurementId = localStorage.getItem('bis_ga4_measurement_id_v1') || 'GTM-M7KS3N9C';
 
   window.initGoogleAnalyticsGA4 = function (measurementId) {
-    const cleanId = String(measurementId || '').trim().toUpperCase();
-    if (!cleanId || !/^G-[A-Z0-9]+$/i.test(cleanId)) return false;
+    const cleanId = String(measurementId || '').trim();
+    if (!cleanId) return false;
 
     try { localStorage.setItem('bis_ga4_measurement_id_v1', cleanId); } catch (e) {}
     if (window._loadedGA4ScriptId === cleanId) return true;
@@ -12774,19 +12782,29 @@ ESSAY
     window.dataLayer = window.dataLayer || [];
     window.gtag = window.gtag || function () { window.dataLayer.push(arguments); };
     window.gtag('js', new Date());
-    window.gtag('config', cleanId, {
-      page_title: document.title || 'كلية نظم ومعلومات (BIS)',
-      page_location: window.location.href,
-      send_page_view: true
-    });
 
-    const existingScript = document.getElementById('bis-ga4-gtag-script');
-    if (existingScript) existingScript.remove();
-    const s = document.createElement('script');
-    s.id = 'bis-ga4-gtag-script';
-    s.async = true;
-    s.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(cleanId)}`;
-    document.head.appendChild(s);
+    if (cleanId.startsWith('GTM-')) {
+      // Google Tag Manager loader
+      (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+      new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+      j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+      'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+      })(window,document,'script','dataLayer',cleanId);
+    } else {
+      // Direct GA4 measurement ID
+      window.gtag('config', cleanId, {
+        page_title: document.title || 'كلية نظم ومعلومات (BIS)',
+        page_location: window.location.href,
+        send_page_view: true
+      });
+      const existingScript = document.getElementById('bis-ga4-gtag-script');
+      if (existingScript) existingScript.remove();
+      const s = document.createElement('script');
+      s.id = 'bis-ga4-gtag-script';
+      s.async = true;
+      s.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(cleanId)}`;
+      document.head.appendChild(s);
+    }
     return true;
   };
 
@@ -12804,10 +12822,10 @@ ESSAY
 
   window.saveGoogleAnalyticsIdAdmin = async function () {
     const inp = document.getElementById('ga4-measurement-id-input');
-    const rawVal = (inp ? inp.value : '').trim().toUpperCase();
+    const rawVal = (inp ? inp.value : '').trim();
 
-    if (rawVal && !/^G-[A-Z0-9]{4,}$/i.test(rawVal)) {
-      return toast('❌ يرجى إدخال معرّف قياس صحيح يبدأ بـ G- (مثال: G-XXXXXXXXXX)', 'error');
+    if (rawVal && !/^(G-[A-Z0-9]{4,}|GTM-[A-Z0-9]{4,})$/i.test(rawVal)) {
+      return toast('❌ يرجى إدخال معرّف صحيح يبدأ بـ G- أو GTM- (مثال: GTM-M7KS3N9C أو G-XXXXXXXXXX)', 'error');
     }
 
     window._currentGA4MeasurementId = rawVal;
@@ -12828,11 +12846,11 @@ ESSAY
         updated_at: new Date().toISOString()
       };
       await window.saveSystemUserOverrides(overrides);
-      await logAdminActivity(rawVal ? 'ربط Google Analytics (GA4)' : 'إلغاء ربط Google Analytics', 'analytics', rawVal || 'تم مسح المعرّف');
-      toast(rawVal ? `✅ تم ربط المنصة بـ Google Analytics (${rawVal}) وتفعيله على جميع الطلاب فوراً!` : '🗑️ تم إلغاء ربط Google Analytics');
+      await logAdminActivity(rawVal ? 'ربط Google Analytics / GTM' : 'إلغاء ربط Google Analytics', 'analytics', rawVal || 'تم مسح المعرّف');
+      toast(rawVal ? `✅ تم تفعيل معرّف (${rawVal}) وتعميمه سحابياً على جميع الطلاب فوراً!` : '🗑️ تم إلغاء الربط');
       loadSuperAdminAnalytics();
     } catch (e) {
-      toast('تعذر حفظ معرّف Google Analytics', 'error');
+      toast('تعذر حفظ المعرّف', 'error');
     }
   };
 
