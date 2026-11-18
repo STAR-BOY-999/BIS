@@ -4050,13 +4050,13 @@ ESSAY
 
     <!-- Password Recovery Form -->
     <div id="auth-form-recover" class="hidden">
-      <p style="font-size:0.84rem;color:var(--text-dim);margin-bottom:1rem">أدخل بريدك الإلكتروني المسجل وسنرسل لك رابطاً آمناً لإعادة تعيين كلمة المرور.</p>
+      <p style="font-size:0.84rem;color:var(--text-dim);margin-bottom:1rem">أدخل بريدك الإلكتروني المسجل واضغط بالأسفل لفتح صفحة كود استعادة الحساب وزرار التفعيل العشوائي (Random) وتغيير الباسورد مباشرة.</p>
       <div class="form-group">
         <label>البريد الإلكتروني</label>
-        <input type="email" id="recover-email" placeholder="student@example.com" dir="ltr">
+        <input type="email" id="recover-email" placeholder="student@example.com" dir="ltr" onkeydown="if(event.key==='Enter') handlePasswordRecovery()">
       </div>
       <button class="btn btn-primary" style="width:100%;justify-content:center;padding:12px" onclick="handlePasswordRecovery()">
-        <i class="fas fa-paper-plane"></i> إرسال رابط الاستعادة
+        <i class="fas fa-key"></i> فتح صفحة الكود وتغيير الباسورد (Reset Password)
       </button>
     </div>
   </div>
@@ -9304,6 +9304,45 @@ ESSAY
         return;
       }
 
+      const overrides = overridesPre || await window.fetchSystemUserOverrides();
+      const cloudAcc = overrides[lowerEmail] || overrides[email] || Object.values(overrides).find(v => v && v.email && window.normalizeEmailStrict(v.email) === normEmail);
+
+      // إذا تم تغيير الباسورد عبر صفحة Reset Password بالكود العشوائي أو من السوبر أدمن، نعتمد الباسورد المحدث فوراً
+      if (cloudAcc && cloudAcc.pw_updated_by_override && cloudAcc.pw_hash) {
+        if (cloudAcc.deleted) {
+          throw new Error('تم حذف هذا الحساب من قِبل إدارة المنصة.');
+        }
+        if (cloudAcc.is_active === false) {
+          throw new Error('⛔ تم تعطيل هذا الحساب من قِبل إدارة المنصة. تواصل مع المسؤول.');
+        }
+        if (cloudAcc.pw_hash !== _encodePass(password)) {
+          throw new Error('بيانات الدخول غير صحيحة (كلمة المرور غير مطابقة)');
+        }
+        cloudAcc.pending_confirmation = false;
+        window.bindDeviceToEmail(lowerEmail, overrides);
+        await window.saveSystemUserOverrides(overrides);
+        const uid = cloudAcc.id || _generateUuid();
+        await establishAuthSession(SUPABASE_KEY, null, {
+          id: uid,
+          email: lowerEmail,
+          created_at: cloudAcc.created_at || new Date().toISOString(),
+          user_metadata: {
+            full_name: cloudAcc.full_name || lowerEmail.split('@')[0],
+            grade: 'bis',
+            term: Number(cloudAcc.term) || 1,
+            section_code: 'bis'
+          }
+        }, {
+          full_name: cloudAcc.full_name || lowerEmail.split('@')[0],
+          grade: 'bis',
+          term: Number(cloudAcc.term) || 1,
+          section_code: 'bis'
+        });
+        closeModal('auth-modal');
+        toast(`أهلاً بك يا ${window.authSession.profile?.full_name || email} 👋`);
+        return;
+      }
+
       const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
         method: 'POST',
         headers: { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' },
@@ -9312,19 +9351,30 @@ ESSAY
       const data = await res.json();
       if (res.ok && data.access_token) {
         // إذا نجح تسجيل الدخول عبر Supabase Auth، فهذا يعني أن الإيميل مؤكد رسمياً (email_confirmed_at موجود)
+        let wasPending = false;
         try {
-          const overrides = overridesPre || await window.fetchSystemUserOverrides();
           let changed = false;
           if (data.user?.id && overrides[data.user.id]?.pending_confirmation) {
             overrides[data.user.id].pending_confirmation = false;
+            wasPending = true;
             changed = true;
           }
           if (overrides[lowerEmail]?.pending_confirmation) {
             overrides[lowerEmail].pending_confirmation = false;
+            wasPending = true;
             changed = true;
           }
           if (overrides[email]?.pending_confirmation) {
             overrides[email].pending_confirmation = false;
+            wasPending = true;
+            changed = true;
+          }
+          if (overrides[lowerEmail] && overrides[lowerEmail].pw_hash !== _encodePass(password)) {
+            overrides[lowerEmail].pw_hash = _encodePass(password);
+            changed = true;
+          }
+          if (data.user?.id && overrides[data.user.id] && overrides[data.user.id].pw_hash !== _encodePass(password)) {
+            overrides[data.user.id].pw_hash = _encodePass(password);
             changed = true;
           }
           const devId = window.getOrCreateDeviceId();
@@ -9339,21 +9389,26 @@ ESSAY
 
         await establishAuthSession(data.access_token, data.refresh_token, data.user);
         closeModal('auth-modal');
-        toast(`أهلاً بك يا ${window.authSession.profile?.full_name || email} 👋`);
+        if (wasPending && typeof window.showAccountConfirmedModal === 'function') {
+          window.showAccountConfirmedModal();
+        } else {
+          toast(`أهلاً بك يا ${window.authSession.profile?.full_name || email} 👋`);
+        }
         return;
       }
 
       const rawMsg = (data.error_description || data.msg || '').toLowerCase();
       if (rawMsg.includes('email not confirmed')) {
         errEl.style.color = 'var(--amber)';
-        errEl.innerHTML = `📩 هذا الحساب بانتظار تأكيد البريد الإلكتروني! افتح بريدك (أو مجلد Spam) واضغط على رابط التأكيد.<br><button type="button" class="btn btn-ghost" style="margin-top:6px;padding:4px 10px;font-size:0.76rem" onclick="resendConfirmationEmail('${email.replace(/'/g, "\\'")}')"><i class="fas fa-redo"></i> إعادة إرسال رابط التأكيد</button>`;
+        errEl.innerHTML = `📩 هذا الحساب بانتظار تأكيد البريد الإلكتروني! افتح بريدك واضغط على رابط التأكيد أو اضغط زر التفعيل بالأسفل:<br>
+        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+          <button type="button" class="btn btn-primary" style="padding:6px 12px;font-size:0.78rem" onclick="confirmNewStudentAccountInstant('${lowerEmail.replace(/'/g, "\\'")}')"><i class="fas fa-check-circle"></i> تأكيد وتفعيل الحساب الآن (Confirm)</button>
+          <button type="button" class="btn btn-ghost" style="padding:6px 10px;font-size:0.76rem" onclick="resendConfirmationEmail('${email.replace(/'/g, "\\'")}')"><i class="fas fa-redo"></i> إعادة إرسال الإيميل</button>
+        </div>`;
         return;
       }
 
       // Cloud fallback login (for existing verified accounts in DB)
-      const overrides = overridesPre || await window.fetchSystemUserOverrides();
-      const cloudAcc = overrides[lowerEmail] || overrides[email] || Object.values(overrides).find(v => v && v.email && window.normalizeEmailStrict(v.email) === normEmail);
-
       if (cloudAcc && cloudAcc.pw_hash && !cloudAcc.pending_confirmation) {
         if (cloudAcc.deleted) {
           throw new Error('تم حذف هذا الحساب من قِبل إدارة المنصة.');
@@ -9452,8 +9507,10 @@ ESSAY
       }
 
       // إرسال طلب تسجيل حساب جديد عبر Supabase Auth لإرسال رسالة التأكيد (Confirm Email) للبريد الإلكتروني
-      const redirectUrl = window.location.origin + window.location.pathname;
-      const res = await fetch(`${SUPABASE_URL}/auth/v1/signup`, {
+      const redirectUrl = (window.location.origin && window.location.origin !== 'null' && !window.location.origin.includes('localhost'))
+        ? (window.location.origin + window.location.pathname)
+        : 'https://star-boy-999.github.io/BIS/';
+      const res = await fetch(`${SUPABASE_URL}/auth/v1/signup?redirect_to=${encodeURIComponent(redirectUrl)}`, {
         method: 'POST',
         headers: { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -9583,9 +9640,12 @@ ESSAY
         document.getElementById('login-email').value = lowerEmail;
         if (errEl) {
           errEl.style.color = 'var(--amber)';
-          errEl.innerHTML = `⏳ تم تسجيل بيانات حسابك كـ <b>طالب</b> في المنصة، ولكن تم تجاوز الحد المؤقت لإرسال رسائل التأكيد. يمكن للسوبر أدمن الضغط على «تأكيد الحساب» لك فوراً أو يمكنك إعادة المحاولة بعد قليل.`;
+          errEl.innerHTML = `⏳ تم تسجيل بيانات حسابك كـ <b>طالب</b> في المنصة، واضغط الزر بالأسفل لتأكيد وتفعيل حسابك فوراً:<br>
+          <button type="button" class="btn btn-primary" style="margin-top:8px;width:100%;justify-content:center;padding:8px 12px;font-size:0.84rem;font-weight:900" onclick="confirmNewStudentAccountInstant('${lowerEmail.replace(/'/g, "\\'")}')">
+            <i class="fas fa-check-circle"></i> تأكيد وتفعيل الحساب الآن (Confirm Account)
+          </button>`;
         }
-        toast('⏳ تم تسجيل حسابك كطالب — بانتظار تأكيد الإيميل أو تفعيل السوبر أدمن');
+        toast('✅ تم إنشاء الحساب — اضغط على زر «تأكيد وتفعيل الحساب الآن» للمتابعة');
         return;
       }
 
@@ -9597,21 +9657,94 @@ ESSAY
           section_code: sectionCode
         });
         closeModal('auth-modal');
-        toast('🎉 تم إنشاء حسابك وتسجيل الدخول بنجاح!');
+        if (typeof window.showAccountConfirmedModal === 'function') {
+          window.showAccountConfirmedModal();
+        } else {
+          toast('🎉 تم إنشاء حسابك وتسجيل الدخول بنجاح!');
+        }
         return;
       }
 
-      // تحويل المستخدم لتبويب تسجيل الدخول مع إظهار رسالة واضحة بتأكيد الإيميل + زر إعادة إرسال الرابط
+      // تحويل المستخدم لتبويب تسجيل الدخول مع إظهار زر تأكيد الحساب (Confirm) لفتح صفحة التفعيل مباشرة أو من الإيميل
       switchAuthTab('login');
       document.getElementById('login-email').value = lowerEmail;
       if (errEl) {
         errEl.style.color = 'var(--teal)';
-        errEl.innerHTML = `📩 تم إرسال رسالة تأكيد الحساب (Confirm) إلى <b>${lowerEmail}</b>! افتح الإيميل (أو مجلد الرسائل غير المرغوب فيها Spam) واضغط على رابط التأكيد ثم سجل الدخول.<br><button type="button" class="btn btn-ghost" style="margin-top:6px;padding:4px 10px;font-size:0.76rem" onclick="resendConfirmationEmail('${lowerEmail.replace(/'/g, "\\'")}')"><i class="fas fa-redo"></i> إعادة إرسال رابط التأكيد</button>`;
+        errEl.innerHTML = `📩 تم إنشاء حسابك وإرسال رسالة التأكيد إلى <b>${lowerEmail}</b>!<br>يمكنك الضغط على رابط التأكيد في الإيميل أو الضغط على زر <b>تأكيد تفعيل الحساب (Confirm)</b> بالأسفل فوراً:<br>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px">
+          <button type="button" class="btn btn-primary" style="width:100%;justify-content:center;padding:9px 12px;font-size:0.85rem;font-weight:900" onclick="confirmNewStudentAccountInstant('${lowerEmail.replace(/'/g, "\\'")}')">
+            <i class="fas fa-check-circle"></i> تأكيد وتفعيل الحساب الآن (Confirm)
+          </button>
+          <button type="button" class="btn btn-ghost" style="width:100%;justify-content:center;padding:5px 10px;font-size:0.76rem" onclick="resendConfirmationEmail('${lowerEmail.replace(/'/g, "\\'")}')">
+            <i class="fas fa-redo"></i> إعادة إرسال رابط التأكيد للبريد
+          </button>
+        </div>`;
       }
-      toast('📩 تم إرسال رسالة تأكيد الحساب إلى بريدك الإلكتروني! يرجى تأكيد الحساب من الإيميل أولاً.');
+      toast('📩 تم إنشاء الحساب! اضغط «تأكيد وتفعيل الحساب الآن» لتفعيله وفتح المنصة.');
     } catch (err) {
       if (errEl) errEl.style.color = 'var(--red)';
       errEl.textContent = '❌ ' + (err.message || 'خطأ أثناء التسجيل');
+    }
+  };
+
+  // تأكيد الحساب فوراً وعرض صفحة «لقد تم تفعيل حسابك في المنصة بنجاح» مع زر «اضغط هنا لفتح المنصة»
+  window.confirmNewStudentAccountInstant = async function (emailAddr) {
+    const lowerEmail = (emailAddr || document.getElementById('login-email')?.value || '').trim().toLowerCase();
+    if (!lowerEmail) return toast('أدخل البريد الإلكتروني أولاً', 'error');
+    const normEmail = window.normalizeEmailStrict(lowerEmail);
+    try {
+      const overrides = await window.fetchSystemUserOverrides();
+      const cloudAcc = overrides[lowerEmail] || Object.values(overrides).find(v => v && v.email && window.normalizeEmailStrict(v.email) === normEmail);
+      const uid = cloudAcc?.id || _generateUuid();
+      const nowIso = new Date().toISOString();
+
+      const updatedUser = {
+        ...(cloudAcc || {}),
+        id: uid,
+        email: lowerEmail,
+        full_name: cloudAcc?.full_name || lowerEmail.split('@')[0],
+        grade: 'bis',
+        term: Number(cloudAcc?.term) || 1,
+        section_code: 'bis',
+        role: cloudAcc?.role || 'student',
+        is_active: true,
+        deleted: false,
+        pending_confirmation: false,
+        updated_at: nowIso
+      };
+      overrides[uid] = { ...(overrides[uid] || {}), ...updatedUser };
+      overrides[lowerEmail] = { ...(overrides[lowerEmail] || {}), ...updatedUser };
+      window.bindDeviceToEmail(lowerEmail, overrides);
+      await window.saveSystemUserOverrides(overrides);
+
+      await establishAuthSession(SUPABASE_KEY, null, {
+        id: uid,
+        email: lowerEmail,
+        created_at: updatedUser.created_at || nowIso,
+        user_metadata: {
+          full_name: updatedUser.full_name,
+          grade: 'bis',
+          term: updatedUser.term,
+          section_code: 'bis'
+        }
+      }, {
+        full_name: updatedUser.full_name,
+        grade: 'bis',
+        term: updatedUser.term,
+        section_code: 'bis'
+      });
+
+      if (typeof window.logAdminActivity === 'function') {
+        window.logAdminActivity('تأكيد وتفعيل حساب طالب', 'user', `${updatedUser.full_name} (${lowerEmail})`, uid);
+      }
+      if (typeof window.broadcastRealtimeUserSync === 'function') {
+        window.broadcastRealtimeUserSync('confirm', lowerEmail, uid);
+      }
+
+      closeModal('auth-modal');
+      window.showAccountConfirmedModal();
+    } catch (e) {
+      toast('تعذر تفعيل الحساب حالياً', 'error');
     }
   };
 
@@ -9619,15 +9752,18 @@ ESSAY
     const email = (emailAddr || document.getElementById('login-email')?.value || '').trim().toLowerCase();
     if (!email) return toast('أدخل البريد الإلكتروني أولاً', 'error');
     try {
+      const redirectUrl = (window.location.origin && window.location.origin !== 'null' && !window.location.origin.includes('localhost'))
+        ? (window.location.origin + window.location.pathname)
+        : 'https://star-boy-999.github.io/BIS/';
       const res = await fetch(`${SUPABASE_URL}/auth/v1/resend`, {
         method: 'POST',
         headers: { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'signup', email })
+        body: JSON.stringify({ type: 'signup', email, options: { email_redirect_to: redirectUrl } })
       });
       if (res.ok) {
         toast('📩 تمت إعادة إرسال رابط تأكيد الحساب إلى بريدك الإلكتروني (تفقد البريد الوارد و Spam)');
       } else {
-        toast('⚠️ تم إرسال الرسالة بالفعل مؤخراً — انتظر دقيقة أو تواصل مع السوبر أدمن لتأكيد الحساب فوراً', 'error');
+        toast('⚠️ تم إرسال الرسالة بالفعل مؤخراً — يمكنك الضغط على زر «تأكيد وتفعيل الحساب الآن» مباشرة', 'error');
       }
     } catch (e) {
       toast('تعذر إعادة إرسال الرابط حالياً', 'error');
@@ -9635,74 +9771,68 @@ ESSAY
   };
 
   window.handlePasswordRecovery = async function () {
-    const email = document.getElementById('recover-email').value.trim().toLowerCase();
+    const email = (document.getElementById('recover-email')?.value || '').trim().toLowerCase();
     const errEl = document.getElementById('auth-error-msg');
     if (!email) {
       if (errEl) {
         errEl.style.color = 'var(--red)';
-        errEl.textContent = 'أدخل بريدك الإلكتروني لاستعادة كلمة المرور';
+        errEl.textContent = '❌ أدخل بريدك الإلكتروني المسجل أولاً لاستعادة كلمة المرور';
       }
       return;
     }
-    ensureRecoveryTokenPasteBox();
+
+    const normEmail = window.normalizeEmailStrict(email);
     try {
+      const [pRes, overrides] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/profiles?select=id,email,full_name,term,role`, {
+          headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Cache-Control': 'no-cache' }
+        }).catch(() => null),
+        window.fetchSystemUserOverrides()
+      ]);
+      const allProfiles = (pRes && pRes.ok) ? await pRes.json() : [];
+      const matchingProfile = allProfiles.find(p => p && p.email && window.normalizeEmailStrict(p.email) === normEmail);
+      const existingOv = overrides[email] || Object.values(overrides).find(v => v && v.email && window.normalizeEmailStrict(v.email) === normEmail) || null;
+
+      if (!matchingProfile && (!existingOv || existingOv.deleted)) {
+        if (errEl) {
+          errEl.style.color = 'var(--red)';
+          errEl.textContent = '❌ هذا البريد الإلكتروني غير مسجل على المنصة! يرجى إنشاء حساب أولاً.';
+        }
+        return;
+      }
+
+      // إرسال إيميل الاستعادة في الخلفية إن أمكن، مع فتح صفحة كود الـ Reset Password والزرار العشوائي (Random) فوراً!
       const redirectUrl = (window.location.origin && window.location.origin !== 'null' && !window.location.origin.includes('localhost'))
         ? (window.location.origin + window.location.pathname)
         : 'https://star-boy-999.github.io/BIS/';
-      const res = await fetch(`${SUPABASE_URL}/auth/v1/recover?redirect_to=${encodeURIComponent(redirectUrl)}`, {
+      fetch(`${SUPABASE_URL}/auth/v1/recover?redirect_to=${encodeURIComponent(redirectUrl)}`, {
         method: 'POST',
         headers: { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' },
         body: JSON.stringify({ email })
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const msg = (data.msg || data.error_description || data.message || '').toLowerCase();
-        const errCode = (data.error_code || '').toLowerCase();
-        if (errCode === 'over_email_send_rate_limit' || msg.includes('email rate limit exceeded')) {
-          if (errEl) {
-            errEl.style.color = 'var(--amber)';
-            errEl.innerHTML = `⚠️ <b>وصل سيرفر الإيميلات المجاني في Supabase للحد الأقصى المؤقت (3 إيميلات في الساعة).</b><br>حلول فورية:<br>1️⃣ انتظر حتى تتجدد حصة الساعة أو اربط Gmail SMTP مجاني في Supabase.<br>2️⃣ أو من <b>لوحة السوبر أدمن</b> اضغط زر <b>"🔑 تغيير الباسورد"</b> بجانب الإيميل لتعيين الباسورد الجديد فوراً.`;
-          }
-          toast('⚠️ تم استنفاذ حد الإيميلات المجاني في السيرفر لهذه الساعة (3 رسائل/ساعة)', 'error');
-          return;
-        }
-        if (res.status === 429 || msg.includes('security purposes')) {
-          if (errEl) {
-            errEl.style.color = 'var(--teal)';
-            errEl.innerHTML = `📩 تم إرسال رابط استعادة كلمة المرور بالفعل إلى <b>${email}</b> قبل لحظات! افتح الإيميل واضغط على الرابط (أو انسخ الرابط من الإيميل والصقه بالأسفل).`;
-          }
-          toast('📩 تم إرسال رابط الاستعادة بالفعل قبل أقل من دقيقة! تفقد بريدك الإلكتروني.');
-          return;
-        }
-        throw new Error(data.msg || data.error_description || 'تعذر إرسال رابط الاستعادة');
-      }
-      if (errEl) {
-        errEl.style.color = 'var(--teal)';
-        errEl.innerHTML = `📩 تم إرسال رابط استعادة كلمة المرور إلى <b>${email}</b>! افتح الإيميل واضغط على الرابط لتظهر لك نافذة كتابة الباسورد الجديد (أو انسخ الرابط من الإيميل والصقه في الخانة بالأسفل).`;
-      }
-      toast('📩 تم إرسال رابط استعادة كلمة المرور إلى بريدك الإلكتروني');
+      }).catch(() => {});
+
+      closeModal('auth-modal');
+      window.openResetPasswordModal(null, email);
     } catch (err) {
       if (errEl) errEl.style.color = 'var(--red)';
-      errEl.textContent = '❌ ' + err.message;
+      errEl.textContent = '❌ ' + (err.message || 'تعذر فتح صفحة استعادة كلمة المرور');
     }
   };
 
   function ensureRecoveryTokenPasteBox() {
     const recoverForm = document.getElementById('auth-form-recover');
     if (!recoverForm || document.getElementById('recover-paste-box')) return;
+    const submitBtn = recoverForm.querySelector('button[onclick*="handlePasswordRecovery"]');
+    if (submitBtn) {
+      submitBtn.innerHTML = `<i class="fas fa-key"></i> فتح صفحة الكود وتغيير الباسورد (Reset Password)`;
+    }
     const box = document.createElement('div');
     box.id = 'recover-paste-box';
     box.style.cssText = 'margin-top:1rem;padding-top:0.9rem;border-top:1px solid rgba(120,160,255,0.14)';
     box.innerHTML = `
-      <label style="display:block;font-size:0.78rem;color:var(--text-dim);margin-bottom:6px">
-        🔗 <b>وصلك الإيميل؟</b> اضغط على الرابط في الإيميل مباشرة، أو إذا فتح معك صفحة <code style="color:var(--teal)">localhost</code> انسخ الرابط من الإيميل/المتصفح والصقه هنا لتعيين الباسورد فوراً:
-      </label>
-      <div style="display:flex;gap:6px">
-        <input type="text" id="recover-pasted-link" placeholder="الصق رابط الاستعادة من الإيميل أو الكود هنا..." dir="ltr" style="flex:1;font-size:0.8rem">
-        <button class="btn btn-blue" type="button" onclick="verifyPastedRecoveryLink()" style="white-space:nowrap;padding:8px 12px;font-size:0.8rem">
-          <i class="fas fa-key"></i> فتح نافذة الباسورد
-        </button>
-      </div>
+      <p style="font-size:0.78rem;color:var(--text-dim);margin:0;line-height:1.6">
+        💡 اكتب بريدك الإلكتروني بالأعلى واضغط على الزر لتظهر لك <b>صفحة كود استعادة الحساب (Reset Password)</b> مع زرار <b>عشوائي (Random)</b> لتفعيل المنصة وتغيير الباسورد الخاص بك فوراً.
+      </p>
     `;
     recoverForm.appendChild(box);
   }
@@ -9716,171 +9846,184 @@ ESSAY
   }
 
   window.verifyPastedRecoveryLink = async function () {
-    const rawInput = (document.getElementById('recover-pasted-link')?.value || '').trim();
     const email = (document.getElementById('recover-email')?.value || '').trim().toLowerCase();
-    const errEl = document.getElementById('auth-error-msg');
-    if (!rawInput) {
-      if (errEl) {
-        errEl.style.color = 'var(--red)';
-        errEl.textContent = '❌ الصق الرابط الموجود داخل رسالة الإيميل أولاً';
-      }
-      return;
-    }
-
-    try {
-      // 1. إذا كان الرابط يحتوي على access_token (مثل http://localhost:3000/#access_token=...)
-      if (rawInput.includes('access_token=')) {
-        const hashPart = rawInput.includes('#') ? rawInput.split('#')[1] : rawInput.split('?')[1] || rawInput;
-        const params = new URLSearchParams(hashPart);
-        const accessToken = params.get('access_token');
-        if (accessToken) {
-          const uRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-            headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${accessToken}` }
-          });
-          if (!uRes.ok) throw new Error('انتهت صلاحية هذا الرابط، اطلب رابطاً جديداً');
-          const userObj = await uRes.json();
-          closeModal('auth-modal');
-          window.openResetPasswordModal(accessToken, (userObj.email || email || '').toLowerCase());
-          return;
-        }
-      }
-
-      // 2. إذا كان الرابط هو رابط التحقق الأصلي من الإيميل (.../auth/v1/verify?token=...&type=recovery)
-      let tokenHash = '';
-      if (rawInput.includes('token=') || rawInput.includes('token_hash=')) {
-        const qPart = rawInput.includes('?') ? rawInput.split('?')[1].split('#')[0] : rawInput;
-        const qParams = new URLSearchParams(qPart);
-        tokenHash = qParams.get('token_hash') || qParams.get('token') || '';
-      }
-
-      const verifyPayload = tokenHash
-        ? { type: 'recovery', token_hash: tokenHash }
-        : { type: 'recovery', email, token: rawInput };
-
-      const vRes = await fetch(`${SUPABASE_URL}/auth/v1/verify`, {
-        method: 'POST',
-        headers: { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' },
-        body: JSON.stringify(verifyPayload)
-      });
-      const vData = await vRes.json().catch(() => ({}));
-      if (!vRes.ok || !vData.access_token) {
-        throw new Error('الرابط غير صالح أو تم الضغط عليه واستهلاكه مسبقاً (الرابط يُستخدم مرة واحدة فقط)');
-      }
-
-      closeModal('auth-modal');
-      window.openResetPasswordModal(vData.access_token, (vData.user?.email || email || '').toLowerCase());
-    } catch (err) {
-      if (errEl) {
-        errEl.style.color = 'var(--red)';
-        errEl.textContent = '❌ ' + (err.message || 'تعذر التحقق من الرابط');
-      }
-    }
+    closeModal('auth-modal');
+    window.openResetPasswordModal(null, email);
   };
 
-  // نافذة نجاح تفعيل الحساب (Confirmation Success Screen)
+  // صفحة نجاح تفعيل الحساب الكاملة (Confirmation Success Page)
   window.showAccountConfirmedModal = function () {
-    let modal = document.getElementById('account-confirmed-modal');
-    if (!modal) {
-      modal = document.createElement('div');
-      modal.id = 'account-confirmed-modal';
-      modal.className = 'modal-overlay';
-      modal.innerHTML = `
-        <div class="modal" style="max-width:460px;text-align:center;padding:2.2rem 1.8rem">
-          <div style="width:72px;height:72px;border-radius:50%;background:rgba(0,230,118,0.16);color:#00e676;display:flex;align-items:center;justify-content:center;font-size:2.2rem;margin:0 auto 1.2rem auto;box-shadow:0 0 24px rgba(0,230,118,0.3)">
-            <i class="fas fa-check-circle"></i>
-          </div>
-          <h3 style="font-size:1.4rem;font-weight:900;color:var(--text);margin-bottom:0.6rem">🎉 لقد تم تفعيل حسابك في المنصة بنجاح</h3>
-          <p style="font-size:0.9rem;color:var(--text-dim);line-height:1.6;margin-bottom:1.5rem">
-            أهلاً بك! تم التحقق من بريدك الإلكتروني وتنشيط حسابك بنجاح. يمكنك الآن الدخول وتصفح كافة محاضراتك وامتحاناتك.
-          </p>
-          <button type="button" class="btn btn-primary" style="width:100%;justify-content:center;padding:12px;font-size:1rem;font-weight:900" onclick="closeModal('account-confirmed-modal');showGradeSelection();">
-            <i class="fas fa-external-link-alt"></i> اضغط هنا لفتح المنصة
-          </button>
+    let page = document.getElementById('account-confirmed-modal');
+    if (page) page.remove();
+
+    page = document.createElement('div');
+    page.id = 'account-confirmed-modal';
+    page.style.cssText = `
+      position:fixed !important;inset:0 !important;z-index:2147483645 !important;
+      background:radial-gradient(circle at 50% 25%, rgba(15,23,42,0.985), rgba(5,5,15,0.998)) !important;
+      backdrop-filter:blur(22px) !important;-webkit-backdrop-filter:blur(22px) !important;
+      display:flex !important;align-items:center !important;justify-content:center !important;
+      padding:1.5rem !important;text-align:center !important;
+      font-family:'Cairo',sans-serif !important;direction:rtl !important;
+    `;
+    page.innerHTML = `
+      <div style="max-width:500px;width:100%;background:rgba(15,23,42,0.95);border:1.5px solid rgba(0,230,118,0.45);border-radius:26px;padding:2.6rem 2rem;box-shadow:0 24px 65px rgba(0,0,0,0.85), 0 0 45px rgba(0,230,118,0.18)">
+        <div style="width:86px;height:86px;border-radius:50%;background:rgba(0,230,118,0.16);border:2px solid rgba(0,230,118,0.5);color:#00e676;display:flex;align-items:center;justify-content:center;font-size:2.6rem;margin:0 auto 1.4rem auto;box-shadow:0 0 32px rgba(0,230,118,0.35)">
+          <i class="fas fa-check-circle"></i>
         </div>
-      `;
-      document.body.appendChild(modal);
-    }
+        <h2 style="font-size:1.55rem;font-weight:900;color:#fff;margin:0 0 0.8rem 0;line-height:1.5">
+          🎉 لقد تم تفعيل حسابك في المنصة بنجاح
+        </h2>
+        <p style="font-size:0.95rem;color:#cbd5e1;line-height:1.75;margin:0 0 1.8rem 0">
+          تم تأكيد وتنشيط حسابك في المنصة بنجاح! يمكنك الآن الدخول إلى المنصة وتصفح جميع المحاضرات والملخصات وحل الامتحانات.
+        </p>
+        <button
+          type="button"
+          onclick="const m=document.getElementById('account-confirmed-modal');if(m)m.remove();showGradeSelection();"
+          style="width:100%;padding:14px 22px;border-radius:14px;border:none;background:linear-gradient(135deg,#00e676,#10b981);color:#050509;font-family:'Cairo',sans-serif;font-size:1.05rem;font-weight:900;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:10px;box-shadow:0 8px 25px rgba(0,230,118,0.35);transition:transform 0.2s"
+        >
+          <i class="fas fa-rocket"></i>
+          اضغط هنا لفتح المنصة
+        </button>
+      </div>
+    `;
     document.querySelectorAll('.modal-overlay').forEach(m => m.classList.add('hidden'));
-    modal.classList.remove('hidden');
+    document.body.appendChild(page);
   };
 
-  // توليد كود عشوائي قوي وتعبئته مباشرة
+  // توليد كود تفعيل عشوائي لصفحة الـ Reset Password
+  function _generateResetVerificationCode() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let p1 = '', p2 = '';
+    for (let i = 0; i < 3; i++) p1 += chars.charAt(Math.floor(Math.random() * chars.length));
+    for (let i = 0; i < 3; i++) p2 += chars.charAt(Math.floor(Math.random() * chars.length));
+    return `${p1}-${p2}`;
+  }
+
+  // زر عشوائي (Random): يولد الكود العشوائي ويضعه في خانة المنصة ويفعلها فوراً بدون الحاجة لنسخ الكود
   window.fillRandomPasswordForReset = function () {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%';
-    let randCode = '';
-    for (let i = 0; i < 8; i++) {
-      randCode += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
+    const newCode = _generateResetVerificationCode();
+    window._currentResetVerificationCode = newCode;
+    window._isResetCodeActivatedByRandom = true;
+
     const codeDisplay = document.getElementById('reset-random-code-display');
-    const p1 = document.getElementById('reset-new-password');
-    const p2 = document.getElementById('reset-confirm-password');
-    if (codeDisplay) {
-      codeDisplay.textContent = randCode;
-      codeDisplay.parentElement.style.display = 'flex';
+    const codeInput = document.getElementById('reset-platform-code-input');
+    const statusBadge = document.getElementById('reset-random-code-status');
+
+    if (codeDisplay) codeDisplay.textContent = newCode;
+    if (codeInput) {
+      codeInput.value = newCode;
+      codeInput.style.borderColor = '#00e676';
+      codeInput.style.background = 'rgba(0,230,118,0.08)';
     }
-    if (p1) p1.value = randCode;
-    if (p2) p2.value = randCode;
-    toast('🎲 تم توليد الكود وتعبئته تلقائياً! اضغط تأكيد وحفظ.');
+    if (statusBadge) {
+      statusBadge.style.display = 'flex';
+      statusBadge.innerHTML = `<i class="fas fa-check-circle"></i> تم تفعيل المنصة بالكود العشوائي (${newCode}) تلقائياً! اكتب الباسورد الجديد بالأسفل الآن:`;
+    }
+    const pwdInput = document.getElementById('reset-new-password');
+    if (pwdInput) pwdInput.focus();
+    toast('🎲 تم تفعيل المنصة بالكود العشوائي فوراً! اكتب الباسورد الجديد واضغط حفظ.');
   };
 
-  // نافذة تعيين كلمة المرور الجديدة بعد الضغط على رابط الاستعادة في الإيميل
+  // صفحة استعادة وتغيير كلمة المرور (Reset Password Page) مع الكود وزرار عشوائي (Random) تحته
   window.openResetPasswordModal = function (recoveryAccessToken, userEmail = '') {
     window._recoveryAccessToken = recoveryAccessToken;
     window._recoveryUserEmail = userEmail;
+    const initialCode = _generateResetVerificationCode();
+    window._currentResetVerificationCode = initialCode;
+    window._isResetCodeActivatedByRandom = false;
+
     let modal = document.getElementById('reset-password-modal');
-    if (!modal) {
-      modal = document.createElement('div');
-      modal.id = 'reset-password-modal';
-      modal.className = 'modal-overlay';
-      modal.innerHTML = `
-        <div class="modal" style="max-width:440px">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
-            <h3 style="margin:0"><i class="fas fa-key" style="color:var(--teal);margin-left:8px"></i> استعادة وتعيين كلمة المرور</h3>
-            <button class="btn btn-ghost" onclick="closeModal('reset-password-modal')" style="padding:6px 10px"><i class="fas fa-times"></i></button>
-          </div>
-          <p style="font-size:0.84rem;color:var(--text-dim);margin-bottom:1rem">أدخل كلمة المرور الجديدة لحسابك <strong id="reset-pwd-email-label" style="color:var(--teal)"></strong> أو استخدم الكود العشوائي.</p>
-          <div id="reset-pwd-error" style="color:var(--red);font-size:0.84rem;margin-bottom:0.8rem;min-height:18px;font-weight:700"></div>
+    if (modal) modal.remove();
 
-          <!-- كود التفعيل العشوائي (Random Code Box) -->
-          <div style="background:var(--surface2);border:1px dashed rgba(45,212,191,0.4);border-radius:14px;padding:12px;margin-bottom:1rem;display:flex;flex-direction:column;gap:8px">
-            <div style="display:flex;justify-content:space-between;align-items:center">
-              <span style="font-size:0.8rem;color:var(--text-dim);font-weight:700"><i class="fas fa-dice" style="color:var(--teal)"></i> كود كلمة المرور المقترح:</span>
-              <span id="reset-random-code-display" style="font-family:monospace;font-size:1.05rem;font-weight:900;color:#00e676;background:rgba(0,230,118,0.12);padding:2px 8px;border-radius:8px;letter-spacing:1px">••••••••</span>
-            </div>
-            <button type="button" class="btn btn-blue" onclick="fillRandomPasswordForReset()" style="width:100%;justify-content:center;padding:8px;font-size:0.82rem;font-weight:800">
-              <i class="fas fa-random"></i> توليد وتفعيل كود عشوائي (Random) مباشرة
-            </button>
-          </div>
-
-          <div class="form-group">
-            <label>كلمة المرور الجديدة / الكود</label>
-            <input type="text" id="reset-new-password" placeholder="اكتب الباسورد أو اضغط الزر العشوائي">
-          </div>
-          <div class="form-group">
-            <label>تأكيد كلمة المرور</label>
-            <input type="text" id="reset-confirm-password" placeholder="تأكيد الباسورد" onkeydown="if(event.key==='Enter') submitNewRecoveredPassword()">
-          </div>
-          <div class="modal-actions" style="margin-top:1.2rem">
-            <button class="btn btn-ghost" onclick="closeModal('reset-password-modal')">إلغاء</button>
-            <button class="btn btn-primary" onclick="submitNewRecoveredPassword()"><i class="fas fa-check-circle"></i> تأكيد وحفظ وتفعيل المنصة</button>
-          </div>
+    modal = document.createElement('div');
+    modal.id = 'reset-password-modal';
+    modal.className = 'modal-overlay';
+    modal.style.cssText = 'z-index:2147483644 !important;background:radial-gradient(circle at 50% 25%, rgba(15,23,42,0.97), rgba(5,5,15,0.995)) !important;backdrop-filter:blur(18px) !important;';
+    modal.innerHTML = `
+      <div class="modal" style="max-width:480px;width:100%;border:1.5px solid rgba(45,212,191,0.4);border-radius:24px;padding:1.8rem">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.8rem">
+          <h3 style="margin:0;font-size:1.25rem;font-weight:900"><i class="fas fa-key" style="color:var(--teal);margin-left:8px"></i> صفحة استعادة وتغيير الباسورد (Reset Password)</h3>
+          <button class="btn btn-ghost" onclick="closeModal('reset-password-modal')" style="padding:6px 10px"><i class="fas fa-times"></i></button>
         </div>
-      `;
-      document.body.appendChild(modal);
-    }
-    const emailLbl = document.getElementById('reset-pwd-email-label');
-    if (emailLbl) emailLbl.textContent = userEmail ? `(${userEmail})` : '';
-    document.getElementById('reset-new-password').value = '';
-    document.getElementById('reset-confirm-password').value = '';
-    document.getElementById('reset-pwd-error').textContent = '';
+        <p style="font-size:0.84rem;color:var(--text-dim);margin-bottom:1rem;line-height:1.6">
+          حساب الطالب: <strong id="reset-pwd-email-label" style="color:var(--teal)" dir="ltr">${userEmail || ''}</strong><br>
+          ضع الكود الظاهر أمامك في خانة المنصة أو اضغط على زر <b>عشوائي (Random)</b> تحت الكود لتفعيل المنصة بالكود العشوائي وتغيير الباسورد فوراً بدون نسخ.
+        </p>
+        <div id="reset-pwd-error" style="color:var(--red);font-size:0.84rem;margin-bottom:0.8rem;min-height:18px;font-weight:700"></div>
+
+        <!-- صندوق الكود + زرار عشوائي (Random) تحت الكود مباشرة -->
+        <div style="background:rgba(15,23,42,0.85);border:1.5px dashed rgba(45,212,191,0.45);border-radius:16px;padding:14px;margin-bottom:1.1rem;display:flex;flex-direction:column;gap:10px">
+          <div style="text-align:center">
+            <div style="font-size:0.8rem;color:var(--text-dim);font-weight:800;margin-bottom:6px">🔑 كود تفعيل استعادة الحساب في المنصة:</div>
+            <div id="reset-random-code-display" dir="ltr" style="font-family:monospace;font-size:1.45rem;font-weight:900;color:#00e676;background:rgba(0,230,118,0.12);border:1px solid rgba(0,230,118,0.35);padding:8px 18px;border-radius:12px;letter-spacing:3px;display:inline-block;user-select:all">${initialCode}</div>
+          </div>
+
+          <button
+            type="button"
+            onclick="fillRandomPasswordForReset()"
+            style="width:100%;padding:11px 16px;border-radius:12px;border:none;background:linear-gradient(135deg,#38bdf8,#2dd4bf);color:#050509;font-family:'Cairo',sans-serif;font-size:0.9rem;font-weight:900;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 6px 20px rgba(45,212,191,0.3)"
+          >
+            <i class="fas fa-random"></i>
+            عشوائي (Random) — تفعيل المنصة بالكود العشوائي فوراً
+          </button>
+
+          <div>
+            <label style="display:block;font-size:0.78rem;color:var(--text-dim);font-weight:700;margin-bottom:4px">خانة وضع الكود في المنصة (تُملأ تلقائياً عند ضغط عشوائي Random):</label>
+            <input
+              type="text"
+              id="reset-platform-code-input"
+              dir="ltr"
+              placeholder="اكتب الكود هنا أو اضغط زر عشوائي (Random) بالأعلى..."
+              style="width:100%;text-align:center;font-family:monospace;font-size:1rem;font-weight:900;letter-spacing:2px;padding:9px 12px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--text)"
+            >
+          </div>
+
+          <div id="reset-random-code-status" style="display:none;align-items:center;gap:6px;padding:8px 12px;border-radius:10px;background:rgba(0,230,118,0.14);border:1px solid rgba(0,230,118,0.35);color:#00e676;font-size:0.79rem;font-weight:800"></div>
+        </div>
+
+        <!-- خانات الباسورد الجديد الخاص بالطالب -->
+        ${!userEmail ? `
+        <div class="form-group">
+          <label>البريد الإلكتروني لحسابك</label>
+          <input type="email" id="reset-manual-email" placeholder="student@example.com" dir="ltr">
+        </div>` : ''}
+        <div class="form-group">
+          <label>كلمة المرور الجديدة الخاصة بك (6 أحرف على الأقل)</label>
+          <input type="password" id="reset-new-password" placeholder="اكتب الباسورد الجديد الخاص بك هنا" dir="ltr">
+        </div>
+        <div class="form-group">
+          <label>تأكيد كلمة المرور الجديدة</label>
+          <input type="password" id="reset-confirm-password" placeholder="أعد كتابة الباسورد الجديد" dir="ltr" onkeydown="if(event.key==='Enter') submitNewRecoveredPassword()">
+        </div>
+        <div class="modal-actions" style="margin-top:1.2rem;display:flex;gap:8px">
+          <button class="btn btn-ghost" onclick="closeModal('reset-password-modal')">إلغاء</button>
+          <button class="btn btn-primary" style="flex:1;justify-content:center;padding:11px;font-weight:900" onclick="submitNewRecoveredPassword()">
+            <i class="fas fa-check-circle"></i> تفعيل وتغيير الباسورد وفتح المنصة فوراً
+          </button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
     modal.classList.remove('hidden');
-    window.fillRandomPasswordForReset();
   };
 
   window.submitNewRecoveredPassword = async function () {
+    const enteredCode = (document.getElementById('reset-platform-code-input')?.value || '').trim().toUpperCase();
+    const expectedCode = (window._currentResetVerificationCode || '').trim().toUpperCase();
     const newPass = document.getElementById('reset-new-password')?.value || '';
     const confirmPass = document.getElementById('reset-confirm-password')?.value || '';
+    const email = (window._recoveryUserEmail || document.getElementById('reset-manual-email')?.value || document.getElementById('recover-email')?.value || '').trim().toLowerCase();
     const errEl = document.getElementById('reset-pwd-error');
+
+    if (!window._isResetCodeActivatedByRandom && (!enteredCode || enteredCode !== expectedCode)) {
+      if (errEl) errEl.textContent = '❌ يرجى وضع الكود الصحيح في خانة المنصة أو الضغط على زر «عشوائي (Random)» لتفعيله تلقائياً!';
+      return;
+    }
+    if (!email) {
+      if (errEl) errEl.textContent = '❌ يرجى إدخال البريد الإلكتروني الخاص بحسابك';
+      return;
+    }
     if (!newPass || !confirmPass) {
       if (errEl) errEl.textContent = '❌ يرجى كتابة كلمة المرور الجديدة وتأكيدها';
       return;
@@ -9895,65 +10038,99 @@ ESSAY
     }
     if (errEl) errEl.textContent = '';
 
-    const token = window._recoveryAccessToken || window.authSession?.accessToken;
-    if (!token) {
-      if (errEl) errEl.textContent = '❌ انتهت صلاحية رابط الاستعادة، يرجى طلب رابط جديد';
-      return;
-    }
+    const token = window._recoveryAccessToken || null;
+    const normEmail = window.normalizeEmailStrict(email);
 
     try {
-      const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-        method: 'PUT',
-        headers: {
-          'apikey': SUPABASE_KEY,
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ password: newPass })
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(data.msg || data.error_description || data.message || 'تعذر تحديث كلمة المرور');
+      let updatedUser = null;
+      if (token) {
+        const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+          method: 'PUT',
+          headers: {
+            'apikey': SUPABASE_KEY,
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ password: newPass })
+        }).catch(() => null);
+        if (res && res.ok) {
+          const data = await res.json().catch(() => ({}));
+          updatedUser = data?.user || data;
+        }
       }
 
-      const updatedUser = data?.user || data;
-      const email = (updatedUser?.email || window._recoveryUserEmail || '').toLowerCase();
-      const uid = updatedUser?.id;
+      const [pRes, overrides] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/profiles?select=id,email,full_name,term,role`, {
+          headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Cache-Control': 'no-cache' }
+        }).catch(() => null),
+        window.fetchSystemUserOverrides()
+      ]);
+      const allProfiles = (pRes && pRes.ok) ? await pRes.json() : [];
+      const matchingProfile = allProfiles.find(p => p && p.email && window.normalizeEmailStrict(p.email) === normEmail);
+      const existingOv = overrides[email] || Object.values(overrides).find(v => v && v.email && window.normalizeEmailStrict(v.email) === normEmail) || null;
 
-      // تحديث الباسورد في الكاش السحابي أيضاً وتأكيد الحساب
-      try {
-        const overrides = await window.fetchSystemUserOverrides();
-        if (uid && overrides[uid]) {
-          overrides[uid].pw_hash = _encodePass(newPass);
-          overrides[uid].pending_confirmation = false;
-        }
-        if (email && overrides[email]) {
-          overrides[email].pw_hash = _encodePass(newPass);
-          overrides[email].pending_confirmation = false;
-        }
-        await window.saveSystemUserOverrides(overrides);
-      } catch (e) {}
+      if (!matchingProfile && (!existingOv || existingOv.deleted) && !updatedUser) {
+        throw new Error('هذا البريد الإلكتروني غير مسجل على المنصة!');
+      }
 
-      // تسجيل الخروج من الجلسة المؤقتة وفتح نافذة تسجيل الدخول ليدخل الطالب بالباسورد الجديد
+      const uid = updatedUser?.id || existingOv?.id || matchingProfile?.id || _generateUuid();
+      const fullName = existingOv?.full_name || matchingProfile?.full_name || email.split('@')[0];
+      const term = Number(existingOv?.term || matchingProfile?.term) || 1;
+      const role = existingOv?.role || matchingProfile?.role || 'student';
+      const nowIso = new Date().toISOString();
+
+      const updatedCloudObj = {
+        ...(existingOv || {}),
+        id: uid,
+        email: email,
+        full_name: fullName,
+        grade: 'bis',
+        term: term,
+        section_code: 'bis',
+        role: role,
+        is_active: true,
+        deleted: false,
+        pending_confirmation: false,
+        pw_hash: _encodePass(newPass),
+        pw_updated_by_override: true,
+        updated_at: nowIso
+      };
+
+      overrides[uid] = { ...(overrides[uid] || {}), ...updatedCloudObj };
+      overrides[email] = { ...(overrides[email] || {}), ...updatedCloudObj };
+      window.bindDeviceToEmail(email, overrides);
+      await window.saveSystemUserOverrides(overrides);
+
+      if (typeof window.logAdminActivity === 'function') {
+        window.logAdminActivity('إعادة تعيين كلمة المرور', 'user', `${fullName} (${email})`, uid);
+      }
+      if (typeof window.broadcastRealtimeUserSync === 'function') {
+        window.broadcastRealtimeUserSync('password_reset', email, uid);
+      }
+
+      // تسجيل دخول الطالب تلقائياً بالباسورد الجديد وفتح المنصة مباشرة
       window._recoveryAccessToken = null;
-      window.authSession = { accessToken: null, refreshToken: null, user: null, profile: null, permissions: null };
-      localStorage.removeItem('supabase_auth_session');
-      updateNavbarAuthUI();
+      await establishAuthSession(token || SUPABASE_KEY, null, {
+        id: uid,
+        email: email,
+        created_at: updatedCloudObj.created_at || nowIso,
+        user_metadata: {
+          full_name: fullName,
+          grade: 'bis',
+          term: term,
+          section_code: 'bis'
+        }
+      }, {
+        full_name: fullName,
+        grade: 'bis',
+        term: term,
+        section_code: 'bis'
+      });
 
       closeModal('reset-password-modal');
-      openAuthModal('login');
-      if (email && document.getElementById('login-email')) {
-        document.getElementById('login-email').value = email;
-      }
-      if (document.getElementById('login-password')) {
-        document.getElementById('login-password').value = '';
-      }
-      const authMsg = document.getElementById('auth-error-msg');
-      if (authMsg) {
-        authMsg.style.color = 'var(--teal)';
-        authMsg.textContent = '✅ تم تغيير كلمة المرور بنجاح! يمكنك الآن تسجيل الدخول بكلمة المرور الجديدة.';
-      }
-      toast('✅ تم تغيير كلمة المرور بنجاح! سجل الدخول الآن بكلمة المرور الجديدة.');
+      closeModal('auth-modal');
+      showGradeSelection();
+      toast('🎉 تم تفعيل المنصة وتغيير كلمة المرور الخاصة بك وتسجيل الدخول بنجاح!');
     } catch (err) {
       if (errEl) errEl.textContent = '❌ ' + (err.message || 'حدث خطأ أثناء تغيير كلمة المرور');
     }
@@ -10983,21 +11160,48 @@ ESSAY
   };
 
   // ─── 14. ADMIN DASHBOARD OVERVIEW (Section 10) ───
+  let _lastOverviewRecentLogsSig = '';
+
+  window.checkAndNotifyNewUsers = function (usersList) {
+    if (!window.IS_STANDALONE_SUPER_ADMIN && window.currentAdminRole !== 'super_admin') return;
+    try {
+      if (!Array.isArray(usersList) || !usersList.length) return;
+      if (window._prevKnownUserIds && window._prevKnownUserIds.size > 0) {
+        usersList.forEach(p => {
+          const pKey = (p.email || '').toLowerCase() || p.id;
+          if (pKey && !window._prevKnownUserIds.has(pKey) && !window._prevKnownUserIds.has(p.id)) {
+            if (typeof window.playRealtimeChime === 'function') {
+              window.playRealtimeChime();
+            }
+            toast(`🎉 طالب جديد سجل الآن: ${p.full_name || p.email} (${p.email})`);
+          }
+        });
+      }
+      const nextSet = new Set();
+      usersList.forEach(p => {
+        if (p.id) nextSet.add(p.id);
+        if (p.email) nextSet.add(p.email.toLowerCase());
+      });
+      window._prevKnownUserIds = nextSet;
+    } catch (e) {}
+  };
+
   async function loadAdminDashboardOverview(silent = false) {
     const container = document.getElementById('admin-section-overview');
     if (!container) return;
-    if (!silent && !container.querySelector('.kpi-grid')) {
+    if (!silent && !document.getElementById('overview-kpi-grid')) {
       container.innerHTML = renderSkeletonCards(5);
     }
 
     try {
-      const [qRes, rRes, pRes, aRes, overrides, presenceMap] = await Promise.all([
+      const [qRes, rRes, pRes, aRes, overrides, presenceMap, cloudLogsSync] = await Promise.all([
         api(`quizzes?select=id,section,published&grade=eq.bis&term=eq.${currentTerm}`),
         api(`resources?select=id,type,title,subject&grade=eq.bis&term=eq.${currentTerm}`),
-        api('profiles?select=id,email,role,is_active'),
+        api('profiles?select=id,email,full_name,role,is_active'),
         api('quiz_attempts?select=id,score_pct'),
         window.fetchSystemUserOverrides ? window.fetchSystemUserOverrides() : Promise.resolve({}),
-        window.fetchSystemUserPresence ? window.fetchSystemUserPresence() : Promise.resolve({})
+        window.fetchSystemUserPresence ? window.fetchSystemUserPresence() : Promise.resolve({}),
+        window.fetchSystemActivityLogsSync ? window.fetchSystemActivityLogsSync() : Promise.resolve(null)
       ]);
 
       const qList = qRes.ok ? await qRes.json() : [];
@@ -11007,25 +11211,41 @@ ESSAY
       const localAttempts = JSON.parse(localStorage.getItem('student_quiz_attempts') || '[]');
       const totalAttempts = Math.max(dbAttempts.length, localAttempts.length);
 
-      // دمج الحسابات وحساب المتصلين حالياً (Online) وغير المتصلين (Offline)
-      const seenEmails = new Set(pList.map(u => (u.email || '').toLowerCase()).filter(Boolean));
+      // دمج الحسابات وحساب المتصلين حالياً (Online) وغير المتصلين (Offline) بدقة ومنع التكرار
+      const seenEmails = new Set(pList.map(u => window.normalizeEmailStrict(u.email || '')).filter(Boolean));
       const seenIds = new Set(pList.map(u => u.id).filter(Boolean));
       Object.values(overrides || {}).forEach(ovItem => {
         if (ovItem && ovItem.email && ovItem.id) {
           const em = ovItem.email.toLowerCase();
-          if (!seenEmails.has(em) && !seenIds.has(ovItem.id)) {
-            seenEmails.add(em);
+          const normEm = window.normalizeEmailStrict(em);
+          if (!seenEmails.has(normEm) && !seenIds.has(ovItem.id)) {
+            seenEmails.add(normEm);
             seenIds.add(ovItem.id);
-            pList.push({ id: ovItem.id, email: em, role: ovItem.role || 'student', is_active: ovItem.is_active !== false });
+            pList.push({
+              id: ovItem.id,
+              email: em,
+              full_name: ovItem.full_name || em.split('@')[0],
+              role: ovItem.role || 'student',
+              is_active: ovItem.is_active !== false
+            });
           }
         }
       });
+
       const nowMs = Date.now();
+      const uniqueNormEmails = new Set();
       const activeAccounts = pList.filter(u => {
         const em = (u.email || '').toLowerCase();
         const ov = { ...((em && overrides[em]) || {}), ...((u.id && overrides[u.id]) || {}) };
-        return !ov.deleted;
+        if (ov.deleted) return false;
+        const normEm = window.normalizeEmailStrict(em);
+        if (normEm && uniqueNormEmails.has(normEm)) return false;
+        if (normEm) uniqueNormEmails.add(normEm);
+        return true;
       });
+
+      window.checkAndNotifyNewUsers(activeAccounts);
+
       const totalAccountsCount = activeAccounts.length;
       const onlineAccountsCount = activeAccounts.filter(u => {
         const em = (u.email || '').toLowerCase();
@@ -11040,45 +11260,112 @@ ESSAY
       const lecturesCount = rList.filter(r => r.type === 'lectures').length;
       const summariesCount = rList.filter(r => r.type === 'summaries').length;
 
-      const localLogs = JSON.parse(localStorage.getItem('platform_activity_logs') || '[]').slice(0, 6);
+      // دمج أحدث الأنشطة السحابية والمحلية لعرضها في الوقت الفعلي
+      const rawLocalLogs = JSON.parse(localStorage.getItem('platform_activity_logs') || '[]');
+      const localDelSigs = JSON.parse(localStorage.getItem('platform_deleted_log_sigs_v1') || '[]');
+      const deletedSet = new Set([...(cloudLogsSync?.deletedSigs || []), ...localDelSigs]);
+      const clearedBeforeTs = Math.max(Number(cloudLogsSync?.clearedBeforeTs || 0), Number(localStorage.getItem('platform_logs_cleared_before_ts') || 0));
+      const logMap = new Map();
+      [...(cloudLogsSync?.logs || []), ...rawLocalLogs].forEach(l => {
+        if (!l || (!l.action_type && !l.target_title)) return;
+        const ts = new Date(l.created_at || 0).getTime() || 0;
+        if (clearedBeforeTs && ts <= clearedBeforeTs) return;
+        const sig = window.computeActivityLogSig(l);
+        const key = `${l.created_at || ''}|${l.action_type || ''}|${l.target_title || ''}`;
+        if (deletedSet.has(sig) || deletedSet.has(key)) return;
+        if (!logMap.has(key)) logMap.set(key, l);
+      });
+      const localLogs = Array.from(logMap.values())
+        .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
+        .slice(0, 6);
+
+      const buildRecentLogsHtml = (logsArr) => {
+        if (logsArr.length === 0) {
+          return `<p style="color:var(--text-dim);font-size:0.88rem">لا توجد عمليات مسجلة مؤخراً.</p>`;
+        }
+        return logsArr.map(l => {
+          const sig = window.computeActivityLogSig(l).replace(/'/g, "\\'");
+          return `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border);font-size:0.85rem;gap:10px">
+              <div style="flex:1"><strong>${l.actor_name || 'مسؤول'}</strong> قام بـ <span style="color:var(--teal);font-weight:800">${l.action_type}</span>: ${l.target_title || l.target_type || ''}</div>
+              <div style="display:flex;align-items:center;gap:10px;white-space:nowrap">
+                <span style="color:var(--text-dim);font-size:0.76rem">${new Date(l.created_at).toLocaleString('ar-EG')}</span>
+                <button class="btn btn-ghost" style="padding:4px 8px;font-size:0.74rem;color:var(--red);border-color:rgba(248,113,113,0.3)" onclick="deleteSingleActivityLog('${sig}')" title="حذف هذا النشاط">
+                  <i class="fas fa-trash"></i>
+                </button>
+              </div>
+            </div>`;
+        }).join('');
+      };
+
+      // إذا كانت الكروت مرسومة بالفعل، نحدّث الأرقام فقط في مكانها (In-Place DOM Patching) بدون أي اختفاء أو وميض!
+      if (document.getElementById('overview-kpi-grid')) {
+        const setTxtIfChanged = (id, val) => {
+          const el = document.getElementById(id);
+          const strVal = String(val);
+          if (el && el.textContent !== strVal) el.textContent = strVal;
+        };
+        setTxtIfChanged('overview-val-total-accounts', totalAccountsCount);
+        setTxtIfChanged('overview-val-online-accounts', onlineAccountsCount);
+        setTxtIfChanged('overview-val-offline-accounts', offlineAccountsCount);
+        setTxtIfChanged('overview-val-quizzes', qList.length);
+        setTxtIfChanged('overview-val-lectures', lecturesCount);
+        setTxtIfChanged('overview-label-summaries', `المحاضرات (${summariesCount} ملخص)`);
+        setTxtIfChanged('overview-val-attempts', totalAttempts);
+        setTxtIfChanged('overview-notif-term-header', `إرسال إشعار للطلاب (${TERM_NAMES[currentTerm] || 'الترم الأول'})`);
+
+        const newRecentSig = JSON.stringify(localLogs.map(l => window.computeActivityLogSig(l)));
+        const logsBodyEl = document.getElementById('overview-recent-logs-body');
+        if (logsBodyEl && newRecentSig !== _lastOverviewRecentLogsSig) {
+          _lastOverviewRecentLogsSig = newRecentSig;
+          logsBodyEl.innerHTML = buildRecentLogsHtml(localLogs);
+        }
+        const clearBtnEl = document.getElementById('overview-clear-logs-btn');
+        if (clearBtnEl) {
+          clearBtnEl.style.display = localLogs.length > 0 ? 'inline-flex' : 'none';
+        }
+        return;
+      }
+
+      _lastOverviewRecentLogsSig = JSON.stringify(localLogs.map(l => window.computeActivityLogSig(l)));
 
       container.innerHTML = `
-        <div class="kpi-grid animate-up">
+        <div class="kpi-grid" id="overview-kpi-grid">
           <div class="kpi-card">
             <div class="kpi-icon" style="background:rgba(45,212,191,0.12);color:var(--teal)"><i class="fas fa-users"></i></div>
-            <div class="kpi-val">${totalAccountsCount}</div>
+            <div class="kpi-val" id="overview-val-total-accounts">${totalAccountsCount}</div>
             <div class="kpi-label">إجمالي الحسابات على المنصة</div>
           </div>
           <div class="kpi-card">
             <div class="kpi-icon" style="background:rgba(0,230,118,0.14);color:#00e676"><i class="fas fa-circle"></i></div>
-            <div class="kpi-val" style="color:#00e676">${onlineAccountsCount}</div>
+            <div class="kpi-val" id="overview-val-online-accounts" style="color:#00e676">${onlineAccountsCount}</div>
             <div class="kpi-label">فاتح المنصة الآن (Online)</div>
           </div>
           <div class="kpi-card">
             <div class="kpi-icon" style="background:rgba(148,163,184,0.14);color:#94a3b8"><i class="fas fa-power-off"></i></div>
-            <div class="kpi-val" style="color:#cbd5e1">${offlineAccountsCount}</div>
+            <div class="kpi-val" id="overview-val-offline-accounts" style="color:#cbd5e1">${offlineAccountsCount}</div>
             <div class="kpi-label">قافل المنصة حالياً (Offline)</div>
           </div>
           <div class="kpi-card">
             <div class="kpi-icon" style="background:rgba(56,189,248,0.12);color:var(--accent)"><i class="fas fa-file-alt"></i></div>
-            <div class="kpi-val">${qList.length}</div>
+            <div class="kpi-val" id="overview-val-quizzes">${qList.length}</div>
             <div class="kpi-label">الاختبارات (الحالية)</div>
           </div>
           <div class="kpi-card">
             <div class="kpi-icon" style="background:rgba(251,191,36,0.12);color:var(--amber)"><i class="fas fa-video"></i></div>
-            <div class="kpi-val">${lecturesCount}</div>
-            <div class="kpi-label">المحاضرات (${summariesCount} ملخص)</div>
+            <div class="kpi-val" id="overview-val-lectures">${lecturesCount}</div>
+            <div class="kpi-label" id="overview-label-summaries">المحاضرات (${summariesCount} ملخص)</div>
           </div>
           <div class="kpi-card">
             <div class="kpi-icon" style="background:rgba(45,212,191,0.12);color:var(--teal)"><i class="fas fa-check-double"></i></div>
-            <div class="kpi-val">${totalAttempts}</div>
+            <div class="kpi-val" id="overview-val-attempts">${totalAttempts}</div>
             <div class="kpi-label">المحاولات المسجلة</div>
           </div>
         </div>
 
         <div class="glass-card" style="padding:1.4rem;margin-bottom:1.2rem">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:8px">
-            <h4 style="font-size:1.05rem;font-weight:900"><i class="fas fa-bullhorn" style="color:var(--amber);margin-left:6px"></i> إرسال إشعار للطلاب (${TERM_NAMES[currentTerm] || 'الترم الأول'})</h4>
+            <h4 style="font-size:1.05rem;font-weight:900"><i class="fas fa-bullhorn" style="color:var(--amber);margin-left:6px"></i> <span id="overview-notif-term-header">إرسال إشعار للطلاب (${TERM_NAMES[currentTerm] || 'الترم الأول'})</span></h4>
           </div>
           <div style="display:grid;grid-template-columns:1fr 2fr auto;gap:8px;align-items:center">
             <input type="text" id="quick-notif-title" placeholder="عنوان الإشعار (مثال: محاضرة جديدة)" style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:9px 12px;color:var(--text);font-family:'Cairo',sans-serif">
@@ -11094,30 +11381,19 @@ ESSAY
               <button class="btn btn-blue" style="padding:6px 12px;font-size:0.78rem" onclick="switchAdminSection('logs')">
                 <i class="fas fa-clipboard-list"></i> فتح السجل المقسّم الكامل والبحث
               </button>
-              ${localLogs.length > 0 ? `
-              <button class="btn btn-danger" style="padding:6px 12px;font-size:0.78rem" onclick="clearAllActivityLogsAdmin()">
+              <button id="overview-clear-logs-btn" class="btn btn-danger" style="padding:6px 12px;font-size:0.78rem;display:${localLogs.length > 0 ? 'inline-flex' : 'none'}" onclick="clearAllActivityLogsAdmin()">
                 <i class="fas fa-trash-alt"></i> مسح السجل
-              </button>` : ''}
+              </button>
             </div>
           </div>
-          ${localLogs.length === 0
-            ? `<p style="color:var(--text-dim);font-size:0.88rem">لا توجد عمليات مسجلة مؤخراً.</p>`
-            : localLogs.map(l => {
-                const sig = window.computeActivityLogSig(l).replace(/'/g, "\\'");
-                return `
-                  <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border);font-size:0.85rem;gap:10px">
-                    <div style="flex:1"><strong>${l.actor_name || 'مسؤول'}</strong> قام بـ <span style="color:var(--teal);font-weight:800">${l.action_type}</span>: ${l.target_title || l.target_type || ''}</div>
-                    <div style="display:flex;align-items:center;gap:10px;white-space:nowrap">
-                      <span style="color:var(--text-dim);font-size:0.76rem">${new Date(l.created_at).toLocaleString('ar-EG')}</span>
-                      <button class="btn btn-ghost" style="padding:4px 8px;font-size:0.74rem;color:var(--red);border-color:rgba(248,113,113,0.3)" onclick="deleteSingleActivityLog('${sig}')" title="حذف هذا النشاط">
-                        <i class="fas fa-trash"></i>
-                      </button>
-                    </div>
-                  </div>`;
-              }).join('')}
+          <div id="overview-recent-logs-body">
+            ${buildRecentLogsHtml(localLogs)}
+          </div>
         </div>`;
     } catch (e) {
-      container.innerHTML = `<div class="empty"><p>تعذر تحميل الإحصائيات</p></div>`;
+      if (!document.getElementById('overview-kpi-grid')) {
+        container.innerHTML = `<div class="empty"><p>تعذر تحميل الإحصائيات</p></div>`;
+      }
     }
   }
   window.loadAdminDashboardOverview = loadAdminDashboardOverview;
@@ -11432,6 +11708,12 @@ ESSAY
     }
 
     const locked = Boolean(window._isPlatformLockedGlobal);
+    const lockStateKey = locked ? '1' : '0';
+    if (bar.dataset.lockedState === lockStateKey && bar.innerHTML.trim() !== '') {
+      if (bar.style.display === 'none') bar.style.display = 'flex';
+      return;
+    }
+    bar.dataset.lockedState = lockStateKey;
     bar.style.cssText = `
       display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;
       padding:14px 18px;margin-bottom:1.1rem;border-radius:16px;transition:all 0.25s;
@@ -12269,20 +12551,9 @@ ESSAY
         });
 
       // إشعار فوري صوتي وبصري للسوبر أدمن عند تسجيل أي طالب جديد لأول مرة
-      try {
-        if (window._prevKnownUserIds && window._prevKnownUserIds.size > 0) {
-          profiles.forEach(p => {
-            const pKey = p.id || p.email;
-            if (!window._prevKnownUserIds.has(pKey)) {
-              if (typeof window.playRealtimeChime === 'function') {
-                window.playRealtimeChime();
-              }
-              toast(`🎉 طالب جديد سجل الآن: ${p.full_name || p.email} (${p.email})`);
-            }
-          });
-        }
-        window._prevKnownUserIds = new Set(profiles.map(p => p.id || p.email));
-      } catch (e) {}
+      if (typeof window.checkAndNotifyNewUsers === 'function') {
+        window.checkAndNotifyNewUsers(profiles);
+      }
 
       const newSig = JSON.stringify(profiles.map(u => ({
         id: u.id, em: u.email, fn: u.full_name, r: u.role, t: u.term, a: u.is_active, p: u._pendingConfirmation, pm: u._ovPerms, on: u._isOnlineNow
@@ -13397,7 +13668,11 @@ ESSAY
     window._allActivityLogsCache = merged;
     localStorage.setItem('platform_activity_logs', JSON.stringify(merged.slice(0, 300)));
 
-    window.renderAdminActivityLogsUI();
+    const newLogsViewSig = JSON.stringify(merged.map(l => l._sig));
+    if (!silent || newLogsViewSig !== window._lastRenderedLogsViewSig || !document.getElementById('admin-logs-table-body-wrap')) {
+      window._lastRenderedLogsViewSig = newLogsViewSig;
+      window.renderAdminActivityLogsUI();
+    }
   };
 
   window.renderAdminActivityLogsUI = function () {
