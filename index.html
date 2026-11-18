@@ -10963,6 +10963,10 @@ ESSAY
     const addExamBtn = document.getElementById('admin-add-exam-btn');
     if (addExamBtn) addExamBtn.style.display = (section === 'exams' && checkAdminPermission('create', 'exams')) ? '' : 'none';
 
+    if (typeof window.renderSuperAdminPlatformLockBar === 'function') {
+      window.renderSuperAdminPlatformLockBar();
+    }
+
     if (section === 'overview') {
       loadAdminDashboardOverview();
     } else if (section === 'users') {
@@ -11398,8 +11402,255 @@ ESSAY
       );
   };
 
-  // ─── 19. SUPER ADMIN RBAC & USERS MANAGEMENT (Section 11) ───
-  window.fetchSystemUserOverrides = async function () {
+  // ─── 19. SUPER ADMIN RBAC & USERS MANAGEMENT + GLOBAL PLATFORM LOCK (Section 11) ───
+  window._isPlatformLockedGlobal = false;
+
+  window.renderSuperAdminPlatformLockBar = function () {
+    const adminPage = document.getElementById('admin-page');
+    if (!adminPage) return;
+    const isSuper = Boolean(window.IS_STANDALONE_SUPER_ADMIN || window.currentAdminRole === 'super_admin');
+    let bar = document.getElementById('super-admin-platform-lock-bar');
+    if (!isSuper) {
+      if (bar) bar.remove();
+      return;
+    }
+    const usersPanel = document.getElementById('admin-section-users');
+    const isUsersSectionActive = Boolean(usersPanel && !usersPanel.classList.contains('hidden'));
+    if (isUsersSectionActive) {
+      if (bar) bar.style.display = 'none';
+      return;
+    }
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.id = 'super-admin-platform-lock-bar';
+      const headerEl = adminPage.querySelector('.admin-header');
+      if (headerEl && headerEl.nextSibling) {
+        adminPage.insertBefore(bar, headerEl.nextSibling);
+      } else {
+        adminPage.prepend(bar);
+      }
+    }
+
+    const locked = Boolean(window._isPlatformLockedGlobal);
+    bar.style.cssText = `
+      display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;
+      padding:14px 18px;margin-bottom:1.1rem;border-radius:16px;transition:all 0.25s;
+      background:${locked ? 'rgba(248,113,113,0.12)' : 'rgba(0,230,118,0.09)'};
+      border:1.5px solid ${locked ? 'rgba(248,113,113,0.45)' : 'rgba(0,230,118,0.35)'};
+      box-shadow:${locked ? '0 0 24px rgba(248,113,113,0.15)' : '0 0 20px rgba(0,230,118,0.1)'};
+    `;
+    bar.innerHTML = `
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <div style="width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.25rem;background:${locked ? 'rgba(248,113,113,0.2)' : 'rgba(0,230,118,0.18)'};color:${locked ? 'var(--red)' : '#00e676'}">
+          <i class="fas fa-${locked ? 'lock' : 'unlock-alt'}"></i>
+        </div>
+        <div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span style="font-size:0.98rem;font-weight:900;color:var(--text)">التحكم الفوري في حالة المنصة بالكامل (Real-Time)</span>
+            <span style="display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:20px;font-size:0.76rem;font-weight:900;background:${locked ? 'rgba(248,113,113,0.22)' : 'rgba(0,230,118,0.2)'};color:${locked ? 'var(--red)' : '#00e676'}">
+              <span style="width:8px;height:8px;border-radius:50%;background:${locked ? 'var(--red)' : '#00e676'};box-shadow:0 0 8px ${locked ? 'var(--red)' : '#00e676'};display:inline-block"></span>
+              ${locked ? '🔴 المنصة مقفولة حالياً على الجميع' : '🟢 المنصة مفتوحة وتعمل الآن'}
+            </span>
+          </div>
+          <p style="font-size:0.79rem;color:var(--text-dim);margin:2px 0 0 0">
+            ${locked
+              ? 'جميع صفحات المنصة مقفولة الآن أمام الطلاب والزوار — اضغط الزر باليسار لفتح المنصة فوراً في نفس اللحظة بدون ريفريش'
+              : 'بضغطة زر واحدة يمكنك قفل المنصة بالكامل أمام جميع الطلاب والزوار في نفس اللحظة (Real-Time) أو إعادة فتحها'}
+          </p>
+        </div>
+      </div>
+      <button
+        type="button"
+        onclick="togglePlatformGlobalLock(${!locked})"
+        class="btn ${locked ? 'btn-primary' : 'btn-danger'}"
+        style="padding:11px 20px;font-size:0.9rem;font-weight:900;border-radius:12px;display:inline-flex;align-items:center;gap:8px;box-shadow:${locked ? '0 0 18px rgba(0,230,118,0.35)' : '0 0 18px rgba(248,113,113,0.35)'};background:${locked ? '#00e676' : 'var(--red)'};color:${locked ? '#050509' : '#fff'};border:none;cursor:pointer"
+      >
+        <i class="fas fa-${locked ? 'unlock' : 'power-off'}"></i>
+        ${locked ? '🔓 فتح المنصة بالكامل الآن (Real-Time)' : '🔒 قفل المنصة بالكامل الآن (Real-Time)'}
+      </button>
+    `;
+  };
+
+  window._lastPlatformLockTs = Number(localStorage.getItem('bis_platform_lock_ts_v1') || 0);
+  let _lockToggleInFlight = false;
+
+  window.applyPlatformGlobalLockState = function (isLocked, incomingTs = 0, isServerAuthoritative = false) {
+    const numTs = Number(incomingTs || 0);
+    const locked = Boolean(isLocked);
+
+    // إذا كانت الحالة المطلوبة هي القفل ولكن الختم الزمني قديم، نتجاهلها فقط إذا لم تكن قادمة رسمياً من السيرفر
+    if (!isServerAuthoritative && locked && numTs > 0 && window._lastPlatformLockTs && numTs < window._lastPlatformLockTs) {
+      return;
+    }
+    if (numTs > 0) {
+      window._lastPlatformLockTs = Math.max(window._lastPlatformLockTs || 0, numTs);
+      try { localStorage.setItem('bis_platform_lock_ts_v1', String(window._lastPlatformLockTs)); } catch (e) {}
+    }
+
+    const prevLocked = Boolean(window._isPlatformLockedGlobal);
+    window._isPlatformLockedGlobal = locked;
+    try { localStorage.setItem('bis_platform_lock_state_v1', locked ? 'true' : 'false'); } catch (e) {}
+
+    if (typeof window.renderSuperAdminPlatformLockBar === 'function') {
+      window.renderSuperAdminPlatformLockBar();
+    }
+
+    // السوبر أدمن لا يُقفل عليه أبداً (سواء في ملف السوبر أدمن المستقل أو إذا كان مسجلاً كـ super_admin)
+    const isSuperAdminUser = Boolean(
+      window.IS_STANDALONE_SUPER_ADMIN ||
+      window.currentAdminRole === 'super_admin' ||
+      window.authSession?.profile?.role === 'super_admin'
+    );
+    if (isSuperAdminUser) {
+      document.querySelectorAll('#platform-global-lock-overlay, [id="platform-global-lock-overlay"]').forEach(el => el.remove());
+      document.body.style.overflow = '';
+      return;
+    }
+
+    let overlay = document.getElementById('platform-global-lock-overlay');
+    if (locked) {
+      if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'platform-global-lock-overlay';
+        overlay.style.cssText = `
+          position:fixed !important;inset:0 !important;z-index:2147483647 !important;
+          background:radial-gradient(circle at 50% 25%, rgba(15,23,42,0.985), rgba(5,5,15,0.998)) !important;
+          backdrop-filter:blur(22px) !important;-webkit-backdrop-filter:blur(22px) !important;
+          display:flex !important;align-items:center !important;justify-content:center !important;
+          padding:1.5rem !important;text-align:center !important;
+          font-family:'Cairo',sans-serif !important;direction:rtl !important;
+          pointer-events:all !important;user-select:none !important;
+        `;
+        overlay.innerHTML = `
+          <div style="max-width:480px;width:100%;background:rgba(15,23,42,0.92);border:1.5px solid rgba(248,113,113,0.45);border-radius:24px;padding:2.4rem 1.8rem;box-shadow:0 20px 60px rgba(0,0,0,0.85), 0 0 40px rgba(248,113,113,0.18)">
+            <div style="width:76px;height:76px;border-radius:50%;background:rgba(248,113,113,0.15);border:2px solid rgba(248,113,113,0.45);color:#f87171;font-size:2.1rem;display:flex;align-items:center;justify-content:center;margin:0 auto 1.2rem auto;box-shadow:0 0 28px rgba(248,113,113,0.28)">
+              <i class="fas fa-lock"></i>
+            </div>
+            <h2 style="font-size:1.5rem;font-weight:900;color:#fff;margin:0 0 0.6rem 0">🔒 المنصة مغلقة مؤقتاً</h2>
+            <p style="font-size:0.95rem;color:#cbd5e1;line-height:1.75;margin:0 0 1.2rem 0">
+              تم إيقاف الوصول للمنصة حالياً من قِبل إدارة المنصة.<br>
+              <span style="color:#2dd4bf;font-weight:800">ستفتح المنصة أمامك تلقائياً في نفس اللحظة</span> بمجرد إعادة فتحها دون الحاجة لعمل ريفريش للصفحة.
+            </p>
+            <div style="margin:0 0 1.25rem 0;padding:12px 14px;border-radius:16px;background:rgba(37,211,102,0.08);border:1px solid rgba(37,211,102,0.28);display:flex;flex-direction:column;align-items:center;gap:10px">
+              <div style="font-size:0.84rem;color:#e2e8f0;font-weight:700">
+                📞 رقم التواصل مع المطور: <span dir="ltr" style="color:#25d366;font-weight:900;font-size:0.95rem;user-select:text">01154335024</span>
+              </div>
+              <a
+                href="https://wa.me/+201154335024"
+                target="_blank"
+                rel="noopener"
+                style="display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;max-width:280px;padding:11px 20px;border-radius:12px;background:linear-gradient(135deg, #25d366, #128c7e);color:#fff;font-weight:900;font-size:0.92rem;text-decoration:none;box-shadow:0 6px 20px rgba(37,211,102,0.35);transition:transform 0.2s;cursor:pointer"
+              >
+                <i class="fab fa-whatsapp" style="font-size:1.15rem"></i>
+                تواصل مع المطور
+              </a>
+            </div>
+            <div style="display:inline-flex;align-items:center;gap:8px;padding:8px 16px;border-radius:20px;background:rgba(45,212,191,0.1);border:1px solid rgba(45,212,191,0.28);color:#2dd4bf;font-size:0.8rem;font-weight:800">
+              <span style="width:8px;height:8px;border-radius:50%;background:#2dd4bf;box-shadow:0 0 8px #2dd4bf;display:inline-block"></span>
+              متصل بالخادم — بانتظار إعادة فتح المنصة تلقائياً...
+            </div>
+          </div>
+        `;
+        ['click', 'dblclick', 'mousedown', 'mouseup', 'pointerdown', 'pointerup', 'touchstart', 'touchend', 'contextmenu'].forEach(evType => {
+          overlay.addEventListener(evType.trim(), (ev) => {
+            if (ev.target && ev.target.closest && ev.target.closest('a[href*="wa.me"]')) {
+              ev.stopPropagation();
+              return;
+            }
+            ev.stopPropagation();
+          }, true);
+        });
+        document.body.appendChild(overlay);
+      } else {
+        overlay.classList.remove('hidden');
+        overlay.style.display = 'flex';
+      }
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.querySelectorAll('#platform-global-lock-overlay, [id="platform-global-lock-overlay"]').forEach(el => el.remove());
+      document.body.style.overflow = '';
+      if (prevLocked) {
+        toast('🟢 تم فتح المنصة الآن! يمكنك المتابعة بحرية');
+      }
+    }
+  };
+
+  // حارس مستمر (Lock Guardian): يمنع فتح المنصة عند الضغط المتكرر على الشاشة ويفتحها فوراً عند إلغاء القفل
+  if (!window.IS_STANDALONE_SUPER_ADMIN) {
+    setInterval(() => {
+      const isSuperAdminUser = Boolean(
+        window.IS_STANDALONE_SUPER_ADMIN ||
+        window.currentAdminRole === 'super_admin' ||
+        window.authSession?.profile?.role === 'super_admin'
+      );
+      const isLocked = Boolean(window._isPlatformLockedGlobal) && !isSuperAdminUser;
+      const overlays = document.querySelectorAll('#platform-global-lock-overlay, [id="platform-global-lock-overlay"]');
+      if (isLocked) {
+        if (overlays.length === 0) {
+          window.applyPlatformGlobalLockState(true);
+        } else {
+          overlays.forEach(ov => {
+            if (ov.classList.contains('hidden') || ov.style.display === 'none') {
+              ov.classList.remove('hidden');
+              ov.style.display = 'flex';
+            }
+          });
+        }
+      } else {
+        if (overlays.length > 0) {
+          overlays.forEach(ov => ov.remove());
+          document.body.style.overflow = '';
+        }
+      }
+    }, 400);
+  }
+
+  window.togglePlatformGlobalLock = async function (forceState = null) {
+    if (!window.IS_STANDALONE_SUPER_ADMIN && window.currentAdminRole !== 'super_admin') {
+      return toast('⛔ هذا الزر مخصص للسوبر أدمن فقط!', 'error');
+    }
+    const nextLocked = typeof forceState === 'boolean' ? forceState : !window._isPlatformLockedGlobal;
+    const nowTs = Date.now();
+    const nowIso = new Date(nowTs).toISOString();
+    _lockToggleInFlight = true;
+
+    // 1. تطبيق فوري (0ms Optimistic UI)
+    window.applyPlatformGlobalLockState(nextLocked, nowTs, true);
+    try {
+      const localCached = JSON.parse(localStorage.getItem('super_admin_user_overrides_v2') || '{}');
+      localCached.__platform_status__ = { locked: nextLocked, ts: nowTs, updated_at: nowIso };
+      localStorage.setItem('super_admin_user_overrides_v2', JSON.stringify(localCached));
+    } catch (e) {}
+
+    if (typeof window.broadcastRealtimeUserSync === 'function') {
+      window.broadcastRealtimeUserSync(nextLocked ? 'platform_locked' : 'platform_unlocked', '__platform__', String(nowTs));
+    }
+    toast(nextLocked
+      ? '🔒 تم قفل المنصة بالكامل الآن في الوقت الفعلي على جميع المستخدمين!'
+      : '🟢 تم فتح المنصة بالكامل الآن في الوقت الفعلي لجميع المستخدمين!');
+
+    try {
+      const overrides = await window.fetchSystemUserOverrides({ skipApplyLock: true });
+      overrides.__platform_status__ = {
+        locked: nextLocked,
+        ts: nowTs,
+        updated_at: nowIso
+      };
+      await window.saveSystemUserOverrides(overrides, {
+        explicitLockStatus: { locked: nextLocked, ts: nowTs, updated_at: nowIso }
+      });
+      if (typeof window.broadcastRealtimeUserSync === 'function') {
+        window.broadcastRealtimeUserSync(nextLocked ? 'platform_locked' : 'platform_unlocked', '__platform__', String(nowTs));
+      }
+      logAdminActivity(nextLocked ? 'قفل المنصة بالكامل' : 'فتح المنصة بالكامل', 'platform', nextLocked ? 'تم إغلاق المنصة مؤقتاً' : 'تم إعادة فتح المنصة');
+    } catch (e) {
+      toast('تعذر حفظ حالة قفل المنصة في الخادم', 'error');
+    } finally {
+      _lockToggleInFlight = false;
+    }
+  };
+
+  window.fetchSystemUserOverrides = async function (opts = {}) {
     try { localStorage.removeItem('super_admin_user_overrides'); } catch (e) {}
     try {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/resources?select=id,url&type=eq.user_overrides&grade=eq.sys&order=id.desc&limit=1`, {
@@ -11415,27 +11666,50 @@ ESSAY
         const rows = await res.json();
         if (rows.length && rows[0].url) {
           const remoteOv = JSON.parse(rows[0].url);
+          const remoteLockObj = remoteOv?.__platform_status__;
+          const remoteTs = Number(remoteLockObj?.ts || (remoteLockObj?.updated_at ? new Date(remoteLockObj.updated_at).getTime() : 0) || 0);
+
+          if (!opts?.skipApplyLock) {
+            if (remoteLockObj && typeof remoteLockObj.locked === 'boolean') {
+              window.applyPlatformGlobalLockState(remoteLockObj.locked, remoteTs || Date.now(), true);
+            } else if (!_lockToggleInFlight) {
+              window.applyPlatformGlobalLockState(false, Date.now(), true);
+            }
+          }
+
           if (remoteOv?.__ga4_config__?.measurement_id && typeof window.initGoogleAnalyticsGA4 === 'function') {
             window.initGoogleAnalyticsGA4(remoteOv.__ga4_config__.measurement_id);
           }
+
           localStorage.setItem('super_admin_user_overrides_v2', JSON.stringify(remoteOv));
           return remoteOv;
         }
         localStorage.setItem('super_admin_user_overrides_v2', '{}');
+        if (!opts?.skipApplyLock && !_lockToggleInFlight) window.applyPlatformGlobalLockState(false, 0, true);
         return {};
       }
     } catch (e) {}
     try {
-      return JSON.parse(localStorage.getItem('super_admin_user_overrides_v2') || '{}');
+      const cachedOv = JSON.parse(localStorage.getItem('super_admin_user_overrides_v2') || '{}');
+      if (!opts?.skipApplyLock && cachedOv && cachedOv.__platform_status__?.locked === false) {
+        window.applyPlatformGlobalLockState(false, 0, true);
+      }
+      return cachedOv;
     } catch (e) {
       return {};
     }
   };
 
-  window.saveSystemUserOverrides = async function (overrides) {
+  window.saveSystemUserOverrides = async function (overrides, opts = {}) {
     try { localStorage.removeItem('super_admin_user_overrides'); } catch (e) {}
+    // الحفاظ دائماً على أحدث حالة قفل للمنصة وإعدادات Google Analytics عند حفظ أي تعديلات أخرى
     try {
       const prevCached = JSON.parse(localStorage.getItem('super_admin_user_overrides_v2') || '{}');
+      if (opts?.explicitLockStatus) {
+        overrides.__platform_status__ = opts.explicitLockStatus;
+      } else if (!overrides.__platform_status__ && prevCached.__platform_status__) {
+        overrides.__platform_status__ = prevCached.__platform_status__;
+      }
       if (!overrides.__ga4_config__ && prevCached.__ga4_config__) {
         overrides.__ga4_config__ = prevCached.__ga4_config__;
       }
@@ -13588,6 +13862,9 @@ ESSAY
   // ─── 22. INITIALIZE ON PAGE LOAD + REAL-TIME LIVE SYNC ENGINE ───
   function handleIncomingRealtimeSync() {
     if (window.IS_STANDALONE_SUPER_ADMIN) {
+      if (typeof window.renderSuperAdminPlatformLockBar === 'function') {
+        window.renderSuperAdminPlatformLockBar();
+      }
       const overviewPanel = document.getElementById('admin-section-overview');
       if (overviewPanel && !overviewPanel.classList.contains('hidden') && typeof window.loadAdminDashboardOverview === 'function') {
         window.loadAdminDashboardOverview(true);
@@ -13616,12 +13893,23 @@ ESSAY
   try {
     if (_bisRealtimeChannel) {
       _bisRealtimeChannel.onmessage = (ev) => {
+        const msg = ev?.data || {};
+        if (msg.action === 'platform_locked' || msg.action === 'platform_unlocked') {
+          const lockTs = Number(msg.uid || msg.ts || Date.now());
+          window.applyPlatformGlobalLockState(msg.action === 'platform_locked', lockTs, true);
+          return;
+        }
         handleIncomingRealtimeSync();
       };
     }
   } catch (e) {}
 
   window.addEventListener('storage', (e) => {
+    if (e.key === 'bis_platform_lock_state_v1') {
+      const savedTs = Number(localStorage.getItem('bis_platform_lock_ts_v1') || Date.now());
+      window.applyPlatformGlobalLockState(e.newValue === 'true', savedTs, true);
+      return;
+    }
     if (e.key === 'bis_realtime_user_sync_ping' || e.key === 'super_admin_user_overrides_v2' || e.key === 'super_admin_user_presence_v1') {
       handleIncomingRealtimeSync();
     }
@@ -13656,13 +13944,12 @@ ESSAY
   });
 
   document.addEventListener('DOMContentLoaded', () => {
-    try {
-      localStorage.removeItem('bis_platform_lock_state_v1');
-      localStorage.removeItem('bis_platform_lock_ts_v1');
-      document.querySelectorAll('#platform-global-lock-overlay, [id="platform-global-lock-overlay"]').forEach(el => el.remove());
-      document.body.style.overflow = '';
-    } catch (e) {}
-
+    if (typeof window.applyPlatformGlobalLockState === 'function') {
+      window.applyPlatformGlobalLockState(window._isPlatformLockedGlobal);
+    }
+    if (typeof window.renderSuperAdminPlatformLockBar === 'function') {
+      window.renderSuperAdminPlatformLockBar();
+    }
     window.fetchSystemUserOverrides();
 
     restoreSavedAuthSession().then(() => {
@@ -13675,7 +13962,7 @@ ESSAY
     // نبض مزامنة سحابي لحظي فائق السرعة كل 1.5 ثانية في السوبر أدمن و 2 ثانية في المنصة
     const syncIntervalMs = window.IS_STANDALONE_SUPER_ADMIN ? 1500 : 2000;
     setInterval(() => {
-      if (document.hidden) return;
+      if (document.hidden && !window._isPlatformLockedGlobal) return;
       handleIncomingRealtimeSync();
     }, syncIntervalMs);
 
