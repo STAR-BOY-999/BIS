@@ -2788,6 +2788,474 @@
   border-bottom: 1px solid rgba(45, 212, 191, 0.22) !important;
 }
 
+/* ─── DEEP-SPACE COSMIC ASTRAL OWNER CARDS (Super Admin & Student Platform) ─── */
+@keyframes cosmicAuroraBeam {
+  0%   { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+
+@keyframes cosmicNebulaPulse {
+  0%   { opacity: 0.55; transform: scale(1) translate(0, 0); }
+  50%  { opacity: 0.9;  transform: scale(1.06) translate(0, -3px); }
+  100% { opacity: 0.65; transform: scale(0.98) translate(0, 2px); }
+}
+
+@keyframes cosmicPlanetOrbit {
+  0%   { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes cosmicPlanetOrbitReverse {
+  0%   { transform: rotate(360deg); }
+  100% { transform: rotate(0deg); }
+}
+
+@keyframes cosmicStarTwinkle {
+  0%, 100% { opacity: 0.25; transform: scale(0.85); }
+  50%      { opacity: 1;    transform: scale(1.35); }
+}
+
+@keyframes cosmicHaloWave {
+  0%, 100% { transform: scale(1);    opacity: 0.35; }
+  50%      { transform: scale(1.12); opacity: 0.75; }
+}
+
+#admin-owners-list,
+#admin-lecture-owners-list {
+  padding-top: 1rem;
+}
+
+.owner-leader-card {
+  position: relative;
+  margin-top: 1.7rem !important;
+  margin-bottom: 2.2rem !important;
+  cursor: pointer;
+  transition: transform 0.42s cubic-bezier(0.22, 1, 0.36, 1) !important;
+}
+
+.owner-leader-card:hover {
+  transform: translateY(-7px) scale(1.008);
+}
+
+/* Deep Space Nebula & Starfield Glass Interior */
+.owner-leader-inner {
+  position: relative;
+  background:
+    /* Subtle internal cosmic starfield dots */
+    radial-gradient(1.5px 1.5px at 12% 32%, rgba(224, 242, 254, 0.75) 50%, transparent 100%),
+    radial-gradient(1px 1px at 22% 68%, rgba(45, 212, 191, 0.7) 50%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 34% 24%, rgba(167, 139, 250, 0.75) 50%, transparent 100%),
+    radial-gradient(1px 1px at 66% 26%, rgba(56, 189, 248, 0.75) 50%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 78% 64%, rgba(224, 242, 254, 0.7) 50%, transparent 100%),
+    radial-gradient(1.2px 1.2px at 89% 35%, rgba(45, 212, 191, 0.75) 50%, transparent 100%),
+    /* Deep Space Nebula clouds matching platform theme */
+    radial-gradient(ellipse 60% 70% at 50% -5%, rgba(56, 189, 248, 0.2) 0%, rgba(167, 139, 250, 0.11) 45%, transparent 80%),
+    radial-gradient(circle at 10% 90%, rgba(45, 212, 191, 0.12) 0%, transparent 50%),
+    radial-gradient(circle at 90% 90%, rgba(167, 139, 250, 0.12) 0%, transparent 50%),
+    linear-gradient(170deg, rgba(6, 8, 24, 0.88) 0%, rgba(4, 5, 16, 0.94) 60%, rgba(2, 3, 10, 0.97) 100%) !important;
+  border: 1px solid rgba(56, 189, 248, 0.24) !important;
+  border-radius: 24px !important;
+  overflow: hidden;
+  padding-top: 38px !important;
+  backdrop-filter: blur(22px) saturate(170%) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(170%) !important;
+  box-shadow:
+    0 16px 45px -8px rgba(0, 0, 0, 0.82),
+    0 0 35px rgba(56, 189, 248, 0.08),
+    0 0 60px rgba(45, 212, 191, 0.05),
+    inset 0 1px 0 rgba(125, 211, 252, 0.14) !important;
+  transition: all 0.42s cubic-bezier(0.22, 1, 0.36, 1) !important;
+}
+
+/* Flowing Cosmic Aurora Laser Beam along Top Edge */
+.owner-leader-inner::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent 5%, #2dd4bf 25%, #38bdf8 50%, #a78bfa 75%, transparent 95%);
+  background-size: 200% 100%;
+  animation: cosmicAuroraBeam 4s linear infinite;
+  z-index: 3;
+  pointer-events: none;
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.55);
+}
+
+/* Holographic Warp Sweep & Nebula Glow on Hover */
+.owner-leader-inner::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 24px;
+  background:
+    linear-gradient(115deg, transparent 30%, rgba(56, 189, 248, 0.08) 46%, rgba(167, 139, 250, 0.12) 50%, rgba(45, 212, 191, 0.08) 54%, transparent 70%),
+    radial-gradient(ellipse 65% 60% at 50% 0%, rgba(56, 189, 248, 0.18), rgba(167, 139, 250, 0.1) 50%, transparent 80%);
+  background-size: 250% 100%, 100% 100%;
+  background-position: 180% 0, 0 0;
+  opacity: 0;
+  transition: opacity 0.4s ease, background-position 0.75s cubic-bezier(0.22, 1, 0.36, 1);
+  pointer-events: none;
+}
+
+.owner-leader-card:hover .owner-leader-inner {
+  border-color: rgba(56, 189, 248, 0.58) !important;
+  transform: none !important;
+  box-shadow:
+    0 24px 60px -8px rgba(0, 0, 0, 0.9),
+    0 0 45px rgba(56, 189, 248, 0.22),
+    0 0 75px rgba(167, 139, 250, 0.15),
+    inset 0 0 30px rgba(45, 212, 191, 0.07) !important;
+}
+
+.owner-leader-card:hover .owner-leader-inner::after {
+  opacity: 1;
+  background-position: -60% 0, 0 0;
+}
+
+/* Cosmic Constellation & Portal Header SVG */
+.owner-leader-header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 66px !important;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.owner-leader-header svg {
+  display: block;
+  width: 100% !important;
+  height: 66px !important;
+  filter: drop-shadow(0 4px 16px rgba(56, 189, 248, 0.24));
+}
+
+.owner-leader-header path.owner-hdr-fill-path {
+  fill: url(#ownerHdrFill) !important;
+}
+
+.owner-leader-header path.owner-hdr-stroke-path {
+  fill: none !important;
+  stroke: url(#ownerHdrStroke) !important;
+}
+
+/* Twinkling Constellation Stars inside Header */
+.owner-leader-header .c-star {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: cosmicStarTwinkle 2.8s ease-in-out infinite;
+}
+.owner-leader-header .c-star.s2 { animation-delay: 0.5s; animation-duration: 3.4s; }
+.owner-leader-header .c-star.s3 { animation-delay: 1.1s; animation-duration: 2.4s; }
+.owner-leader-header .c-star.s4 { animation-delay: 1.6s; animation-duration: 3.1s; }
+.owner-leader-header .c-star.s5 { animation-delay: 0.8s; animation-duration: 2.7s; }
+.owner-leader-header .c-star.s6 { animation-delay: 1.9s; animation-duration: 3.5s; }
+
+/* Cosmic Crystal Nebula Ribbon */
+.owner-leader-ribbon {
+  position: absolute;
+  top: 0;
+  right: 22px !important;
+  width: 30px !important;
+  padding: 7px 0 14px !important;
+  background: linear-gradient(180deg, #2dd4bf 0%, #38bdf8 48%, #8b5cf6 100%) !important;
+  color: #ffffff !important;
+  font-size: 0.8rem !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  clip-path: polygon(0 0, 100% 0, 100% 82%, 50% 100%, 0 82%);
+  box-shadow: 0 6px 20px rgba(56, 189, 248, 0.45) !important;
+  z-index: 3;
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.35s ease;
+}
+
+.owner-leader-ribbon i {
+  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.8));
+}
+
+.owner-leader-card:hover .owner-leader-ribbon {
+  transform: translateY(3px) scale(1.08);
+  box-shadow: 0 8px 26px rgba(45, 212, 191, 0.65) !important;
+}
+
+/* Planetary Avatar with Dual Rotating Orbital Rings */
+.owner-leader-photo-wrap {
+  position: absolute;
+  top: -39px !important;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 4;
+  width: 84px !important;
+  height: 84px !important;
+  border-radius: 50%;
+  padding: 3px !important;
+  background: conic-gradient(from 0deg, #2dd4bf, #38bdf8, #a78bfa, #38bdf8, #2dd4bf) !important;
+  box-shadow:
+    0 0 26px rgba(56, 189, 248, 0.42),
+    0 0 0 4px rgba(3, 5, 16, 0.95),
+    0 0 0 5.5px rgba(56, 189, 248, 0.32) !important;
+  transition: transform 0.42s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.42s ease !important;
+}
+
+/* Outer Rotating Dashed Planetary Orbit Ring + Glowing Satellite Node */
+.owner-leader-photo-wrap::before {
+  content: '';
+  position: absolute;
+  inset: -9px;
+  border-radius: 50%;
+  border: 1.5px dashed rgba(56, 189, 248, 0.45);
+  border-top-color: #2dd4bf;
+  border-bottom-color: #a78bfa;
+  animation: cosmicPlanetOrbit 9s linear infinite;
+  pointer-events: none;
+  transition: border-color 0.35s ease, inset 0.35s ease;
+}
+
+/* Pulsing Nebula Shockwave Halo Ring */
+.owner-leader-photo-wrap::after {
+  content: '';
+  position: absolute;
+  inset: -15px;
+  border-radius: 50%;
+  border: 1px solid rgba(167, 139, 250, 0.25);
+  box-shadow: 0 0 18px rgba(56, 189, 248, 0.18);
+  animation: cosmicHaloWave 3.2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.owner-leader-card:hover .owner-leader-photo-wrap {
+  transform: translateX(-50%) translateY(-3px) scale(1.08) !important;
+  box-shadow:
+    0 0 38px rgba(45, 212, 191, 0.6),
+    0 0 60px rgba(167, 139, 250, 0.4),
+    0 0 0 4px rgba(3, 5, 16, 0.96),
+    0 0 0 6px rgba(45, 212, 191, 0.55) !important;
+}
+
+.owner-leader-card:hover .owner-leader-photo-wrap::before {
+  inset: -11px;
+  border-color: rgba(45, 212, 191, 0.8);
+  border-top-color: #38bdf8;
+  border-bottom-color: #c084fc;
+  animation-duration: 4s;
+}
+
+.owner-leader-photo {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 25%, #0f172a, #030510) !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 3px solid #030510 !important;
+  position: relative;
+  z-index: 2;
+}
+
+.owner-leader-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.owner-leader-card:hover .owner-leader-photo img {
+  transform: scale(1.08);
+}
+
+.owner-leader-photo i {
+  font-size: 1.75rem !important;
+  color: #38bdf8 !important;
+  opacity: 0.92 !important;
+  filter: drop-shadow(0 0 12px rgba(56, 189, 248, 0.55));
+  transition: transform 0.35s ease, color 0.35s ease;
+}
+
+.owner-leader-card:hover .owner-leader-photo i {
+  color: #2dd4bf !important;
+  transform: scale(1.12);
+}
+
+.owner-leader-photo-edit {
+  position: absolute;
+  bottom: -2px !important;
+  left: -2px !important;
+  width: 26px !important;
+  height: 26px !important;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #2dd4bf, #0ea5e9) !important;
+  color: #020617 !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem !important;
+  border: 2.5px solid #030510 !important;
+  box-shadow: 0 0 12px rgba(45, 212, 191, 0.5);
+  cursor: pointer;
+  z-index: 6;
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease;
+}
+
+.owner-leader-photo-edit:hover {
+  transform: scale(1.2) !important;
+  box-shadow: 0 0 18px rgba(56, 189, 248, 0.9);
+}
+
+/* Cosmic Typography, Astral Role Badge & Warp CTA Pill */
+.owner-leader-content {
+  position: relative;
+  z-index: 2;
+  padding: 1.85rem 1.5rem 1.35rem !important;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px !important;
+  text-align: center;
+}
+
+.owner-leader-content h4 {
+  font-family: 'Cairo', sans-serif !important;
+  font-size: 1.36rem !important;
+  font-weight: 900 !important;
+  color: #f0f9ff !important;
+  line-height: 1.3;
+  letter-spacing: 0.3px;
+  text-shadow: 0 0 20px rgba(56, 189, 248, 0.35), 0 2px 10px rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px !important;
+  transition: text-shadow 0.35s ease, transform 0.35s ease;
+}
+
+.owner-leader-card:hover .owner-leader-content h4 {
+  text-shadow: 0 0 26px rgba(45, 212, 191, 0.65), 0 0 45px rgba(56, 189, 248, 0.4);
+}
+
+.owner-leader-verified {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px !important;
+  height: 20px !important;
+  flex-shrink: 0;
+  filter: drop-shadow(0 0 10px rgba(56, 189, 248, 0.8)) !important;
+}
+
+.owner-leader-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 15px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(45, 212, 191, 0.14), rgba(56, 189, 248, 0.2), rgba(167, 139, 250, 0.14));
+  border: 1px solid rgba(56, 189, 248, 0.38);
+  font-family: 'Cairo', sans-serif;
+  font-size: 0.66rem !important;
+  font-weight: 900 !important;
+  letter-spacing: 2.4px !important;
+  color: #38bdf8 !important;
+  text-transform: uppercase;
+  text-shadow: 0 0 12px rgba(56, 189, 248, 0.55);
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  transition: all 0.35s ease;
+}
+
+.owner-leader-card:hover .owner-leader-tag {
+  border-color: rgba(45, 212, 191, 0.65);
+  color: #2dd4bf !important;
+  text-shadow: 0 0 14px rgba(45, 212, 191, 0.75);
+  box-shadow: 0 0 20px rgba(45, 212, 191, 0.25);
+}
+
+.owner-leader-divider {
+  position: relative;
+  width: 58% !important;
+  max-width: 280px;
+  height: 1px;
+  margin: 7px 0 !important;
+  background: linear-gradient(90deg, transparent, rgba(45, 212, 191, 0.45), rgba(56, 189, 248, 0.9), rgba(167, 139, 250, 0.45), transparent) !important;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.45);
+}
+
+.owner-leader-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px !important;
+  background: linear-gradient(135deg, rgba(45, 212, 191, 0.11) 0%, rgba(56, 189, 248, 0.14) 50%, rgba(167, 139, 250, 0.11) 100%) !important;
+  border: 1px solid rgba(56, 189, 248, 0.36) !important;
+  border-radius: 999px !important;
+  padding: 7px 22px !important;
+  font-size: 0.79rem !important;
+  font-weight: 800 !important;
+  color: #bae6fd !important;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45), 0 0 18px rgba(56, 189, 248, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
+  transition: all 0.34s cubic-bezier(0.22, 1, 0.36, 1) !important;
+}
+
+.owner-leader-pill i {
+  color: #2dd4bf !important;
+  font-size: 0.78rem !important;
+  filter: drop-shadow(0 0 6px rgba(45, 212, 191, 0.6));
+  transition: color 0.34s ease, transform 0.34s ease;
+}
+
+.owner-leader-card:hover .owner-leader-pill {
+  background: linear-gradient(135deg, #2dd4bf 0%, #0ea5e9 55%, #8b5cf6 100%) !important;
+  border-color: rgba(125, 211, 252, 0.85) !important;
+  color: #ffffff !important;
+  box-shadow: 0 6px 24px rgba(45, 212, 191, 0.42), 0 0 35px rgba(56, 189, 248, 0.3) !important;
+  transform: translateY(-2px) scale(1.03);
+}
+
+.owner-leader-card:hover .owner-leader-pill i {
+  color: #ffffff !important;
+  transform: scale(1.14) rotate(-6deg);
+}
+
+/* Cosmic Admin Delete Button */
+.owner-leader-delete {
+  position: absolute;
+  top: 12px !important;
+  left: 14px !important;
+  z-index: 3;
+}
+
+.owner-leader-delete .btn {
+  width: 34px;
+  height: 34px;
+  padding: 0 !important;
+  border-radius: 11px !important;
+  background: rgba(248, 113, 113, 0.12) !important;
+  border: 1px solid rgba(248, 113, 113, 0.28) !important;
+  color: #fca5a5 !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem !important;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+
+.owner-leader-delete .btn:hover {
+  background: linear-gradient(135deg, #ef4444, #be123c) !important;
+  border-color: #fecdd3 !important;
+  color: #ffffff !important;
+  transform: scale(1.12);
+  box-shadow: 0 0 22px rgba(248, 113, 113, 0.55);
+}
+
+
+
 
 
   </style>
@@ -3984,9 +4452,12 @@ ESSAY
 
 <!-- 1. NOTIFICATIONS DROPDOWN PANEL -->
 <div id="notif-dropdown" class="notif-dropdown hidden">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.8rem">
-    <h4 style="font-size:0.95rem;font-weight:900"><i class="fas fa-bell" style="color:var(--teal);margin-left:6px"></i> الإشعارات</h4>
-    <button class="btn btn-ghost" style="padding:4px 10px;font-size:0.75rem" onclick="markAllNotificationsRead()">تعليم الكل كمقروء</button>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.8rem;gap:8px;flex-wrap:wrap">
+    <h4 style="font-size:0.92rem;font-weight:900;margin:0"><i class="fas fa-bell" style="color:var(--teal);margin-left:6px"></i> <span id="notif-dropdown-title">الإشعارات</span></h4>
+    <div style="display:flex;align-items:center;gap:6px">
+      <button class="btn btn-ghost" style="padding:4px 9px;font-size:0.73rem" onclick="markAllNotificationsRead()">تعليم كمقروء</button>
+      <button id="notif-clear-all-btn" class="btn btn-danger" style="padding:4px 9px;font-size:0.73rem" onclick="deleteAllNotificationsFromBell()" title="حذف جميع الإشعارات"><i class="fas fa-trash-alt"></i> حذف الكل</button>
+    </div>
   </div>
   <div id="notif-dropdown-list"></div>
 </div>
@@ -4002,7 +4473,7 @@ ESSAY
     <div style="display:flex;gap:6px;margin-bottom:1.2rem">
       <button class="grade-tab active" id="auth-tab-btn-login" style="flex:1" onclick="switchAuthTab('login')">تسجيل الدخول</button>
       <button class="grade-tab" id="auth-tab-btn-register" style="flex:1" onclick="switchAuthTab('register')">إنشاء حساب</button>
-      <button class="grade-tab" id="auth-tab-btn-recover" style="flex:1" onclick="switchAuthTab('recover')">استعادة السر</button>
+      <button class="grade-tab" id="auth-tab-btn-recover" style="flex:1" onclick="switchAuthTab('recover')">استعادة كلمة المرور</button>
     </div>
 
     <div id="auth-error-msg" style="color:var(--red);font-size:0.84rem;margin-bottom:0.8rem;min-height:18px;font-weight:700"></div>
@@ -4236,7 +4707,7 @@ ESSAY
     // ====================== Owners (SUMMARY OWNERS) — STATE ======================
     let summaryOwnersMasterPassword = null; // باسورد إضافة صاحب ملخص جديد — من جدول app_passwords
     // شكل الكيرف اللي بيتقوّس حوالين صورة صاحب الملخص أعلى الكارت
-    const OWNER_HEADER_CURVE_SVG = `<svg viewBox="0 0 300 54" preserveAspectRatio="none"><path d="M20,0 H280 Q300,0 300,20 L300,24 L185,24 C170,24 170,54 150,54 C130,54 130,24 115,24 L0,24 L0,20 Q0,0 20,0 Z"/></svg>`;
+    const OWNER_HEADER_CURVE_SVG = `<svg viewBox="0 0 2000 66" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="ownerHdrFill" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#0ea5e9" stop-opacity="0.05"/><stop offset="32%" stop-color="#2dd4bf" stop-opacity="0.18"/><stop offset="50%" stop-color="#a78bfa" stop-opacity="0.28"/><stop offset="68%" stop-color="#38bdf8" stop-opacity="0.18"/><stop offset="100%" stop-color="#0ea5e9" stop-opacity="0.05"/></linearGradient><linearGradient id="ownerHdrStroke" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#38bdf8" stop-opacity="0.08"/><stop offset="36%" stop-color="#2dd4bf" stop-opacity="0.65"/><stop offset="50%" stop-color="#38bdf8" stop-opacity="1"/><stop offset="64%" stop-color="#a78bfa" stop-opacity="0.65"/><stop offset="100%" stop-color="#38bdf8" stop-opacity="0.08"/></linearGradient><radialGradient id="ownerPortalGlow" cx="50%" cy="0%" r="50%"><stop offset="0%" stop-color="#38bdf8" stop-opacity="0.35"/><stop offset="55%" stop-color="#a78bfa" stop-opacity="0.14"/><stop offset="100%" stop-color="#020208" stop-opacity="0"/></radialGradient></defs><ellipse cx="1000" cy="24" rx="220" ry="56" fill="url(#ownerPortalGlow)"/><path class="owner-hdr-fill-path" d="M0,0 H2000 V28 H1068 C1042,28 1038,60 1000,60 C962,60 958,28 932,28 H0 Z" fill="url(#ownerHdrFill)"/><path class="owner-hdr-stroke-path" d="M0,28 H932 C958,28 962,60 1000,60 C1038,60 1042,28 1068,28 H2000" fill="none" stroke="url(#ownerHdrStroke)" stroke-width="1.8"/><g class="owner-cosmic-stars"><circle class="c-star s1" cx="780" cy="14" r="1.6" fill="#38bdf8"/><circle class="c-star s2" cx="845" cy="20" r="1.2" fill="#2dd4bf"/><circle class="c-star s3" cx="905" cy="11" r="2" fill="#e0f2fe"/><circle class="c-star s4" cx="1095" cy="12" r="1.8" fill="#a78bfa"/><circle class="c-star s5" cx="1155" cy="19" r="1.3" fill="#2dd4bf"/><circle class="c-star s6" cx="1225" cy="13" r="1.7" fill="#38bdf8"/><circle class="c-star s1" cx="690" cy="16" r="1.4" fill="#a78bfa"/><circle class="c-star s3" cx="1310" cy="15" r="1.5" fill="#e0f2fe"/><polyline points="780,14 845,20 905,11" fill="none" stroke="rgba(56,189,248,0.22)" stroke-width="0.8" stroke-dasharray="2 2"/><polyline points="1095,12 1155,19 1225,13" fill="none" stroke="rgba(167,139,250,0.22)" stroke-width="0.8" stroke-dasharray="2 2"/></g></svg>`;
     // علامة التوثيق الزرقاء (نجمة 12 ضلع + علامة صح)
     const OWNER_VERIFIED_BADGE_SVG = `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><path d="M50,2 L59.84,13.29 L74,8.43 L76.87,23.13 L91.57,26 L86.71,40.16 L98,50 L86.71,59.84 L91.57,74 L76.87,76.87 L74,91.57 L59.84,86.71 L50,98 L40.16,86.71 L26,91.57 L23.13,76.87 L8.43,74 L13.29,59.84 L2,50 L13.29,40.16 L8.43,26 L23.13,23.13 L26,8.43 L40.16,13.29 Z" fill="#3b9df0"/><path d="M30,53 L43,66 L72,36" stroke="#fff" stroke-width="9" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
     // بيحدد اتجاه اسم صاحب الملخص (عربي = يمين لشمال، إنجليزي = شمال ليمين) عشان مكان علامة التوثيق
@@ -8485,65 +8956,287 @@ ESSAY
 
   // ─── 5. NOTIFICATIONS ENGINE (Section 16) ───
   window.notificationsList = [];
+  window.adminSentStudentNotifs = [];
+  window._editingStudentNotifId = null;
+  let _lastSentNotifSig = '';
+  let _lastSentNotifTs = 0;
+  let _knownSuperAdminAlertIds = null;
 
-  window.createContentNotification = async function (title, body, notifType, subject = '') {
+  // إزالة التخزين المحلي القديم الذي كان يسبب تكرار الإشعار مرتين
+  try { localStorage.removeItem('platform_notifications'); } catch (e) {}
+
+  window.getSecurityDeviceSummary = function () {
     try {
+      const ua = navigator.userAgent || '';
+      let os = 'جهاز غير معروف';
+      if (/Windows/i.test(ua)) os = 'Windows';
+      else if (/Android/i.test(ua)) os = 'Android';
+      else if (/iPhone|iPad|iPod/i.test(ua)) os = 'iOS';
+      else if (/Mac OS/i.test(ua)) os = 'Mac';
+      else if (/Linux/i.test(ua)) os = 'Linux';
+
+      let browser = 'متصفح';
+      if (/Edg\//i.test(ua)) browser = 'Edge';
+      else if (/Chrome\//i.test(ua)) browser = 'Chrome';
+      else if (/Firefox\//i.test(ua)) browser = 'Firefox';
+      else if (/Safari\//i.test(ua) && !/Chrome\//i.test(ua)) browser = 'Safari';
+
+      const devId = typeof window.getOrCreateDeviceId === 'function' ? window.getOrCreateDeviceId().slice(-8) : 'DEV';
+      const boundAcc = (window.authSession?.user?.email || (typeof window.getDeviceBoundEmail === 'function' ? window.getDeviceBoundEmail() : '') || '').toLowerCase();
+      return `${os} (${browser}) • بصمة الجهاز: #${devId}${boundAcc ? ` • الحساب المرتبط بالجهاز: ${boundAcc}` : ''}`;
+    } catch (e) {
+      return 'جهاز غير معروف';
+    }
+  };
+
+  let _lastSecurityAlertSig = '';
+  let _lastSecurityAlertTs = 0;
+
+  window.pushSuperAdminSecurityAlert = async function (title, body, alertType = 'security_alert', extraTarget = '') {
+    try {
+      const now = Date.now();
+      const sig = `${alertType}|${title}|${body}`;
+      if (sig === _lastSecurityAlertSig && (now - _lastSecurityAlertTs < 3000)) {
+        return;
+      }
+      _lastSecurityAlertSig = sig;
+      _lastSecurityAlertTs = now;
+
+      const devSummary = window.getSecurityDeviceSummary();
+      const fullBody = body.includes('بصمة الجهاز:') ? body : `${body} — [${devSummary}]`;
+
       const payload = {
         title,
-        body,
-        notification_type: notifType,
-        grade: 'bis',
-        term: currentTerm || 1,
-        subject: subject || null,
-        target_section: notifType,
+        body: fullBody,
+        notification_type: alertType,
+        grade: 'sys_admin',
+        term: null,
+        subject: extraTarget || null,
+        target_section: alertType,
         created_by: window.authSession?.user?.id || null
       };
-      // Save locally as fallback + DB
-      const localNotifs = JSON.parse(localStorage.getItem('platform_notifications') || '[]');
-      localNotifs.unshift({ id: Date.now(), ...payload, created_at: new Date().toISOString() });
-      localStorage.setItem('platform_notifications', JSON.stringify(localNotifs.slice(0, 100)));
 
       await api('notifications', {
         method: 'POST',
         body: JSON.stringify(payload)
       }).catch(() => {});
-      await window.loadStudentNotifications();
+
+      if (typeof window.broadcastRealtimeUserSync === 'function') {
+        window.broadcastRealtimeUserSync('admin_security_alert', alertType, title);
+      }
+      if (window.IS_STANDALONE_SUPER_ADMIN) {
+        await window.loadStudentNotifications(true);
+      }
     } catch (e) {}
   };
 
-  window.loadStudentNotifications = async function () {
-    const studentTerm = window.authSession?.profile?.term || currentTerm || null;
-    let items = [];
+  window.createContentNotification = async function (title, body, notifType, subject = '', customTerm = undefined) {
     try {
-      const res = await api('notifications?select=*&order=created_at.desc&limit=30');
-      if (res.ok) items = await res.json();
+      const cleanTitle = (title || '').trim();
+      const cleanBody = (body || '').trim();
+      if (!cleanTitle) return;
+
+      let resolvedTerm = null;
+      if (customTerm !== undefined && customTerm !== null && customTerm !== '') {
+        if (customTerm === 'all' || customTerm === 'both' || Number(customTerm) === 0) {
+          resolvedTerm = null;
+        } else {
+          resolvedTerm = Number(customTerm) || 1;
+        }
+      } else {
+        resolvedTerm = currentTerm ? Number(currentTerm) : 1;
+      }
+
+      const now = Date.now();
+      const dedupeSig = `${cleanTitle}|${cleanBody}|${resolvedTerm || 'all'}|${notifType}`;
+      if (dedupeSig === _lastSentNotifSig && (now - _lastSentNotifTs < 3500)) {
+        return;
+      }
+      _lastSentNotifSig = dedupeSig;
+      _lastSentNotifTs = now;
+
+      const payload = {
+        title: cleanTitle,
+        body: cleanBody,
+        notification_type: notifType || 'announcement',
+        grade: 'bis',
+        term: resolvedTerm,
+        subject: subject || null,
+        target_section: notifType || 'announcement',
+        created_by: window.authSession?.user?.id || null
+      };
+
+      await api('notifications', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      }).catch(() => {});
+
+      if (typeof window.broadcastRealtimeUserSync === 'function') {
+        window.broadcastRealtimeUserSync('student_notif_created', cleanTitle, String(resolvedTerm || 'all'));
+      }
+
+      if (!window.IS_STANDALONE_SUPER_ADMIN) {
+        await window.loadStudentNotifications(true);
+      }
     } catch (e) {}
-
-    const localNotifs = JSON.parse(localStorage.getItem('platform_notifications') || '[]');
-    const mergedMap = new Map();
-    [...items, ...localNotifs].forEach(n => {
-      if (n && n.title) mergedMap.set(n.id || n.created_at, n);
-    });
-
-    const all = Array.from(mergedMap.values()).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-    window.notificationsList = all.filter(n => {
-      return !n.term || !studentTerm || Number(n.term) === Number(studentTerm);
-    });
-
-    updateNotificationBadge();
   };
 
   function getReadNotifIds() {
     try {
-      return new Set(JSON.parse(localStorage.getItem('read_notif_ids') || '[]'));
+      const key = window.IS_STANDALONE_SUPER_ADMIN
+        ? 'read_super_admin_notif_ids_v1'
+        : `read_notif_ids_${window.authSession?.user?.id || 'guest'}`;
+      return new Set(JSON.parse(localStorage.getItem(key) || '[]'));
     } catch {
       return new Set();
     }
   }
 
+  function saveReadNotifIds(setObj) {
+    try {
+      const key = window.IS_STANDALONE_SUPER_ADMIN
+        ? 'read_super_admin_notif_ids_v1'
+        : `read_notif_ids_${window.authSession?.user?.id || 'guest'}`;
+      localStorage.setItem(key, JSON.stringify(Array.from(setObj)));
+    } catch (e) {}
+  }
+
+  function getDismissedStudentNotifIds() {
+    try {
+      const uid = window.authSession?.user?.id || 'guest';
+      return new Set(JSON.parse(localStorage.getItem(`dismissed_notif_ids_${uid}`) || '[]').map(String));
+    } catch {
+      return new Set();
+    }
+  }
+
+  function saveDismissedStudentNotifIds(setObj) {
+    try {
+      const uid = window.authSession?.user?.id || 'guest';
+      localStorage.setItem(`dismissed_notif_ids_${uid}`, JSON.stringify(Array.from(setObj)));
+    } catch (e) {}
+  }
+
+  window.isStudentRegisteredForNotifications = function () {
+    if (window.IS_STANDALONE_SUPER_ADMIN) return true;
+    const uid = window.authSession?.user?.id;
+    const email = (window.authSession?.user?.email || '').trim();
+    if (!uid || !email) return false;
+    if (window._dbAccountVerified === false) return false;
+    return true;
+  };
+
+  window.loadStudentNotifications = async function (silent = false) {
+    const titleSpan = document.getElementById('notif-dropdown-title');
+    if (titleSpan) {
+      titleSpan.textContent = window.IS_STANDALONE_SUPER_ADMIN ? 'إشعارات الأمان والنظام' : 'إشعارات المنصة';
+    }
+
+    // ── A. لوحة السوبر أدمن: تعرض فقط إشعارات الأمان والنظام (تسجيل جديد، باسورد خطأ، حساب مكرر، إلخ) ──
+    if (window.IS_STANDALONE_SUPER_ADMIN) {
+      let adminAlerts = [];
+      try {
+        const res = await api('notifications?select=*&grade=eq.sys_admin&order=created_at.desc&limit=50');
+        if (res.ok) adminAlerts = await res.json();
+      } catch (e) {}
+
+      // منع التكرار نهائياً
+      const uniqueAlerts = [];
+      const seenIds = new Set();
+      const seenSigs = new Set();
+      adminAlerts.forEach(a => {
+        if (!a || !a.title) return;
+        const idStr = String(a.id);
+        const timeBucket = a.created_at ? Math.floor(new Date(a.created_at).getTime() / 4000) : 0;
+        const contentSig = `${a.title}|${a.body}|${timeBucket}`;
+        if (seenIds.has(idStr) || seenSigs.has(contentSig)) return;
+        seenIds.add(idStr);
+        seenSigs.add(contentSig);
+        uniqueAlerts.push(a);
+      });
+
+      // تنبيه صوتي وإشعار لحظي عند وصول تنبيه أمني جديد للسوبر أدمن
+      if (_knownSuperAdminAlertIds !== null) {
+        const brandNew = uniqueAlerts.filter(a => !_knownSuperAdminAlertIds.has(String(a.id)));
+        if (brandNew.length > 0) {
+          if (typeof window.playRealtimeChime === 'function') window.playRealtimeChime('user');
+          toast(`${brandNew[0].title}`);
+        }
+      }
+      _knownSuperAdminAlertIds = new Set(uniqueAlerts.map(a => String(a.id)));
+
+      window.notificationsList = uniqueAlerts;
+      updateNotificationBadge();
+      const dd = document.getElementById('notif-dropdown');
+      if (dd && !dd.classList.contains('hidden')) {
+        renderNotificationsDropdown();
+      }
+      return;
+    }
+
+    // ── B. منصة الطلاب: لا تصل الإشعارات إلا للطلاب المسجلين في المنصة فقط ──
+    if (!window.isStudentRegisteredForNotifications()) {
+      window.notificationsList = [];
+      updateNotificationBadge();
+      const dd = document.getElementById('notif-dropdown');
+      if (dd && !dd.classList.contains('hidden')) {
+        renderNotificationsDropdown();
+      }
+      return;
+    }
+
+    let items = [];
+    try {
+      const res = await api('notifications?select=*&grade=eq.bis&order=created_at.desc&limit=40');
+      if (res.ok) items = await res.json();
+    } catch (e) {}
+
+    const dismissedIds = getDismissedStudentNotifIds();
+    const activeTermFilter = currentTerm ? Number(currentTerm) : null;
+
+    // فلترة ومنع أي تكرار للإشعار نهائياً
+    const uniqueStudentNotifs = [];
+    const seenIds = new Set();
+    const seenSigs = new Set();
+
+    items.forEach(n => {
+      if (!n || !n.title) return;
+      if (n.grade === 'sys_admin') return;
+      const idStr = String(n.id);
+      if (dismissedIds.has(idStr)) return;
+
+      // إذا كان الطالب داخل ترم محدد، نعرض إشعارات هذا الترم + الإشعارات العامة للترمين
+      if (activeTermFilter && n.term && Number(n.term) !== activeTermFilter) {
+        return;
+      }
+
+      const timeBucket = n.created_at ? Math.floor(new Date(n.created_at).getTime() / 5000) : 0;
+      const sig = `${n.title.trim()}|${(n.body || '').trim()}|${n.term || 'all'}|${timeBucket}`;
+      if (seenIds.has(idStr) || seenSigs.has(sig)) return;
+      seenIds.add(idStr);
+      seenSigs.add(sig);
+      uniqueStudentNotifs.push(n);
+    });
+
+    window.notificationsList = uniqueStudentNotifs;
+    updateNotificationBadge();
+    const dd = document.getElementById('notif-dropdown');
+    if (dd && !dd.classList.contains('hidden')) {
+      renderNotificationsDropdown();
+    }
+  };
+
   function updateNotificationBadge() {
     const badge = document.getElementById('notif-unread-badge');
+    const clearAllBtn = document.getElementById('notif-clear-all-btn');
+    if (clearAllBtn) {
+      clearAllBtn.style.display = (window.notificationsList && window.notificationsList.length > 0) ? 'inline-flex' : 'none';
+    }
     if (!badge) return;
+    if (!window.IS_STANDALONE_SUPER_ADMIN && !window.isStudentRegisteredForNotifications()) {
+      badge.classList.add('hidden');
+      return;
+    }
     const readIds = getReadNotifIds();
     const unreadCount = window.notificationsList.filter(n => !readIds.has(String(n.id))).length;
     if (unreadCount > 0) {
@@ -8560,6 +9253,7 @@ ESSAY
     if (!dd) return;
     const isHidden = dd.classList.contains('hidden');
     if (isHidden) {
+      window.loadStudentNotifications(true);
       renderNotificationsDropdown();
       dd.classList.remove('hidden');
     } else {
@@ -8570,19 +9264,91 @@ ESSAY
   window.markAllNotificationsRead = function () {
     const readIds = getReadNotifIds();
     window.notificationsList.forEach(n => readIds.add(String(n.id)));
-    localStorage.setItem('read_notif_ids', JSON.stringify(Array.from(readIds)));
+    saveReadNotifIds(readIds);
     updateNotificationBadge();
     renderNotificationsDropdown();
+  };
+
+  window.deleteSingleNotificationFromBell = async function (notifId) {
+    const idStr = String(notifId);
+    window.notificationsList = window.notificationsList.filter(n => String(n.id) !== idStr);
+    updateNotificationBadge();
+    renderNotificationsDropdown();
+
+    if (window.IS_STANDALONE_SUPER_ADMIN) {
+      try {
+        await api(`notifications?id=eq.${encodeURIComponent(idStr)}`, { method: 'DELETE' });
+        if (_knownSuperAdminAlertIds) _knownSuperAdminAlertIds.delete(idStr);
+        toast('🗑️ تم حذف التنبيه الأمني نهائياً');
+      } catch (e) {}
+    } else {
+      const dismissed = getDismissedStudentNotifIds();
+      dismissed.add(idStr);
+      saveDismissedStudentNotifIds(dismissed);
+      toast('🗑️ تم حذف الإشعار');
+    }
+  };
+
+  window.deleteAllNotificationsFromBell = async function () {
+    if (!window.notificationsList.length) return;
+    if (window.IS_STANDALONE_SUPER_ADMIN) {
+      const idsToDelete = window.notificationsList.map(n => n.id);
+      window.notificationsList = [];
+      updateNotificationBadge();
+      renderNotificationsDropdown();
+      try {
+        await api('notifications?grade=eq.sys_admin', { method: 'DELETE' });
+        if (_knownSuperAdminAlertIds) _knownSuperAdminAlertIds.clear();
+        toast('🗑️ تم مسح جميع إشعارات السوبر أدمن');
+      } catch (e) {
+        await Promise.all(idsToDelete.map(id => api(`notifications?id=eq.${id}`, { method: 'DELETE' }).catch(() => {})));
+      }
+    } else {
+      const dismissed = getDismissedStudentNotifIds();
+      window.notificationsList.forEach(n => dismissed.add(String(n.id)));
+      saveDismissedStudentNotifIds(dismissed);
+      window.notificationsList = [];
+      updateNotificationBadge();
+      renderNotificationsDropdown();
+      toast('🗑️ تم حذف جميع الإشعارات');
+    }
+  };
+
+  window.getNotifTermBadgeHtml = function (termVal) {
+    const t = Number(termVal);
+    if (t === 1) {
+      return `<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:999px;font-size:0.7rem;font-weight:900;background:rgba(45,212,191,0.14);color:#2dd4bf;border:1px solid rgba(45,212,191,0.32)">☀️ الترم الأول</span>`;
+    }
+    if (t === 2) {
+      return `<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:999px;font-size:0.7rem;font-weight:900;background:rgba(56,189,248,0.14);color:#38bdf8;border:1px solid rgba(56,189,248,0.32)">🌙 الترم الثاني</span>`;
+    }
+    return `<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:999px;font-size:0.7rem;font-weight:900;background:rgba(167,139,250,0.14);color:#a78bfa;border:1px solid rgba(167,139,250,0.32)">🌐 الترمين معاً</span>`;
   };
 
   function renderNotificationsDropdown() {
     const listEl = document.getElementById('notif-dropdown-list');
     if (!listEl) return;
-    const readIds = getReadNotifIds();
-    if (!window.notificationsList.length) {
-      listEl.innerHTML = `<div class="empty" style="padding:2rem 1rem"><i class="fas fa-bell-slash"></i><p style="font-size:0.85rem">لا توجد إشعارات جديدة حالياً</p></div>`;
+
+    // للزوار غير المسجلين على منصة الطلاب: حجب الإشعارات تماماً ومطالبتهم بتسجيل الدخول
+    if (!window.IS_STANDALONE_SUPER_ADMIN && !window.isStudentRegisteredForNotifications()) {
+      listEl.innerHTML = `
+        <div class="empty" style="padding:2rem 1rem;text-align:center">
+          <i class="fas fa-user-lock" style="font-size:2.1rem;color:var(--amber);opacity:0.85;margin-bottom:0.65rem"></i>
+          <p style="font-size:0.88rem;color:var(--text);font-weight:900;margin-bottom:0.35rem">الإشعارات للطلاب المسجلين فقط</p>
+          <p style="font-size:0.78rem;color:var(--text-dim);margin-bottom:0.95rem;line-height:1.5">سجّل دخولك بحسابك المسجل في المنصة لتلقي ومتابعة إشعارات المحاضرات والامتحانات</p>
+          <button type="button" class="btn btn-primary" style="padding:7px 18px;font-size:0.8rem" onclick="document.getElementById('notif-dropdown').classList.add('hidden');if(typeof openAuthModal==='function')openAuthModal('login')">
+            <i class="fas fa-sign-in-alt"></i> تسجيل الدخول الآن
+          </button>
+        </div>`;
       return;
     }
+
+    const readIds = getReadNotifIds();
+    if (!window.notificationsList.length) {
+      listEl.innerHTML = `<div class="empty" style="padding:2rem 1rem"><i class="fas fa-bell-slash"></i><p style="font-size:0.85rem">${window.IS_STANDALONE_SUPER_ADMIN ? 'لا توجد تنبيهات أمنية أو تسجيلات جديدة حالياً' : 'لا توجد إشعارات جديدة حالياً'}</p></div>`;
+      return;
+    }
+
     const icons = {
       lecture: '🎥',
       lectures: '🎥',
@@ -8592,16 +9358,36 @@ ESSAY
       exams: '📝',
       book: '📚',
       books: '📚',
-      announcement: '📢'
+      announcement: '📢',
+      new_account: '🆕',
+      failed_login: '🔑',
+      failed_admin_pwd: '🚨',
+      failed_owner_pwd: '⚠️',
+      duplicate_device_signup: '🔄',
+      duplicate_email_signup: '🔄',
+      device_violation: '⛔',
+      disabled_login: '🚫',
+      password_reset: '🔐',
+      owner_login: '👑'
     };
+
     listEl.innerHTML = window.notificationsList.map(n => {
       const isUnread = !readIds.has(String(n.id));
       const dateStr = n.created_at ? new Date(n.created_at).toLocaleDateString('ar-EG', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+      const termBadge = window.IS_STANDALONE_SUPER_ADMIN ? '' : window.getNotifTermBadgeHtml(n.term);
       return `
-        <div class="notif-item ${isUnread ? 'unread' : ''}" onclick="openNotificationTarget('${n.id}', '${n.grade || 'bis'}', '${n.term || ''}', '${n.target_section || ''}')">
-          <h5>${icons[n.notification_type] || '🔔'} ${n.title}</h5>
-          <p>${n.body || ''}</p>
-          <span class="notif-time">${n.term ? TERM_NAMES[n.term] + ' • ' : ''}${dateStr}</span>
+        <div class="notif-item ${isUnread ? 'unread' : ''}" style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px" onclick="openNotificationTarget('${n.id}', '${n.grade || 'bis'}', '${n.term || ''}', '${n.target_section || ''}')">
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;margin-bottom:4px">
+              <h5 style="margin:0;font-size:0.88rem">${icons[n.notification_type] || '🔔'} ${n.title}</h5>
+              ${termBadge}
+            </div>
+            <p style="margin:0 0 5px 0;font-size:0.8rem;line-height:1.5">${n.body || ''}</p>
+            <span class="notif-time">${dateStr}</span>
+          </div>
+          <button type="button" class="btn btn-ghost" onclick="event.stopPropagation(); deleteSingleNotificationFromBell('${n.id}')" title="حذف الإشعار" style="padding:5px 8px;font-size:0.75rem;color:var(--red);border-color:rgba(248,113,113,0.28);flex-shrink:0;border-radius:9px">
+            <i class="fas fa-trash-alt"></i>
+          </button>
         </div>`;
     }).join('');
   }
@@ -8609,13 +9395,25 @@ ESSAY
   window.openNotificationTarget = function (id, grade, term, section) {
     const readIds = getReadNotifIds();
     readIds.add(String(id));
-    localStorage.setItem('read_notif_ids', JSON.stringify(Array.from(readIds)));
+    saveReadNotifIds(readIds);
     updateNotificationBadge();
     const dd = document.getElementById('notif-dropdown');
     if (dd) dd.classList.add('hidden');
 
+    if (window.IS_STANDALONE_SUPER_ADMIN) {
+      if (section === 'new_account' || section === 'duplicate_device_signup' || section === 'duplicate_email_signup') {
+        if (typeof switchAdminSection === 'function') switchAdminSection('users');
+      } else if (section && typeof switchAdminSection === 'function') {
+        switchAdminSection('logs');
+      }
+      return;
+    }
+
     currentGrade = 'bis';
-    if (term && Number(term)) currentTerm = Number(term);
+    if (term && Number(term)) {
+      currentTerm = Number(term);
+      if (typeof selectTerm === 'function') selectTerm(Number(term));
+    }
     if (section && ['exams', 'lectures', 'lecture-quizzes', 'summaries'].includes(section)) {
       openSection(section);
     }
@@ -8629,7 +9427,21 @@ ESSAY
     currentTerm = null;
     currentSection = null;
     showTermSelection();
+    if (typeof window.loadStudentNotifications === 'function') {
+      window.loadStudentNotifications(true);
+    }
   };
+
+  const _origSelectTermNotif = window.selectTerm;
+  if (typeof _origSelectTermNotif === 'function') {
+    window.selectTerm = function (term) {
+      const res = _origSelectTermNotif.apply(this, arguments);
+      if (typeof window.loadStudentNotifications === 'function') {
+        window.loadStudentNotifications(true);
+      }
+      return res;
+    };
+  }
 
   // ─── 7. GLOBAL SEARCH ACROSS ALL CONTENT (Section 15) ───
   let _globalSearchTimer = null;
@@ -9306,6 +10118,14 @@ ESSAY
       const overridesPre = await window.fetchSystemUserOverrides();
       const boundEmail = window.getDeviceBoundEmail(overridesPre);
       if (boundEmail && window.normalizeEmailStrict(boundEmail) !== normEmail) {
+        if (typeof window.pushSuperAdminSecurityAlert === 'function') {
+          window.pushSuperAdminSecurityAlert(
+            '⛔ محاولة دخول بحساب آخر من جهاز مسجل',
+            `جهاز مرتبط بالفعل بالحساب (${boundEmail}) حاول تسجيل الدخول بإيميل مختلف (${lowerEmail})`,
+            'device_violation',
+            lowerEmail
+          );
+        }
         errEl.style.color = 'var(--red)';
         errEl.textContent = `⛔ لا يمكن الدخول بأكثر من إيميل على نفس الجهاز! هذا الجهاز مرتبط بالفعل بالحساب (${boundEmail}).`;
         return;
@@ -9363,12 +10183,36 @@ ESSAY
 
       if (cloudAcc && cloudAcc.pw_hash && !cloudAcc.pending_confirmation) {
         if (cloudAcc.deleted) {
+          if (typeof window.pushSuperAdminSecurityAlert === 'function') {
+            window.pushSuperAdminSecurityAlert(
+              '🚫 محاولة دخول بحساب محذوف',
+              `حاول المستخدم (${lowerEmail}) تسجيل الدخول إلى المنصة بحساب تم حذفه مسبقاً`,
+              'disabled_login',
+              lowerEmail
+            );
+          }
           throw new Error('تم حذف هذا الحساب من قِبل إدارة المنصة.');
         }
         if (cloudAcc.is_active === false) {
+          if (typeof window.pushSuperAdminSecurityAlert === 'function') {
+            window.pushSuperAdminSecurityAlert(
+              '🚫 محاولة دخول بحساب معطّل',
+              `حاول المستخدم (${lowerEmail}) تسجيل الدخول إلى المنصة بحساب معطّل من الإدارة`,
+              'disabled_login',
+              lowerEmail
+            );
+          }
           throw new Error('⛔ تم تعطيل هذا الحساب من قِبل إدارة المنصة. تواصل مع المسؤول.');
         }
         if (cloudAcc.pw_hash !== _encodePass(password)) {
+          if (typeof window.pushSuperAdminSecurityAlert === 'function') {
+            window.pushSuperAdminSecurityAlert(
+              '🔑 محاولة دخول بباسورد غلط',
+              `جهاز حاول تسجيل الدخول إلى الحساب (${lowerEmail}) وأدخل كلمة مرور خاطئة!`,
+              'failed_login',
+              lowerEmail
+            );
+          }
           throw new Error('بيانات الدخول غير صحيحة (كلمة المرور غير مطابقة)');
         }
         window.bindDeviceToEmail(lowerEmail, overrides);
@@ -9401,6 +10245,14 @@ ESSAY
         return;
       }
 
+      if (typeof window.pushSuperAdminSecurityAlert === 'function') {
+        window.pushSuperAdminSecurityAlert(
+          '🔑 محاولة دخول بباسورد غلط',
+          `جهاز حاول تسجيل الدخول إلى المنصة بالإيميل (${lowerEmail}) وأدخل كلمة مرور خاطئة!`,
+          'failed_login',
+          lowerEmail
+        );
+      }
       throw new Error('البريد الإلكتروني أو كلمة المرور غير صحيحة');
     } catch (err) {
       errEl.style.color = 'var(--red)';
@@ -9442,6 +10294,14 @@ ESSAY
       // فحص قفل الجهاز على إيميل واحد فقط
       const boundEmail = window.getDeviceBoundEmail(overrides, allProfiles);
       if (boundEmail && window.normalizeEmailStrict(boundEmail) !== normEmail) {
+        if (typeof window.pushSuperAdminSecurityAlert === 'function') {
+          window.pushSuperAdminSecurityAlert(
+            '🔄 محاولة إنشاء أكونت جديد من جهاز مسجل بالفعل',
+            `جهاز مسجل بالفعل على المنصة بالحساب (${boundEmail}) حاول إنشاء حساب جديد باسم (${fullName}) وإيميل (${lowerEmail})`,
+            'duplicate_device_signup',
+            lowerEmail
+          );
+        }
         errEl.style.color = 'var(--red)';
         errEl.textContent = `⛔ لا يمكن تسجيل أكثر من حساب إيميل واحد على نفس الجهاز! هذا الجهاز مرتبط بالفعل بالحساب (${boundEmail}).`;
         return;
@@ -9453,6 +10313,14 @@ ESSAY
       const isDeletedInOv = Boolean(existingOv && existingOv.deleted === true);
 
       if ((matchingProfile || (existingOv && existingOv.email)) && !isDeletedInOv) {
+        if (typeof window.pushSuperAdminSecurityAlert === 'function') {
+          window.pushSuperAdminSecurityAlert(
+            '🔄 محاولة إنشاء أكونت جديد وهو مسجل على المنصة',
+            `جهاز حاول إنشاء حساب جديد بالإيميل (${lowerEmail}) باسم (${fullName}) وهو مسجل بالفعل على المنصة!`,
+            'duplicate_email_signup',
+            lowerEmail
+          );
+        }
         errEl.style.color = 'var(--red)';
         errEl.textContent = '❌ هذا البريد الإلكتروني مسجل بالفعل على المنصة ولا يمكن تكراره! انتقل لتبويب «تسجيل الدخول».';
         return;
@@ -9482,6 +10350,14 @@ ESSAY
       // إذا أعاد Supabase حالة user_repeated_signup ولم يكن الحساب محذوفاً من السوبر أدمن، نمنع التكرار فوراً
       const isRepeatedAuthUser = Array.isArray(data?.user?.identities) && data.user.identities.length === 0;
       if (isRepeatedAuthUser && !isDeletedInOv) {
+        if (typeof window.pushSuperAdminSecurityAlert === 'function') {
+          window.pushSuperAdminSecurityAlert(
+            '🔄 محاولة إنشاء أكونت جديد وهو مسجل على المنصة',
+            `جهاز حاول إنشاء حساب جديد بالإيميل (${lowerEmail}) باسم (${fullName}) وهو مسجل بالفعل على المنصة!`,
+            'duplicate_email_signup',
+            lowerEmail
+          );
+        }
         errEl.style.color = 'var(--red)';
         errEl.textContent = '❌ هذا البريد الإلكتروني مسجل بالفعل على المنصة ولا يمكن تكراره! انتقل لتبويب «تسجيل الدخول».';
         return;
@@ -9519,6 +10395,14 @@ ESSAY
         } catch (e) {}
       } else if (!res.ok) {
         if (errMsg.includes('already registered') || errMsg.includes('already exists')) {
+          if (typeof window.pushSuperAdminSecurityAlert === 'function') {
+            window.pushSuperAdminSecurityAlert(
+              '🔄 محاولة إنشاء أكونت جديد وهو مسجل على المنصة',
+              `جهاز حاول إنشاء حساب جديد بالإيميل (${lowerEmail}) باسم (${fullName}) وهو مسجل بالفعل على المنصة!`,
+              'duplicate_email_signup',
+              lowerEmail
+            );
+          }
           errEl.style.color = 'var(--red)';
           errEl.textContent = '❌ هذا البريد الإلكتروني مسجل بالفعل على المنصة ولا يمكن تكراره! انتقل لتبويب «تسجيل الدخول».';
           return;
@@ -9576,6 +10460,14 @@ ESSAY
 
       // تسجيل نشاط فوري وإرسال نبض اتصال حي ومزامنة فورية مع السوبر أدمن
       try {
+        if (typeof window.pushSuperAdminSecurityAlert === 'function') {
+          window.pushSuperAdminSecurityAlert(
+            '🆕 تسجيل أكونت جديد على المنصة',
+            `تم تسجيل حساب طالب جديد باسم (${fullName}) وإيميل (${lowerEmail}) — ${TERM_NAMES[term] || 'الترم الأول'}`,
+            'new_account',
+            lowerEmail
+          );
+        }
         if (typeof window.logAdminActivity === 'function') {
           window.logAdminActivity('تسجيل حساب جديد', 'user', `${fullName} (${lowerEmail})`, uid, { role: 'student', term: term });
         }
@@ -9654,6 +10546,14 @@ ESSAY
       return;
     }
     ensureRecoveryTokenPasteBox();
+    if (typeof window.pushSuperAdminSecurityAlert === 'function') {
+      window.pushSuperAdminSecurityAlert(
+        '🔐 طلب استعادة كلمة المرور',
+        `جهاز طلب إرسال رابط استعادة/تغيير كلمة المرور للحساب (${email})`,
+        'password_reset',
+        email
+      );
+    }
     try {
       const redirectUrl = (window.location.origin && window.location.origin !== 'null' && !window.location.origin.includes('localhost'))
         ? (window.location.origin + window.location.pathname)
@@ -10339,6 +11239,9 @@ ESSAY
     window.authSession = { accessToken: null, refreshToken: null, user: null, profile: null, permissions: null };
     localStorage.removeItem('supabase_auth_session');
     updateNavbarAuthUI();
+    if (typeof window.loadStudentNotifications === 'function') {
+      window.loadStudentNotifications(true);
+    }
     showGradeSelection();
     toast('تم تسجيل الخروج بنجاح');
   };
@@ -10791,6 +11694,13 @@ ESSAY
     }
 
     if (!matchedGrade) {
+      if (typeof window.pushSuperAdminSecurityAlert === 'function') {
+        window.pushSuperAdminSecurityAlert(
+          '🚨 محاولة دخول لوحة الإدارة بباسورد غلط',
+          `جهاز حاول فتح لوحة التحكم (Dashboard) وأدخل كلمة سر خاطئة!`,
+          'failed_admin_pwd'
+        );
+      }
       document.getElementById('pwd-error').textContent = '❌ كلمة السر غير صحيحة، حاول مرة أخرى';
       document.getElementById('pwd-input').classList.add('error');
       document.getElementById('pwd-input').value = '';
@@ -10950,6 +11860,8 @@ ESSAY
     } catch (e) {}
   };
 
+  let _lastOverviewStudentNotifsSig = '';
+
   async function loadAdminDashboardOverview(silent = false) {
     const container = document.getElementById('admin-section-overview');
     if (!container) return;
@@ -10958,14 +11870,15 @@ ESSAY
     }
 
     try {
-      const [qRes, rRes, pRes, aRes, overrides, presenceMap, cloudLogsSync] = await Promise.all([
+      const [qRes, rRes, pRes, aRes, overrides, presenceMap, cloudLogsSync, nRes] = await Promise.all([
         api(`quizzes?select=id,section,published&grade=eq.bis&term=eq.${currentTerm}`),
         api(`resources?select=id,type,title,subject&grade=eq.bis&term=eq.${currentTerm}`),
         api('profiles?select=id,email,full_name,role,is_active'),
         api('quiz_attempts?select=id,score_pct'),
         window.fetchSystemUserOverrides ? window.fetchSystemUserOverrides() : Promise.resolve({}),
         window.fetchSystemUserPresence ? window.fetchSystemUserPresence() : Promise.resolve({}),
-        window.fetchSystemActivityLogsSync ? window.fetchSystemActivityLogsSync() : Promise.resolve(null)
+        window.fetchSystemActivityLogsSync ? window.fetchSystemActivityLogsSync() : Promise.resolve(null),
+        api('notifications?select=*&grade=eq.bis&order=created_at.desc&limit=40')
       ]);
 
       const qList = qRes.ok ? await qRes.json() : [];
@@ -10974,6 +11887,23 @@ ESSAY
       const dbAttempts = aRes.ok ? await aRes.json() : [];
       const localAttempts = JSON.parse(localStorage.getItem('student_quiz_attempts') || '[]');
       const totalAttempts = Math.max(dbAttempts.length, localAttempts.length);
+      const rawStudentNotifs = (nRes && nRes.ok) ? await nRes.json() : [];
+
+      // تصفية إشعارات الطلاب ومنع أي تكرار
+      const sentStudentNotifs = [];
+      const seenNIds = new Set();
+      const seenNSigs = new Set();
+      rawStudentNotifs.forEach(n => {
+        if (!n || !n.title || n.grade === 'sys_admin') return;
+        const idStr = String(n.id);
+        const timeBucket = n.created_at ? Math.floor(new Date(n.created_at).getTime() / 5000) : 0;
+        const sig = `${n.title.trim()}|${(n.body || '').trim()}|${n.term || 'all'}|${timeBucket}`;
+        if (seenNIds.has(idStr) || seenNSigs.has(sig)) return;
+        seenNIds.add(idStr);
+        seenNSigs.add(sig);
+        sentStudentNotifs.push(n);
+      });
+      window.adminSentStudentNotifs = sentStudentNotifs;
 
       // دمج الحسابات وحساب المتصلين حالياً (Online) وغير المتصلين (Offline) بدقة ومنع التكرار
       const seenEmails = new Set(pList.map(u => window.normalizeEmailStrict(u.email || '')).filter(Boolean));
@@ -11062,6 +11992,38 @@ ESSAY
         }).join('');
       };
 
+      const buildSentStudentNotifsHtml = (notifsArr) => {
+        if (!notifsArr || notifsArr.length === 0) {
+          return `<p style="color:var(--text-dim);font-size:0.84rem;margin:0;padding:8px 0">لا توجد إشعارات مرسلة للطلاب حالياً.</p>`;
+        }
+        return notifsArr.map(n => {
+          const dateStr = n.created_at ? new Date(n.created_at).toLocaleString('ar-EG', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+          const termBadge = typeof window.getNotifTermBadgeHtml === 'function' ? window.getNotifTermBadgeHtml(n.term) : '';
+          const isEditingThis = String(window._editingStudentNotifId || '') === String(n.id);
+          return `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;margin-bottom:6px;border-radius:12px;background:${isEditingThis ? 'rgba(56,189,248,0.12)' : 'rgba(10,14,32,0.55)'};border:1px solid ${isEditingThis ? 'rgba(56,189,248,0.55)' : 'var(--border)'};gap:10px;flex-wrap:wrap">
+              <div style="flex:1;min-width:200px">
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:3px">
+                  <strong style="font-size:0.9rem;color:var(--text)">📢 ${n.title}</strong>
+                  ${termBadge}
+                  <span style="color:var(--text-dim);font-size:0.74rem">${dateStr}</span>
+                </div>
+                <div style="font-size:0.82rem;color:var(--text-dim);line-height:1.45">${n.body || ''}</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+                <button type="button" class="btn btn-blue" style="padding:5px 11px;font-size:0.76rem" onclick="startEditStudentNotification('${n.id}')" title="تعديل هذا الإشعار">
+                  <i class="fas fa-edit"></i> تعديل
+                </button>
+                <button type="button" class="btn btn-danger" style="padding:5px 11px;font-size:0.76rem" onclick="deleteStudentNotificationPermanently('${n.id}')" title="حذف الإشعار نهائياً من الطلاب والسوبر أدمن">
+                  <i class="fas fa-trash-alt"></i> حذف نهائياً
+                </button>
+              </div>
+            </div>`;
+        }).join('');
+      };
+
+      const newStudentNotifsSig = JSON.stringify(sentStudentNotifs.map(n => `${n.id}|${n.title}|${n.body}|${n.term}|${window._editingStudentNotifId || ''}`));
+
       // إذا كانت الكروت مرسومة بالفعل، نحدّث الأرقام فقط في مكانها (In-Place DOM Patching) بدون أي اختفاء أو وميض!
       if (document.getElementById('overview-kpi-grid')) {
         const setTxtIfChanged = (id, val) => {
@@ -11076,7 +12038,16 @@ ESSAY
         setTxtIfChanged('overview-val-lectures', lecturesCount);
         setTxtIfChanged('overview-label-summaries', `المحاضرات (${summariesCount} ملخص)`);
         setTxtIfChanged('overview-val-attempts', totalAttempts);
-        setTxtIfChanged('overview-notif-term-header', `إرسال إشعار للطلاب (${TERM_NAMES[currentTerm] || 'الترم الأول'})`);
+
+        const sentNotifsBodyEl = document.getElementById('overview-sent-student-notifs-body');
+        if (sentNotifsBodyEl && newStudentNotifsSig !== _lastOverviewStudentNotifsSig) {
+          _lastOverviewStudentNotifsSig = newStudentNotifsSig;
+          sentNotifsBodyEl.innerHTML = buildSentStudentNotifsHtml(sentStudentNotifs);
+        }
+        const clearNotifsBtnEl = document.getElementById('overview-clear-student-notifs-btn');
+        if (clearNotifsBtnEl) {
+          clearNotifsBtnEl.style.display = sentStudentNotifs.length > 0 ? 'inline-flex' : 'none';
+        }
 
         const newRecentSig = JSON.stringify(localLogs.map(l => window.computeActivityLogSig(l)));
         const logsBodyEl = document.getElementById('overview-recent-logs-body');
@@ -11092,6 +12063,7 @@ ESSAY
       }
 
       _lastOverviewRecentLogsSig = JSON.stringify(localLogs.map(l => window.computeActivityLogSig(l)));
+      _lastOverviewStudentNotifsSig = newStudentNotifsSig;
 
       container.innerHTML = `
         <div class="kpi-grid" id="overview-kpi-grid">
@@ -11129,12 +12101,29 @@ ESSAY
 
         <div class="glass-card" style="padding:1.4rem;margin-bottom:1.2rem">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:8px">
-            <h4 style="font-size:1.05rem;font-weight:900"><i class="fas fa-bullhorn" style="color:var(--amber);margin-left:6px"></i> <span id="overview-notif-term-header">إرسال إشعار للطلاب (${TERM_NAMES[currentTerm] || 'الترم الأول'})</span></h4>
+            <h4 style="font-size:1.05rem;font-weight:900;margin:0"><i class="fas fa-bullhorn" style="color:var(--amber);margin-left:6px"></i> <span id="overview-notif-term-header">إرسال وإدارة إشعارات منصة الطلاب (للمسجلين فقط)</span></h4>
+            <button id="overview-clear-student-notifs-btn" type="button" class="btn btn-danger" style="padding:6px 12px;font-size:0.78rem;display:${sentStudentNotifs.length > 0 ? 'inline-flex' : 'none'}" onclick="deleteAllStudentNotificationsPermanently()">
+              <i class="fas fa-trash-alt"></i> حذف جميع إشعارات الطلاب نهائياً
+            </button>
           </div>
-          <div style="display:grid;grid-template-columns:1fr 2fr auto;gap:8px;align-items:center">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;align-items:center;margin-bottom:1rem">
+            <select id="quick-notif-term" style="background:var(--surface2);border:1px solid rgba(56,189,248,0.35);border-radius:10px;padding:9px 12px;color:var(--teal);font-family:'Cairo',sans-serif;font-weight:800">
+              <option value="1" ${Number(currentTerm) === 1 ? 'selected' : ''}>☀️ يخص: الترم الأول</option>
+              <option value="2" ${Number(currentTerm) === 2 ? 'selected' : ''}>🌙 يخص: الترم الثاني</option>
+              <option value="all">🌐 يخص: الترمين معاً (عام)</option>
+            </select>
             <input type="text" id="quick-notif-title" placeholder="عنوان الإشعار (مثال: محاضرة جديدة)" style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:9px 12px;color:var(--text);font-family:'Cairo',sans-serif">
             <input type="text" id="quick-notif-body" placeholder="تفاصيل الإشعار..." style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:9px 12px;color:var(--text);font-family:'Cairo',sans-serif">
-            <button class="btn btn-primary" onclick="sendQuickAdminNotification()"><i class="fas fa-paper-plane"></i> إرسال</button>
+            <div style="display:flex;gap:6px;align-items:center">
+              <button id="quick-notif-submit-btn" type="button" class="btn btn-primary" style="flex:1;justify-content:center" onclick="sendQuickAdminNotification()"><i class="fas fa-paper-plane"></i> إرسال</button>
+              <button id="quick-notif-cancel-btn" type="button" class="btn btn-ghost" style="display:none;padding:9px 12px" onclick="cancelEditStudentNotification()">إلغاء</button>
+            </div>
+          </div>
+          <div style="border-top:1px solid var(--border);padding-top:0.85rem">
+            <div style="font-size:0.82rem;font-weight:800;color:var(--teal);margin-bottom:0.6rem"><i class="fas fa-list-ul" style="margin-left:5px"></i> الإشعارات المرسلة حالياً للطلاب (تعديل أو حذف نهائي):</div>
+            <div id="overview-sent-student-notifs-body" style="max-height:260px;overflow-y:auto">
+              ${buildSentStudentNotifsHtml(sentStudentNotifs)}
+            </div>
           </div>
         </div>
 
@@ -11162,15 +12151,142 @@ ESSAY
   }
   window.loadAdminDashboardOverview = loadAdminDashboardOverview;
 
+  window.startEditStudentNotification = function (notifId) {
+    const item = (window.adminSentStudentNotifs || []).find(n => String(n.id) === String(notifId));
+    if (!item) return;
+    window._editingStudentNotifId = item.id;
+    const titleInp = document.getElementById('quick-notif-title');
+    const bodyInp = document.getElementById('quick-notif-body');
+    const termSel = document.getElementById('quick-notif-term');
+    const submitBtn = document.getElementById('quick-notif-submit-btn');
+    const cancelBtn = document.getElementById('quick-notif-cancel-btn');
+
+    if (titleInp) {
+      titleInp.value = item.title || '';
+      titleInp.focus();
+    }
+    if (bodyInp) bodyInp.value = item.body || '';
+    if (termSel) {
+      termSel.value = (item.term === 1 || item.term === '1') ? '1' : ((item.term === 2 || item.term === '2') ? '2' : 'all');
+    }
+    if (submitBtn) {
+      submitBtn.innerHTML = '<i class="fas fa-save"></i> حفظ التعديل';
+    }
+    if (cancelBtn) {
+      cancelBtn.style.display = 'inline-flex';
+    }
+    loadAdminDashboardOverview(true);
+    toast('✏️ عدّل بيانات الإشعار أو التيرم ثم اضغط «حفظ التعديل»');
+  };
+
+  window.cancelEditStudentNotification = function () {
+    window._editingStudentNotifId = null;
+    const titleInp = document.getElementById('quick-notif-title');
+    const bodyInp = document.getElementById('quick-notif-body');
+    const submitBtn = document.getElementById('quick-notif-submit-btn');
+    const cancelBtn = document.getElementById('quick-notif-cancel-btn');
+    if (titleInp) titleInp.value = '';
+    if (bodyInp) bodyInp.value = '';
+    if (submitBtn) submitBtn.innerHTML = '<i class="fas fa-paper-plane"></i> إرسال';
+    if (cancelBtn) cancelBtn.style.display = 'none';
+    loadAdminDashboardOverview(true);
+  };
+
   window.sendQuickAdminNotification = async function () {
     const title = document.getElementById('quick-notif-title')?.value.trim();
     const body = document.getElementById('quick-notif-body')?.value.trim();
+    const selectedTerm = document.getElementById('quick-notif-term')?.value || '1';
     if (!title || !body) return toast('اكتب عنوان وتفاصيل الإشعار أولاً!', 'error');
-    await window.createContentNotification(title, body, 'announcement');
-    await window.logAdminActivity('إرسال إشعار', 'notification', title);
+
+    const resolvedTerm = (selectedTerm === 'all') ? null : Number(selectedTerm);
+    const termLabel = resolvedTerm === 1 ? 'الترم الأول' : (resolvedTerm === 2 ? 'الترم الثاني' : 'الترمين معاً');
+
+    if (window._editingStudentNotifId) {
+      const editId = window._editingStudentNotifId;
+      try {
+        await api(`notifications?id=eq.${encodeURIComponent(editId)}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            title,
+            body,
+            term: resolvedTerm
+          })
+        });
+        await window.logAdminActivity('تعديل إشعار للطلاب', 'notification', `${title} (${termLabel})`, String(editId));
+        if (typeof window.broadcastRealtimeUserSync === 'function') {
+          window.broadcastRealtimeUserSync('student_notif_updated', title, String(editId));
+        }
+        window.cancelEditStudentNotification();
+        await loadAdminDashboardOverview(true);
+        toast(`✅ تم تعديل الإشعار وتحديثه لدى طلاب (${termLabel}) فوراً!`);
+      } catch (e) {
+        toast('تعذر حفظ تعديل الإشعار', 'error');
+      }
+      return;
+    }
+
+    await window.createContentNotification(title, body, 'announcement', '', selectedTerm);
+    await window.logAdminActivity('إرسال إشعار للطلاب', 'notification', `${title} (${termLabel})`);
     document.getElementById('quick-notif-title').value = '';
     document.getElementById('quick-notif-body').value = '';
-    toast('🔔 تم إرسال الإشعار للطلاب بنجاح!');
+    await loadAdminDashboardOverview(true);
+    toast(`🔔 تم إرسال الإشعار لطلاب (${termLabel}) المسجلين بنجاح!`);
+  };
+
+  window.deleteStudentNotificationPermanently = async function (notifId) {
+    const item = (window.adminSentStudentNotifs || []).find(n => String(n.id) === String(notifId));
+    const titleStr = item ? item.title : `#${notifId}`;
+    const ok = await showConfirm({
+      title: 'حذف الإشعار نهائياً',
+      msg: `سيتم حذف الإشعار "${titleStr}" نهائياً من صفحة الطلاب ومن السوبر أدمن فوراً. هل أنت متأكد؟`,
+      type: 'danger',
+      icon: 'fa-trash-alt',
+      okText: 'نعم، احذف نهائياً'
+    });
+    if (!ok) return;
+
+    try {
+      await api(`notifications?id=eq.${encodeURIComponent(notifId)}`, { method: 'DELETE' });
+      if (String(window._editingStudentNotifId || '') === String(notifId)) {
+        window.cancelEditStudentNotification();
+      }
+      window.adminSentStudentNotifs = (window.adminSentStudentNotifs || []).filter(n => String(n.id) !== String(notifId));
+      await window.logAdminActivity('حذف إشعار طلاب نهائياً', 'notification', titleStr, String(notifId));
+      if (typeof window.broadcastRealtimeUserSync === 'function') {
+        window.broadcastRealtimeUserSync('student_notif_deleted', titleStr, String(notifId));
+      }
+      await loadAdminDashboardOverview(true);
+      toast('🗑️ تم حذف الإشعار نهائياً من صفحة الطلاب والسوبر أدمن!');
+    } catch (e) {
+      toast('تعذر حذف الإشعار', 'error');
+    }
+  };
+
+  window.deleteAllStudentNotificationsPermanently = async function () {
+    const count = (window.adminSentStudentNotifs || []).length;
+    if (!count) return;
+    const ok = await showConfirm({
+      title: 'حذف جميع إشعارات الطلاب نهائياً',
+      msg: `سيتم حذف جميع الإشعارات المرسلة للطلاب (${count} إشعار) نهائياً من صفحة الطلاب ومن السوبر أدمن. هل أنت متأكد؟`,
+      type: 'danger',
+      icon: 'fa-trash-alt',
+      okText: 'نعم، احذف الكل نهائياً'
+    });
+    if (!ok) return;
+
+    try {
+      await api('notifications?grade=eq.bis', { method: 'DELETE' });
+      window.cancelEditStudentNotification();
+      window.adminSentStudentNotifs = [];
+      await window.logAdminActivity('حذف جميع إشعارات الطلاب نهائياً', 'notification', `${count} إشعار`);
+      if (typeof window.broadcastRealtimeUserSync === 'function') {
+        window.broadcastRealtimeUserSync('student_notif_deleted', 'all', 'all');
+      }
+      await loadAdminDashboardOverview(true);
+      toast('🗑️ تم حذف جميع إشعارات الطلاب نهائياً من المنصة والسوبر أدمن!');
+    } catch (e) {
+      toast('تعذر حذف جميع الإشعارات', 'error');
+    }
   };
 
   // ─── 16. EDIT RESOURCE & PUBLISH/HIDE TOGGLE (Lectures & Summaries) ───
@@ -13931,6 +15047,9 @@ ESSAY
 
   // ─── 22. INITIALIZE ON PAGE LOAD + REAL-TIME LIVE SYNC ENGINE ───
   function handleIncomingRealtimeSync() {
+    if (typeof window.loadStudentNotifications === 'function') {
+      window.loadStudentNotifications(true);
+    }
     if (window.IS_STANDALONE_SUPER_ADMIN) {
       if (typeof window.renderSuperAdminPlatformLockBar === 'function') {
         window.renderSuperAdminPlatformLockBar();
@@ -14089,6 +15208,14 @@ ESSAY
       return;
     }
     _origSubmitOwnersMasterPwd();
+    const errTxt = document.getElementById('owners-master-pwd-error')?.textContent || '';
+    if (errTxt && typeof window.pushSuperAdminSecurityAlert === 'function') {
+      window.pushSuperAdminSecurityAlert(
+        '🚨 محاولة إدارة Owners بباسورد غلط',
+        `جهاز حاول فتح إدارة إضافة Owner وأدخل كلمة سر رئيسية خاطئة!`,
+        'failed_owner_pwd'
+      );
+    }
   };
 
   const _origSubmitOwnerPwd = window.submitOwnerPwd;
@@ -14096,6 +15223,7 @@ ESSAY
     const val = document.getElementById('owner-pwd-input').value.trim();
     if (!val) return;
     const targetOwner = _ownerPwdContext === 'lecture' ? _pendingLectureOwnerOpen : _pendingOwnerOpen;
+    const ownerName = targetOwner?.name || 'Owner';
     if (targetOwner) {
       const rpcVerified = await window.rpc('verify_owner_password', {
         p_kind: _ownerPwdContext,
@@ -14108,6 +15236,24 @@ ESSAY
       }
     }
     _origSubmitOwnerPwd();
+    const errTxt = document.getElementById('owner-pwd-error')?.textContent || '';
+    if (errTxt) {
+      if (typeof window.pushSuperAdminSecurityAlert === 'function') {
+        window.pushSuperAdminSecurityAlert(
+          '⚠️ محاولة فتح قسم Owner بباسورد غلط',
+          `جهاز حاول الدخول إلى إدارة قسم الـ Owner (${ownerName}) وأدخل باسورد غلط!`,
+          'failed_owner_pwd',
+          ownerName
+        );
+      }
+    } else if (typeof window.pushSuperAdminSecurityAlert === 'function') {
+      window.pushSuperAdminSecurityAlert(
+        '👑 دخول ناجح لقسم إدارة Owner',
+        `تم فتح إدارة قسم الـ Owner (${ownerName}) بنجاح`,
+        'owner_login',
+        ownerName
+      );
+    }
   };
 
   // 2. Summary Owners Folders Support (Admin & Public Student View)
