@@ -1,20 +1,20 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-  <!-- Google Analytics (GA4) + GTM -->
-  <script async src="https://www.googletagmanager.com/gtag/js?id=G-9W4GM477TK"></script>
+  <!-- Google Analytics / GTM (GTM-WQSC9WGG) -->
+  <script async src="https://www.googletagmanager.com/gtm.js?id=GTM-WQSC9WGG"></script>
   <script>
     window.dataLayer = window.dataLayer || [];
     function gtag(){dataLayer.push(arguments);}
     gtag('js', new Date());
-    gtag('config', 'G-9W4GM477TK');
+    gtag('config', 'GTM-WQSC9WGG');
   </script>
   <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
   new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
   j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
   'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
-  })(window,document,'script','dataLayer','GTM-M7KS3N9C');</script>
-  <!-- End Google Analytics (GA4) + GTM -->
+  })(window,document,'script','dataLayer','GTM-WQSC9WGG');</script>
+  <!-- End Google Analytics / GTM -->
 
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -12988,7 +12988,7 @@ ESSAY
   };
 
   // ─── 20. SUPER ADMIN ANALYTICS ENGINE + GOOGLE ANALYTICS / GTM LIVE INTEGRATION (Section 17) ───
-  window._currentGA4MeasurementId = localStorage.getItem('bis_ga4_measurement_id_v1') || 'G-9W4GM477TK';
+  window._currentGA4MeasurementId = localStorage.getItem('bis_ga4_measurement_id_v1') || 'GTM-WQSC9WGG';
 
   window.initGoogleAnalyticsGA4 = function (measurementId) {
     const cleanId = String(measurementId || '').trim();
@@ -13005,6 +13005,7 @@ ESSAY
 
     if (cleanId.startsWith('GTM-')) {
       // Google Tag Manager loader
+      window.gtag('config', cleanId);
       (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
       new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
       j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
@@ -13030,7 +13031,7 @@ ESSAY
 
   window.trackGA4Event = function (eventName, params = {}) {
     try {
-      const targetId = window._currentGA4MeasurementId || 'G-9W4GM477TK';
+      const targetId = window._currentGA4MeasurementId || 'GTM-WQSC9WGG';
       if (typeof window.gtag === 'function' && targetId) {
         window.gtag('event', eventName, {
           send_to: targetId,
@@ -13044,7 +13045,7 @@ ESSAY
     window.initGoogleAnalyticsGA4(window._currentGA4MeasurementId);
   }
 
-  // إرسال مشاهدات الصفحات والأقسام والامتحانات تلقائياً إلى Google Analytics (G-9W4GM477TK)
+  // إرسال مشاهدات الصفحات والأقسام والامتحانات تلقائياً إلى Google Analytics (GTM-WQSC9WGG)
   try {
     const _origShowPageGA = window.showPage;
     if (typeof _origShowPageGA === 'function') {
