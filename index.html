@@ -8458,6 +8458,13 @@ ESSAY
       if (typeof window.broadcastRealtimeUserSync === 'function') {
         window.broadcastRealtimeUserSync('activity_log', '', uidStr);
       }
+      if (typeof window.trackGA4Event === 'function') {
+        window.trackGA4Event('platform_activity', {
+          action_type: actionType,
+          target_type: targetType,
+          target_title: String(targetTitle || '')
+        });
+      }
 
       // 2. Sync to Cloud activity_logs_sync + activity_logs DB table in parallel
       const dbPayload = { ...logEntry };
@@ -13023,8 +13030,12 @@ ESSAY
 
   window.trackGA4Event = function (eventName, params = {}) {
     try {
-      if (typeof window.gtag === 'function' && window._currentGA4MeasurementId) {
-        window.gtag('event', eventName, params);
+      const targetId = window._currentGA4MeasurementId || 'G-9W4GM477TK';
+      if (typeof window.gtag === 'function' && targetId) {
+        window.gtag('event', eventName, {
+          send_to: targetId,
+          ...params
+        });
       }
     } catch (e) {}
   };
@@ -13032,6 +13043,32 @@ ESSAY
   if (window._currentGA4MeasurementId) {
     window.initGoogleAnalyticsGA4(window._currentGA4MeasurementId);
   }
+
+  // إرسال مشاهدات الصفحات والأقسام والامتحانات تلقائياً إلى Google Analytics (G-9W4GM477TK)
+  try {
+    const _origShowPageGA = window.showPage;
+    if (typeof _origShowPageGA === 'function') {
+      window.showPage = function (pageId) {
+        const res = _origShowPageGA.apply(this, arguments);
+        window.trackGA4Event('page_view', {
+          page_title: `${document.title} - ${pageId}`,
+          page_path: `/${pageId}`
+        });
+        return res;
+      };
+    }
+    const _origSwitchSecGA = window.switchStudentSection;
+    if (typeof _origSwitchSecGA === 'function') {
+      window.switchStudentSection = function (sec) {
+        const res = _origSwitchSecGA.apply(this, arguments);
+        window.trackGA4Event('view_section', {
+          section_name: sec,
+          term: typeof currentTerm !== 'undefined' ? currentTerm : 1
+        });
+        return res;
+      };
+    }
+  } catch (e) {}
 
   window.saveGoogleAnalyticsIdAdmin = async function () {
     const inp = document.getElementById('ga4-measurement-id-input');
