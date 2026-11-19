@@ -14433,13 +14433,104 @@ ESSAY
 
   // ─── 20. SUPER ADMIN ANALYTICS ENGINE + GOOGLE ANALYTICS / GTM LIVE INTEGRATION (Section 17) ───
   window._currentGA4MeasurementId = localStorage.getItem('bis_ga4_measurement_id_v1') || 'G-E6JNTDYEB6';
+  window._ga4HealthState = {
+    status: 'checking', // 'checking' | 'connected' | 'blocked' | 'unconfigured'
+    id: window._currentGA4MeasurementId || '',
+    reason: '',
+    lastCheckedAt: null
+  };
 
-  window.initGoogleAnalyticsGA4 = function (measurementId) {
+  window.updateGA4StatusBadgeUI = function () {
+    const badge = document.getElementById('ga4-live-status-badge');
+    const card = document.getElementById('ga4-connection-card');
+    if (!badge) return;
+    const st = window._ga4HealthState || {};
+    const id = st.id || window._currentGA4MeasurementId || '';
+    const timeStr = st.lastCheckedAt ? new Date(st.lastCheckedAt).toLocaleTimeString('ar-EG') : '';
+
+    if (!id || st.status === 'unconfigured') {
+      badge.style.background = 'rgba(148,163,184,0.15)';
+      badge.style.color = '#94a3b8';
+      badge.innerHTML = '⚪ غير مربوط بعد';
+      if (card) card.style.borderColor = 'rgba(56,189,248,0.28)';
+      return;
+    }
+    if (st.status === 'connected') {
+      badge.style.background = 'rgba(0,230,118,0.16)';
+      badge.style.color = '#00e676';
+      badge.innerHTML = `🟢 متصل فعلياً بخوادم Google الآن (${id})${timeStr ? ` • ${timeStr}` : ''}`;
+      if (card) card.style.borderColor = 'rgba(0,230,118,0.45)';
+      return;
+    }
+    if (st.status === 'blocked') {
+      badge.style.background = 'rgba(248,113,113,0.18)';
+      badge.style.color = '#f87171';
+      badge.innerHTML = `🔴 غير متصل فعلياً (${st.reason || 'محجوب أو فشل تحميل gtag.js'})`;
+      if (card) card.style.borderColor = 'rgba(248,113,113,0.5)';
+      return;
+    }
+    badge.style.background = 'rgba(251,191,36,0.16)';
+    badge.style.color = '#fbbf24';
+    badge.innerHTML = `🟡 جاري فحص الاتصال الفعلي بـ Google (${id})...`;
+    if (card) card.style.borderColor = 'rgba(251,191,36,0.4)';
+  };
+
+  window.checkGoogleAnalyticsLiveHealth = async function (measurementId) {
+    const cleanId = String(measurementId || window._currentGA4MeasurementId || '').trim();
+    if (!cleanId || /^G-X+$/i.test(cleanId)) {
+      window._ga4HealthState = { status: 'unconfigured', id: '', reason: '', lastCheckedAt: Date.now() };
+      window.updateGA4StatusBadgeUI();
+      return false;
+    }
+
+    window._ga4HealthState = { status: 'checking', id: cleanId, reason: '', lastCheckedAt: Date.now() };
+    window.updateGA4StatusBadgeUI();
+
+    try {
+      // 1. فحص وجود المحرك الفعلي في الذاكرة (google_tag_manager) بعد انتظار بسيط لتحميل السكربت
+      const hasRuntime = () => Boolean(
+        window.google_tag_manager &&
+        (window.google_tag_manager[cleanId] || Object.keys(window.google_tag_manager).some(k => k.startsWith('G-') || k.startsWith('GTM-')))
+      );
+
+      let runtimeOk = hasRuntime();
+      if (!runtimeOk) {
+        await new Promise(r => setTimeout(r, 900));
+        runtimeOk = hasRuntime();
+      }
+
+      // 2. إرسال نبضة فحص حقيقية إلى خوادم Google Analytics للتأكد من عدم وجود AdBlocker أو حظر شبكة
+      const isFileProto = window.location.protocol === 'file:';
+      const safePageLoc = isFileProto ? 'https://star-boy-999.github.io/BIS/' : window.location.href;
+      const safeCid = (typeof window.getOrCreateDeviceId === 'function' ? window.getOrCreateDeviceId() : 'bis_health').replace(/[^a-zA-Z0-9._-]/g, '');
+      const probeUrl = cleanId.startsWith('G-')
+        ? `https://www.google-analytics.com/g/collect?v=2&tid=${encodeURIComponent(cleanId)}&cid=${encodeURIComponent(safeCid)}&en=page_view&dl=${encodeURIComponent(safePageLoc)}&dt=${encodeURIComponent(document.title || 'BIS')}`
+        : `https://www.googletagmanager.com/gtm.js?id=${encodeURIComponent(cleanId)}`;
+
+      await fetch(probeUrl, { method: 'POST', mode: 'no-cors', cache: 'no-store' });
+
+      if (runtimeOk) {
+        window._ga4HealthState = { status: 'connected', id: cleanId, reason: '', lastCheckedAt: Date.now() };
+        window.updateGA4StatusBadgeUI();
+        return true;
+      } else {
+        window._ga4HealthState = { status: 'blocked', id: cleanId, reason: 'سكربت gtag.js لم يتفعل في المتصفح (تحقق من مانع الإعلانات)', lastCheckedAt: Date.now() };
+        window.updateGA4StatusBadgeUI();
+        return false;
+      }
+    } catch (err) {
+      window._ga4HealthState = { status: 'blocked', id: cleanId, reason: 'الاتصال محجوب بمانع الإعلانات (AdBlock) أو انقطاع الشبكة', lastCheckedAt: Date.now() };
+      window.updateGA4StatusBadgeUI();
+      return false;
+    }
+  };
+
+  window.initGoogleAnalyticsGA4 = function (measurementId, forceReload = false) {
     const cleanId = String(measurementId || '').trim();
     if (!cleanId || /^G-X+$/i.test(cleanId)) return false;
 
     try { localStorage.setItem('bis_ga4_measurement_id_v1', cleanId); } catch (e) {}
-    if (window._loadedGA4ScriptId === cleanId) return true;
+    if (!forceReload && window._loadedGA4ScriptId === cleanId) return true;
     window._loadedGA4ScriptId = cleanId;
     window._currentGA4MeasurementId = cleanId;
 
@@ -14455,7 +14546,8 @@ ESSAY
       page_title: document.title || 'كلية نظم ومعلومات (BIS)',
       page_location: safePageLoc,
       page_path: isFileProto ? '/' : (window.location.pathname || '/'),
-      send_page_view: true
+      send_page_view: true,
+      transport_type: 'beacon'
     };
     if (isFileProto) {
       gaCfg.cookie_domain = 'none';
@@ -14463,19 +14555,30 @@ ESSAY
     }
 
     if (cleanId.startsWith('GTM-')) {
+      if (forceReload) {
+        document.querySelectorAll(`script[src*="googletagmanager.com/gtm.js?id=${cleanId}"]`).forEach(el => el.remove());
+      }
       (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
       new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
       j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
-      'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+      'https://www.googletagmanager.com/gtm.js?id='+i+dl;
+      j.onload = function () { window.checkGoogleAnalyticsLiveHealth(cleanId); };
+      j.onerror = function () {
+        window._ga4HealthState = { status: 'blocked', id: cleanId, reason: 'فشل تحميل GTM (محجوب أو لا يوجد نت)', lastCheckedAt: Date.now() };
+        window.updateGA4StatusBadgeUI();
+      };
+      f.parentNode.insertBefore(j,f);
       })(window,document,'script','dataLayer',cleanId);
     } else {
-      window.gtag('js', new Date());
+      if (!window._ga4JsInitialized) {
+        window._ga4JsInitialized = true;
+        window.gtag('js', new Date());
+      }
       window.gtag('config', cleanId, gaCfg);
 
-      const alreadyInHead = Boolean(document.querySelector(`script[src*="googletagmanager.com/gtag/js?id=${cleanId}"]`));
+      const alreadyInHead = !forceReload && Boolean(document.querySelector(`script[src*="googletagmanager.com/gtag/js?id=${cleanId}"]`));
       if (!alreadyInHead) {
-        const existingScript = document.getElementById('bis-ga4-gtag-script');
-        if (existingScript) existingScript.remove();
+        document.querySelectorAll('script[id="bis-ga4-gtag-script"], script[src*="googletagmanager.com/gtag/js"]').forEach(el => el.remove());
         const s = document.createElement('script');
         s.id = 'bis-ga4-gtag-script';
         s.async = true;
@@ -14483,9 +14586,16 @@ ESSAY
         s.onload = function () {
           try {
             window.gtag('config', cleanId, gaCfg);
+            window.checkGoogleAnalyticsLiveHealth(cleanId);
           } catch (e) {}
         };
+        s.onerror = function () {
+          window._ga4HealthState = { status: 'blocked', id: cleanId, reason: 'فشل تحميل gtag.js (محجوب بمانع الإعلانات)', lastCheckedAt: Date.now() };
+          window.updateGA4StatusBadgeUI();
+        };
         document.head.appendChild(s);
+      } else {
+        setTimeout(() => window.checkGoogleAnalyticsLiveHealth(cleanId), 400);
       }
     }
     return true;
@@ -14552,9 +14662,11 @@ ESSAY
     try {
       if (rawVal) {
         localStorage.setItem('bis_ga4_measurement_id_v1', rawVal);
-        window.initGoogleAnalyticsGA4(rawVal);
+        window.initGoogleAnalyticsGA4(rawVal, true);
       } else {
         localStorage.removeItem('bis_ga4_measurement_id_v1');
+        window._ga4HealthState = { status: 'unconfigured', id: '', reason: '', lastCheckedAt: Date.now() };
+        window.updateGA4StatusBadgeUI();
       }
     } catch (e) {}
 
@@ -14568,9 +14680,16 @@ ESSAY
       if (typeof window.broadcastRealtimeUserSync === 'function') {
         window.broadcastRealtimeUserSync('ga4_updated', rawVal, String(Date.now()));
       }
-      await logAdminActivity(rawVal ? 'ربط Google Analytics / GTM' : 'إلغاء ربط Google Analytics', 'analytics', rawVal || 'تم مسح المعرّف');
-      toast(rawVal ? `✅ تم تفعيل معرّف (${rawVal}) وتعميمه سحابياً على جميع الطلاب فوراً!` : '🗑️ تم إلغاء الربط');
-      loadSuperAdminAnalytics();
+      await logAdminActivity(rawVal ? 'ربط وإعادة تفعيل Google Analytics / GTM' : 'إلغاء ربط Google Analytics', 'analytics', rawVal || 'تم مسح المعرّف');
+      if (rawVal) {
+        const ok = await window.checkGoogleAnalyticsLiveHealth(rawVal);
+        toast(ok
+          ? `✅ تم التفعيل والتأكد من الاتصال الفعلي بمعرّف (${rawVal}) وتعميمه سحابياً!`
+          : `⚠️ تم حفظ (${rawVal}) لكن المتصفح يحجب gtag.js حالياً (تأكد من إيقاف AdBlock)`, ok ? 'success' : 'error');
+      } else {
+        toast('🗑️ تم إلغاء الربط');
+      }
+      await loadSuperAdminAnalytics();
     } catch (e) {
       toast('تعذر حفظ المعرّف', 'error');
     }
@@ -15401,6 +15520,10 @@ ESSAY
         }
 
         window.updateLiveTrafficAccountsBadge();
+        if (typeof window.updateGA4StatusBadgeUI === 'function') window.updateGA4StatusBadgeUI();
+        if (typeof window.checkGoogleAnalyticsLiveHealth === 'function' && (!window._ga4HealthState || window._ga4HealthState.status === 'checking' || (Date.now() - (window._ga4HealthState.checkedAt || 0)) > 25000)) {
+          window.checkGoogleAnalyticsLiveHealth(ga4Id);
+        }
 
         const newSig = JSON.stringify({
           e: prevSelectedEmail,
@@ -15461,7 +15584,7 @@ ESSAY
 
       container.innerHTML = `
         <!-- كارت ربط Google Analytics (GA4) المباشر بضغطة زر -->
-        <div class="glass-card" style="padding:1.4rem;margin-bottom:1.2rem;border:1.5px solid ${ga4Id ? 'rgba(0,230,118,0.35)' : 'rgba(56,189,248,0.28)'}">
+        <div id="ga4-connection-card" class="glass-card" style="padding:1.4rem;margin-bottom:1.2rem;border:1.5px solid rgba(56,189,248,0.28)">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:0.9rem">
             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
               <div style="width:40px;height:40px;border-radius:12px;background:rgba(251,191,36,0.15);color:#fbbf24;display:flex;align-items:center;justify-content:center;font-size:1.2rem">
@@ -15469,13 +15592,16 @@ ESSAY
               </div>
               <div>
                 <h4 style="font-size:1.05rem;font-weight:900;margin:0">ربط المنصة بـ Google Analytics 4 (GA4) مباشر</h4>
-                <p style="font-size:0.8rem;color:var(--text-dim);margin:2px 0 0 0">أدخل معرّف القياس (Measurement ID) من حسابك في جوجل أناليتكس ليتم تفعيله سحابياً على المنصة بالكامل بدون تعديل الكود</p>
+                <p style="font-size:0.8rem;color:var(--text-dim);margin:2px 0 0 0">يفحص الاتصال الفعلي بخوادم Google في الوقت الفعلي — وإذا توقف يمكنك إعادة التفعيل فوراً من هنا</p>
               </div>
             </div>
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-              <span style="padding:4px 12px;border-radius:20px;font-size:0.76rem;font-weight:900;background:${ga4Id ? 'rgba(0,230,118,0.16)' : 'rgba(148,163,184,0.15)'};color:${ga4Id ? '#00e676' : '#94a3b8'}">
-                ${ga4Id ? `🟢 متصل ومفعّل الآن (${ga4Id})` : '⚪ غير مربوط بعد'}
+              <span id="ga4-live-status-badge" style="padding:4px 12px;border-radius:20px;font-size:0.76rem;font-weight:900;background:rgba(251,191,36,0.16);color:#fbbf24">
+                🟡 جاري فحص الاتصال الفعلي...
               </span>
+              <button type="button" class="btn btn-blue" onclick="checkGoogleAnalyticsLiveHealth(document.getElementById('ga4-measurement-id-input')?.value)" style="padding:6px 12px;font-size:0.78rem">
+                <i class="fas fa-satellite-dish"></i> فحص الاتصال الآن
+              </button>
               <a href="https://analytics.google.com/" target="_blank" rel="noopener" class="btn btn-ghost" style="padding:6px 12px;font-size:0.78rem;text-decoration:none">
                 <i class="fas fa-external-link-alt"></i> فتح Google Analytics
               </a>
@@ -15629,6 +15755,7 @@ ESSAY
           </div>
         </div>`;
       window.renderSelectedStudentAnalytics(prevSelectedEmail);
+      window.checkGoogleAnalyticsLiveHealth(ga4Id);
     } catch (e) {
       container.innerHTML = `<div class="empty"><p>تعذر تحميل التحليلات</p></div>`;
     }
