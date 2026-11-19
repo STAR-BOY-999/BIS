@@ -15055,6 +15055,17 @@ ESSAY
     if (box) box.classList.toggle('hidden');
   };
 
+  window.closeSelectedStudentAnalytics = function () {
+    const selInp = document.getElementById('analytics-student-select');
+    const trigLabel = document.getElementById('analytics-student-picker-label');
+    const totalAcc = (window._analyticsStateCache?.accounts || []).length;
+    if (selInp) selInp.value = '';
+    if (trigLabel) {
+      trigLabel.textContent = `-- اختر حساب الطالب لعرض تحركاته وإحصائياته (${totalAcc}) --`;
+    }
+    window.renderSelectedStudentAnalytics('');
+  };
+
   window.renderSelectedStudentAnalytics = function (selectedEmail) {
     const out = document.getElementById('analytics-student-report-container');
     if (!out || !window._analyticsStateCache) return;
@@ -15122,6 +15133,9 @@ ESSAY
             ${acc?.bound_device_id ? `<span style="padding:4px 10px;border-radius:20px;background:rgba(56,189,248,0.14);color:var(--accent);font-weight:800" dir="ltr">Device: #${String(acc.bound_device_id).slice(-8)}</span>` : ''}
             <button type="button" class="btn btn-danger" onclick="resetSelectedStudentAnalytics('${email.replace(/'/g, "\\'")}')" style="padding:5px 12px;font-size:0.76rem;font-weight:800">
               <i class="fas fa-undo-alt"></i> Reset إحصائيات هذا الحساب
+            </button>
+            <button type="button" class="btn btn-ghost" onclick="closeSelectedStudentAnalytics()" style="padding:5px 12px;font-size:0.76rem;font-weight:800" title="إغلاق تقرير الطالب">
+              <i class="fas fa-times"></i> إغلاق
             </button>
           </div>
         </div>
