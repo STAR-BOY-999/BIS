@@ -14882,11 +14882,15 @@ ESSAY
 
   window.updateLiveTrafficAccountsBadge = function () {
     const liveBadgeEl = document.getElementById('picker-live-traffic-badge');
-    if (!liveBadgeEl || !window._analyticsStateCache) return;
+    const countTrafficEl = document.getElementById('picker-count-traffic');
+    if (!window._analyticsStateCache) return;
     const accounts = window._analyticsStateCache.accounts || [];
     const unreadAccCount = accounts.filter(u => window.getStudentTrafficCountSummary(u).unread > 0).length;
-    liveBadgeEl.style.display = unreadAccCount > 0 ? 'inline-flex' : 'none';
-    liveBadgeEl.innerHTML = `<span>❗</span><span>${unreadAccCount} ${unreadAccCount === 1 ? 'حساب عليه ترافيك جديد' : 'حسابات عليها ترافيك جديد'}</span>`;
+    if (countTrafficEl) countTrafficEl.textContent = unreadAccCount;
+    if (liveBadgeEl) {
+      liveBadgeEl.style.display = unreadAccCount > 0 ? 'inline-flex' : 'none';
+      liveBadgeEl.innerHTML = `<span>❗</span><span>${unreadAccCount} ${unreadAccCount === 1 ? 'حساب عليه ترافيك جديد' : 'حسابات عليها ترافيك جديد'}</span>`;
+    }
   };
 
   window.getStudentTrafficCountSummary = function (acc) {
@@ -14954,12 +14958,12 @@ ESSAY
       return (a.acc.full_name || a.email).localeCompare(b.acc.full_name || b.email, 'ar');
     });
 
-    const trafficTotalUsers = enriched.filter(x => x.stats.total > 0).length;
+    const unreadTrafficUsers = enriched.filter(x => x.stats.unread > 0).length;
     if (countAllEl) countAllEl.textContent = enriched.length;
-    if (countTrafficEl) countTrafficEl.textContent = trafficTotalUsers;
+    if (countTrafficEl) countTrafficEl.textContent = unreadTrafficUsers;
 
     const filtered = enriched.filter(item => {
-      if (window._analyticsTrafficOnlyFilter && item.stats.total === 0) return false;
+      if (window._analyticsTrafficOnlyFilter && item.stats.unread === 0) return false;
       if (!q) return true;
       return item.email.includes(q) || (item.acc.full_name || '').toLowerCase().includes(q);
     });
@@ -14995,9 +14999,7 @@ ESSAY
           </div>
           ${hasUnread
             ? `<span class="cosmic-traffic-bang-badge" title="اضغط لعرض الترافيك الجديد"><span>❗</span><span>${stats.unread} جديد</span></span>`
-            : (hasTraf
-              ? `<span style="font-size:0.72rem;color:var(--teal);font-weight:700;flex-shrink:0">✓ ${stats.total} نشاط</span>`
-              : `<span style="font-size:0.72rem;color:var(--text-dim);flex-shrink:0">لا يوجد نشاط</span>`)}
+            : ''}
         </div>`;
     }).join('');
   };
