@@ -15350,6 +15350,13 @@ ESSAY
           guestDrawerEl.innerHTML = buildGuestDevicesInnerHtml(guestDevicesList);
         }
 
+        const liveTrafficAccCount = allAccounts.filter(u => window.getStudentTrafficCountSummary(u).total > 0).length;
+        const liveBadgeEl = document.getElementById('picker-live-traffic-badge');
+        if (liveBadgeEl) {
+          liveBadgeEl.style.display = liveTrafficAccCount > 0 ? 'inline-flex' : 'none';
+          liveBadgeEl.innerHTML = `<span>❗</span><span>${liveTrafficAccCount} ${liveTrafficAccCount === 1 ? 'حساب عليه ترافيك' : 'حسابات عليها ترافيك'}</span>`;
+        }
+
         const newSig = JSON.stringify({
           e: prevSelectedEmail,
           tc: trafficLogs.length,
@@ -15527,7 +15534,13 @@ ESSAY
                       })()
                     : `-- اختر حساب الطالب لعرض تحركاته وإحصائياته (${allAccounts.length}) --`}
                 </span>
-                <i class="fas fa-chevron-down picker-chevron"></i>
+                <span style="display:inline-flex;align-items:center;gap:8px;flex-shrink:0">
+                  ${(() => {
+                    const liveTrafficAccCount = allAccounts.filter(u => window.getStudentTrafficCountSummary(u).total > 0).length;
+                    return `<span id="picker-live-traffic-badge" class="cosmic-traffic-bang-badge" style="display:${liveTrafficAccCount > 0 ? 'inline-flex' : 'none'};padding:3px 10px;font-size:0.74rem"><span>❗</span><span>${liveTrafficAccCount} ${liveTrafficAccCount === 1 ? 'حساب عليه ترافيك' : 'حسابات عليها ترافيك'}</span></span>`;
+                  })()}
+                  <i class="fas fa-chevron-down picker-chevron"></i>
+                </span>
               </button>
               <div id="analytics-student-picker-menu" class="cosmic-picker-menu hidden">
                 <div class="cosmic-picker-toolbar">
