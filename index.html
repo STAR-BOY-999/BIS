@@ -1,20 +1,18 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-  <!-- Google Analytics / GTM (GTM-WQSC9WGG) -->
-  <script async src="https://www.googletagmanager.com/gtm.js?id=GTM-WQSC9WGG"></script>
+  <!-- Google Tag Manager (GTM-WQSC9WGG) + Dynamic GA4 -->
   <script>
     window.dataLayer = window.dataLayer || [];
     function gtag(){dataLayer.push(arguments);}
     gtag('js', new Date());
-    gtag('config', 'GTM-WQSC9WGG');
   </script>
   <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
   new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
   j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
   'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
   })(window,document,'script','dataLayer','GTM-WQSC9WGG');</script>
-  <!-- End Google Analytics / GTM -->
+  <!-- End Google Tag Manager -->
 
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -2023,9 +2021,7 @@
       background: rgba(215,232,255,0.95);
     }
   </style>
-  <!-- Google Analytics (GA4) : استبدل G-XXXXXXXXXX بالـ Measurement ID بتاعك -->
-  <script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX"></script>
-  <script>
+<script>
     window.dataLayer = window.dataLayer || [];
     function gtag(){dataLayer.push(arguments);}
     gtag('js', new Date());
@@ -4473,7 +4469,7 @@ ESSAY
     <div style="display:flex;gap:6px;margin-bottom:1.2rem">
       <button class="grade-tab active" id="auth-tab-btn-login" style="flex:1" onclick="switchAuthTab('login')">تسجيل الدخول</button>
       <button class="grade-tab" id="auth-tab-btn-register" style="flex:1" onclick="switchAuthTab('register')">إنشاء حساب</button>
-      <button class="grade-tab" id="auth-tab-btn-recover" style="flex:1" onclick="switchAuthTab('recover')">استعادة كلمة المرور</button>
+      <button class="grade-tab" id="auth-tab-btn-recover" style="flex:1" onclick="switchAuthTab('recover')">استعادة السر</button>
     </div>
 
     <div id="auth-error-msg" style="color:var(--red);font-size:0.84rem;margin-bottom:0.8rem;min-height:18px;font-weight:700"></div>
@@ -9564,54 +9560,114 @@ ESSAY
     return qs;
   }
 
+  function getQuizSettingsSignature(quiz) {
+    if (!quiz) return '';
+    return JSON.stringify({
+      t: quiz.title || '',
+      tl: quiz.time_limit_minutes || null,
+      ql: quiz.questions_count_limit || null,
+      ma: quiz.max_attempts || null,
+      sq: Boolean(quiz.shuffle_questions),
+      so: Boolean(quiz.shuffle_options),
+      sa: quiz.show_correct_answers !== false,
+      q: (quiz.questions || []).map(item => ({
+        id: item.id,
+        q: item.question,
+        t: item.type,
+        o: item.options,
+        c: item.correct,
+        e: item.explanation,
+        h: Boolean(item.hidden)
+      }))
+    });
+  }
+  window._getQuizSettingsSignature = getQuizSettingsSignature;
+
   function getStudentAttemptCount(quizId) {
     const uid = window.authSession?.user?.id || 'guest';
     const localAttempts = JSON.parse(localStorage.getItem('student_quiz_attempts') || '[]');
-    return localAttempts.filter(a => Number(a.quiz_id) === Number(quizId) && a.student_id === uid && a.status === 'completed').length;
+    const resetTs = Number(window._analyticsResetTs || 0);
+    return localAttempts.filter(a => {
+      if (Number(a.quiz_id) !== Number(quizId) || a.student_id !== uid || a.status !== 'completed') return false;
+      if (resetTs > 0 && new Date(a.started_at || 0).getTime() < resetTs) return false;
+      return true;
+    }).length;
   }
 
   window.startQuiz = async function (id) {
     stopQuizTimer();
-    const rawQuiz = quizzes.find(q => q.id === id);
-    if (!rawQuiz || !rawQuiz.questions || rawQuiz.questions.length === 0) {
-      return toast('هذا الامتحان لا يحتوي على أسئلة بعد!', 'error');
+    let rawQuiz = quizzes.find(q => q.id === id);
+
+    // جلب أحدث نسخة من الامتحان مباشرة من قاعدة البيانات لضمان تطبيق أي تعديل (أسئلة، وقت، ليميت، خلط) فوراً
+    if (!window.IS_STANDALONE_SUPER_ADMIN) {
+      try {
+        const freshRes = await api(`quizzes?select=*&id=eq.${id}&limit=1`);
+        if (freshRes.ok) {
+          const freshRows = await freshRes.json();
+          if (freshRows && freshRows[0]) {
+            rawQuiz = freshRows[0];
+            const idx = quizzes.findIndex(q => q.id === id);
+            if (idx >= 0) quizzes[idx] = rawQuiz;
+            else quizzes.push(rawQuiz);
+          }
+        }
+      } catch (e) {}
     }
 
+    if (!rawQuiz) {
+      return toast('هذا الاختبار لم يعد متاحاً!', 'error');
+    }
+    if (!window.IS_STANDALONE_SUPER_ADMIN && rawQuiz.published === false) {
+      return toast('⚠️ هذا الاختبار غير منشور حالياً!', 'error');
+    }
+    const visibleRawQuestions = (rawQuiz.questions || []).filter(q => !q.hidden);
+    if (visibleRawQuestions.length === 0) {
+      return toast('هذا الامتحان لا يحتوي على أسئلة متاحة بعد!', 'error');
+    }
+
+    const effectiveRawQuiz = { ...rawQuiz, questions: visibleRawQuestions };
+    const currentQuizSig = getQuizSettingsSignature(effectiveRawQuiz);
+
     // Check max_attempts limit if configured
-    if (rawQuiz.max_attempts && Number(rawQuiz.max_attempts) > 0) {
-      const usedAttempts = getStudentAttemptCount(rawQuiz.id);
-      if (usedAttempts >= Number(rawQuiz.max_attempts)) {
-        return toast(`لقد استنفدت الحد الأقصى للمحاولات (${rawQuiz.max_attempts}) في هذا الاختبار!`, 'error');
+    if (effectiveRawQuiz.max_attempts && Number(effectiveRawQuiz.max_attempts) > 0) {
+      const usedAttempts = getStudentAttemptCount(effectiveRawQuiz.id);
+      if (usedAttempts >= Number(effectiveRawQuiz.max_attempts)) {
+        return toast(`لقد استنفدت الحد الأقصى للمحاولات (${effectiveRawQuiz.max_attempts}) في هذا الاختبار!`, 'error');
       }
     }
 
-    // Check if there is an auto-saved in-progress attempt for this quiz
-    const autoSaveKey = `autosave_quiz_${rawQuiz.id}_${window.authSession?.user?.id || 'guest'}`;
+    // Check if there is an auto-saved in-progress attempt matching the current quiz signature
+    const autoSaveKey = `autosave_quiz_${effectiveRawQuiz.id}_${window.authSession?.user?.id || 'guest'}`;
     const savedRaw = localStorage.getItem(autoSaveKey);
     let restored = false;
 
     if (savedRaw) {
       try {
         const saved = JSON.parse(savedRaw);
-        if (saved && Array.isArray(saved.preparedQuestions) && saved.preparedQuestions.length > 0) {
-          currentQuiz = { ...rawQuiz, questions: saved.preparedQuestions };
-          currentQuestionIndex = saved.currentQuestionIndex || 0;
+        if (saved && saved.settingsSig === currentQuizSig && Array.isArray(saved.preparedQuestions) && saved.preparedQuestions.length > 0) {
+          currentQuiz = { ...effectiveRawQuiz, questions: saved.preparedQuestions };
+          currentQuestionIndex = Math.min(saved.currentQuestionIndex || 0, currentQuiz.questions.length - 1);
           userAnswers = saved.userAnswers || {};
           _quizRemainingSeconds = saved.remainingSeconds || 0;
           _quizAttemptStartTime = saved.startedAt ? new Date(saved.startedAt) : new Date();
           restored = true;
           toast('تم استعادة إجاباتك المحفوظة تلقائياً ✅');
+        } else {
+          // الإعدادات أو الأسئلة اتحدثت من السوبر أدمن — تجاهل الحفظ القديم وحمّل النسخة الجديدة فوراً
+          localStorage.removeItem(autoSaveKey);
         }
       } catch (e) {}
     }
 
     if (!restored) {
-      const preparedQuestions = prepareQuizQuestions(rawQuiz);
-      currentQuiz = { ...rawQuiz, questions: preparedQuestions };
+      const preparedQuestions = prepareQuizQuestions(effectiveRawQuiz);
+      currentQuiz = { ...effectiveRawQuiz, questions: preparedQuestions, _settingsSig: currentQuizSig };
       currentQuestionIndex = 0;
       userAnswers = {};
       _quizAttemptStartTime = new Date();
-      _quizRemainingSeconds = rawQuiz.time_limit_minutes ? Number(rawQuiz.time_limit_minutes) * 60 : 0;
+      _quizRemainingSeconds = effectiveRawQuiz.time_limit_minutes ? Number(effectiveRawQuiz.time_limit_minutes) * 60 : 0;
+    } else {
+      currentQuiz._settingsSig = currentQuizSig;
     }
 
     selectedIndex = userAnswers[currentQuestionIndex] !== undefined ? userAnswers[currentQuestionIndex] : null;
@@ -9658,6 +9714,7 @@ ESSAY
     const autoSaveKey = `autosave_quiz_${currentQuiz.id}_${window.authSession?.user?.id || 'guest'}`;
     localStorage.setItem(autoSaveKey, JSON.stringify({
       quizId: currentQuiz.id,
+      settingsSig: currentQuiz._settingsSig || '',
       preparedQuestions: currentQuiz.questions,
       currentQuestionIndex,
       userAnswers,
@@ -11874,7 +11931,7 @@ ESSAY
         api(`quizzes?select=id,section,published&grade=eq.bis&term=eq.${currentTerm}`),
         api(`resources?select=id,type,title,subject&grade=eq.bis&term=eq.${currentTerm}`),
         api('profiles?select=id,email,full_name,role,is_active'),
-        api('quiz_attempts?select=id,score_pct'),
+        api('quiz_attempts?select=id,score_pct,started_at'),
         window.fetchSystemUserOverrides ? window.fetchSystemUserOverrides() : Promise.resolve({}),
         window.fetchSystemUserPresence ? window.fetchSystemUserPresence() : Promise.resolve({}),
         window.fetchSystemActivityLogsSync ? window.fetchSystemActivityLogsSync() : Promise.resolve(null),
@@ -11884,8 +11941,9 @@ ESSAY
       const qList = qRes.ok ? await qRes.json() : [];
       const rList = (rRes.ok ? await rRes.json() : []).filter(r => r.title !== '__folder__');
       const pList = pRes.ok ? await pRes.json() : [];
-      const dbAttempts = aRes.ok ? await aRes.json() : [];
-      const localAttempts = JSON.parse(localStorage.getItem('student_quiz_attempts') || '[]');
+      const resetTs = Number(overrides?.__analytics_reset_ts__ || 0);
+      const dbAttempts = (aRes.ok ? await aRes.json() : []).filter(a => !resetTs || new Date(a.started_at || 0).getTime() >= resetTs);
+      const localAttempts = JSON.parse(localStorage.getItem('student_quiz_attempts') || '[]').filter(a => !resetTs || new Date(a.started_at || 0).getTime() >= resetTs);
       const totalAttempts = Math.max(dbAttempts.length, localAttempts.length);
       const rawStudentNotifs = (nRes && nRes.ok) ? await nRes.json() : [];
 
@@ -12537,6 +12595,9 @@ ESSAY
       }
       closeModal('quiz-modal');
       renderAdminQuizzes();
+      if (typeof window.broadcastRealtimeUserSync === 'function') {
+        window.broadcastRealtimeUserSync('content_updated', 'quiz', String(editingQuizId || 'new'));
+      }
     } catch (e) {
       toast('خطأ في حفظ الامتحان!', 'error');
     }
@@ -12635,17 +12696,22 @@ ESSAY
 
   window._lastPlatformLockTs = Number(localStorage.getItem('bis_platform_lock_ts_v1') || 0);
   let _lockToggleInFlight = false;
+  let _lastLocalLockToggleTime = 0;
+  let _cachedUserOverridesRowId = null;
 
   window.applyPlatformGlobalLockState = function (isLocked, incomingTs = 0, isServerAuthoritative = false) {
     const numTs = Number(incomingTs || 0);
     const locked = Boolean(isLocked);
+    const isLocalToggleActive = _lockToggleInFlight || (Date.now() - _lastLocalLockToggleTime < 3000);
 
-    // إذا كانت الحالة المطلوبة هي القفل ولكن الختم الزمني قديم، نتجاهلها فقط إذا لم تكن قادمة رسمياً من السيرفر
-    if (!isServerAuthoritative && locked && numTs > 0 && window._lastPlatformLockTs && numTs < window._lastPlatformLockTs) {
+    // إذا كنا في وسط عملية ضغط زر القفل/الفتح الآن، نرفض أي استجابة شبكة قديمة أقدم من ضغطة الزر
+    if ((!isServerAuthoritative || isLocalToggleActive) && numTs > 0 && window._lastPlatformLockTs > 0 && numTs < window._lastPlatformLockTs) {
       return;
     }
     if (numTs > 0) {
-      window._lastPlatformLockTs = Math.max(window._lastPlatformLockTs || 0, numTs);
+      window._lastPlatformLockTs = isServerAuthoritative && !isLocalToggleActive
+        ? numTs
+        : Math.max(window._lastPlatformLockTs || 0, numTs);
       try { localStorage.setItem('bis_platform_lock_ts_v1', String(window._lastPlatformLockTs)); } catch (e) {}
     }
 
@@ -12657,13 +12723,8 @@ ESSAY
       window.renderSuperAdminPlatformLockBar();
     }
 
-    // السوبر أدمن لا يُقفل عليه أبداً (سواء في ملف السوبر أدمن المستقل أو إذا كان مسجلاً كـ super_admin)
-    const isSuperAdminUser = Boolean(
-      window.IS_STANDALONE_SUPER_ADMIN ||
-      window.currentAdminRole === 'super_admin' ||
-      window.authSession?.profile?.role === 'super_admin'
-    );
-    if (isSuperAdminUser) {
+    // لوحة السوبر أدمن المستقلة فقط (super-admin.html) تظل مفتوحة للتحكم، بينما منصة الطلاب (index101.html / index.html) تقفل بالكامل على الجميع
+    if (window.IS_STANDALONE_SUPER_ADMIN) {
       document.querySelectorAll('#platform-global-lock-overlay, [id="platform-global-lock-overlay"]').forEach(el => el.remove());
       document.body.style.overflow = '';
       return;
@@ -12740,12 +12801,7 @@ ESSAY
   // حارس مستمر (Lock Guardian): يمنع فتح المنصة عند الضغط المتكرر على الشاشة ويفتحها فوراً عند إلغاء القفل
   if (!window.IS_STANDALONE_SUPER_ADMIN) {
     setInterval(() => {
-      const isSuperAdminUser = Boolean(
-        window.IS_STANDALONE_SUPER_ADMIN ||
-        window.currentAdminRole === 'super_admin' ||
-        window.authSession?.profile?.role === 'super_admin'
-      );
-      const isLocked = Boolean(window._isPlatformLockedGlobal) && !isSuperAdminUser;
+      const isLocked = Boolean(window._isPlatformLockedGlobal);
       const overlays = document.querySelectorAll('#platform-global-lock-overlay, [id="platform-global-lock-overlay"]');
       if (isLocked) {
         if (overlays.length === 0) {
@@ -12764,7 +12820,7 @@ ESSAY
           document.body.style.overflow = '';
         }
       }
-    }, 400);
+    }, 350);
   }
 
   window.togglePlatformGlobalLock = async function (forceState = null) {
@@ -12772,15 +12828,19 @@ ESSAY
       return toast('⛔ هذا الزر مخصص للسوبر أدمن فقط!', 'error');
     }
     const nextLocked = typeof forceState === 'boolean' ? forceState : !window._isPlatformLockedGlobal;
-    const nowTs = Date.now();
+    const nowTs = Math.max(Date.now(), (window._lastPlatformLockTs || 0) + 1);
     const nowIso = new Date(nowTs).toISOString();
     _lockToggleInFlight = true;
+    _lastLocalLockToggleTime = Date.now();
+    window._lastPlatformLockTs = nowTs;
+
+    const lockStatusObj = { locked: nextLocked, ts: nowTs, updated_at: nowIso };
 
     // 1. تطبيق فوري (0ms Optimistic UI)
     window.applyPlatformGlobalLockState(nextLocked, nowTs, true);
     try {
       const localCached = JSON.parse(localStorage.getItem('super_admin_user_overrides_v2') || '{}');
-      localCached.__platform_status__ = { locked: nextLocked, ts: nowTs, updated_at: nowIso };
+      localCached.__platform_status__ = lockStatusObj;
       localStorage.setItem('super_admin_user_overrides_v2', JSON.stringify(localCached));
     } catch (e) {}
 
@@ -12793,13 +12853,9 @@ ESSAY
 
     try {
       const overrides = await window.fetchSystemUserOverrides({ skipApplyLock: true });
-      overrides.__platform_status__ = {
-        locked: nextLocked,
-        ts: nowTs,
-        updated_at: nowIso
-      };
+      overrides.__platform_status__ = lockStatusObj;
       await window.saveSystemUserOverrides(overrides, {
-        explicitLockStatus: { locked: nextLocked, ts: nowTs, updated_at: nowIso }
+        explicitLockStatus: lockStatusObj
       });
       if (typeof window.broadcastRealtimeUserSync === 'function') {
         window.broadcastRealtimeUserSync(nextLocked ? 'platform_locked' : 'platform_unlocked', '__platform__', String(nowTs));
@@ -12827,20 +12883,40 @@ ESSAY
       if (res.ok) {
         const rows = await res.json();
         if (rows.length && rows[0].url) {
+          _cachedUserOverridesRowId = rows[0].id;
           const remoteOv = JSON.parse(rows[0].url);
           const remoteLockObj = remoteOv?.__platform_status__;
           const remoteTs = Number(remoteLockObj?.ts || (remoteLockObj?.updated_at ? new Date(remoteLockObj.updated_at).getTime() : 0) || 0);
 
-          if (!opts?.skipApplyLock) {
+          // أثناء تنفيذ عملية القفل/الفتح محلياً، لا نسمح لطلب قديم متأخر أن يعكس الحالة قبل اكتمال الحفظ
+          const isRecentLocalToggle = _lockToggleInFlight || (Date.now() - _lastLocalLockToggleTime < 2500);
+          if (isRecentLocalToggle && remoteTs < (window._lastPlatformLockTs || 0)) {
+            remoteOv.__platform_status__ = {
+              locked: Boolean(window._isPlatformLockedGlobal),
+              ts: window._lastPlatformLockTs,
+              updated_at: new Date(window._lastPlatformLockTs).toISOString()
+            };
+          } else if (!opts?.skipApplyLock) {
             if (remoteLockObj && typeof remoteLockObj.locked === 'boolean') {
-              window.applyPlatformGlobalLockState(remoteLockObj.locked, remoteTs || Date.now(), true);
-            } else if (!_lockToggleInFlight) {
-              window.applyPlatformGlobalLockState(false, Date.now(), true);
+              window.applyPlatformGlobalLockState(remoteLockObj.locked, remoteTs, true);
+            } else if (!isRecentLocalToggle) {
+              window.applyPlatformGlobalLockState(false, 0, true);
             }
           }
 
           if (remoteOv?.__ga4_config__?.measurement_id && typeof window.initGoogleAnalyticsGA4 === 'function') {
             window.initGoogleAnalyticsGA4(remoteOv.__ga4_config__.measurement_id);
+          }
+          if (remoteOv?.__analytics_reset_ts__) {
+            const resetTs = Number(remoteOv.__analytics_reset_ts__);
+            window._analyticsResetTs = resetTs;
+            try {
+              const curAttempts = JSON.parse(localStorage.getItem('student_quiz_attempts') || '[]');
+              const filteredAttempts = curAttempts.filter(a => new Date(a.started_at || 0).getTime() >= resetTs);
+              if (filteredAttempts.length !== curAttempts.length) {
+                localStorage.setItem('student_quiz_attempts', JSON.stringify(filteredAttempts));
+              }
+            } catch (e) {}
           }
 
           localStorage.setItem('super_admin_user_overrides_v2', JSON.stringify(remoteOv));
@@ -12853,8 +12929,8 @@ ESSAY
     } catch (e) {}
     try {
       const cachedOv = JSON.parse(localStorage.getItem('super_admin_user_overrides_v2') || '{}');
-      if (!opts?.skipApplyLock && cachedOv && cachedOv.__platform_status__?.locked === false) {
-        window.applyPlatformGlobalLockState(false, 0, true);
+      if (!opts?.skipApplyLock && cachedOv && typeof cachedOv.__platform_status__?.locked === 'boolean') {
+        window.applyPlatformGlobalLockState(cachedOv.__platform_status__.locked, Number(cachedOv.__platform_status__.ts || 0), true);
       }
       return cachedOv;
     } catch (e) {
@@ -12864,16 +12940,19 @@ ESSAY
 
   window.saveSystemUserOverrides = async function (overrides, opts = {}) {
     try { localStorage.removeItem('super_admin_user_overrides'); } catch (e) {}
-    // الحفاظ دائماً على أحدث حالة قفل للمنصة وإعدادات Google Analytics عند حفظ أي تعديلات أخرى
+    // الحفاظ دائماً على أحدث حالة قفل للمنصة وإعدادات Google Analytics وتصفير الإحصائيات عند حفظ أي تعديلات أخرى
     try {
       const prevCached = JSON.parse(localStorage.getItem('super_admin_user_overrides_v2') || '{}');
       if (opts?.explicitLockStatus) {
         overrides.__platform_status__ = opts.explicitLockStatus;
-      } else if (!overrides.__platform_status__ && prevCached.__platform_status__) {
+      } else if (prevCached.__platform_status__ && (!overrides.__platform_status__ || Number(prevCached.__platform_status__.ts || 0) > Number(overrides.__platform_status__.ts || 0))) {
         overrides.__platform_status__ = prevCached.__platform_status__;
       }
       if (!overrides.__ga4_config__ && prevCached.__ga4_config__) {
         overrides.__ga4_config__ = prevCached.__ga4_config__;
+      }
+      if (!overrides.__analytics_reset_ts__ && prevCached.__analytics_reset_ts__) {
+        overrides.__analytics_reset_ts__ = prevCached.__analytics_reset_ts__;
       }
     } catch (e) {}
 
@@ -12885,15 +12964,13 @@ ESSAY
         'Content-Type': 'application/json',
         'Prefer': 'return=representation'
       };
-      const checkRes = await fetch(`${SUPABASE_URL}/rest/v1/resources?select=id&type=eq.user_overrides&grade=eq.sys`, { headers });
-      const rows = checkRes.ok ? await checkRes.json() : [];
-      if (rows.length) {
-        await fetch(`${SUPABASE_URL}/rest/v1/resources?type=eq.user_overrides&grade=eq.sys`, {
-          method: 'PATCH',
-          headers,
-          body: JSON.stringify({ url: JSON.stringify(overrides) })
-        });
-      } else {
+      const patchRes = await fetch(`${SUPABASE_URL}/rest/v1/resources?type=eq.user_overrides&grade=eq.sys`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ url: JSON.stringify(overrides) })
+      });
+      const patchedRows = patchRes.ok ? await patchRes.json().catch(() => []) : [];
+      if (!Array.isArray(patchedRows) || patchedRows.length === 0) {
         await fetch(`${SUPABASE_URL}/rest/v1/resources`, {
           method: 'POST',
           headers,
@@ -14104,11 +14181,11 @@ ESSAY
   };
 
   // ─── 20. SUPER ADMIN ANALYTICS ENGINE + GOOGLE ANALYTICS / GTM LIVE INTEGRATION (Section 17) ───
-  window._currentGA4MeasurementId = localStorage.getItem('bis_ga4_measurement_id_v1') || 'GTM-WQSC9WGG';
+  window._currentGA4MeasurementId = localStorage.getItem('bis_ga4_measurement_id_v1') || 'G-E6JNTDYEB6';
 
   window.initGoogleAnalyticsGA4 = function (measurementId) {
     const cleanId = String(measurementId || '').trim();
-    if (!cleanId) return false;
+    if (!cleanId || /^G-X+$/i.test(cleanId)) return false;
 
     try { localStorage.setItem('bis_ga4_measurement_id_v1', cleanId); } catch (e) {}
     if (window._loadedGA4ScriptId === cleanId) return true;
@@ -14116,43 +14193,63 @@ ESSAY
     window._currentGA4MeasurementId = cleanId;
 
     window.dataLayer = window.dataLayer || [];
-    window.gtag = window.gtag || function () { window.dataLayer.push(arguments); };
+    if (typeof window.gtag !== 'function') {
+      window.gtag = function () { window.dataLayer.push(arguments); };
+    }
     window.gtag('js', new Date());
 
     if (cleanId.startsWith('GTM-')) {
       // Google Tag Manager loader
-      window.gtag('config', cleanId);
       (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
       new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
       j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
       'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
       })(window,document,'script','dataLayer',cleanId);
     } else {
-      // Direct GA4 measurement ID
-      window.gtag('config', cleanId, {
-        page_title: document.title || 'كلية نظم ومعلومات (BIS)',
-        page_location: window.location.href,
-        send_page_view: true
-      });
+      // Direct GA4 measurement ID (G-XXXXXXXXXX)
       const existingScript = document.getElementById('bis-ga4-gtag-script');
       if (existingScript) existingScript.remove();
       const s = document.createElement('script');
       s.id = 'bis-ga4-gtag-script';
       s.async = true;
       s.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(cleanId)}`;
+      s.onload = function () {
+        try {
+          window.gtag('config', cleanId, {
+            page_title: document.title || 'كلية نظم ومعلومات (BIS)',
+            page_location: window.location.href,
+            page_path: window.location.pathname || '/',
+            send_page_view: true
+          });
+        } catch (e) {}
+      };
       document.head.appendChild(s);
+
+      // Queue config immediately as well so gtag.js processes it as soon as it executes
+      window.gtag('config', cleanId, {
+        page_title: document.title || 'كلية نظم ومعلومات (BIS)',
+        page_location: window.location.href,
+        page_path: window.location.pathname || '/',
+        send_page_view: true
+      });
     }
     return true;
   };
 
   window.trackGA4Event = function (eventName, params = {}) {
     try {
-      const targetId = window._currentGA4MeasurementId || 'GTM-WQSC9WGG';
-      if (typeof window.gtag === 'function' && targetId) {
-        window.gtag('event', eventName, {
-          send_to: targetId,
-          ...params
-        });
+      const targetId = window._currentGA4MeasurementId;
+      if (!targetId || /^G-X+$/i.test(targetId)) return;
+      if (typeof window.gtag === 'function') {
+        if (targetId.startsWith('GTM-')) {
+          window.dataLayer = window.dataLayer || [];
+          window.dataLayer.push({ event: eventName, ...params });
+        } else {
+          window.gtag('event', eventName, {
+            send_to: targetId,
+            ...params
+          });
+        }
       }
     } catch (e) {}
   };
@@ -14161,7 +14258,7 @@ ESSAY
     window.initGoogleAnalyticsGA4(window._currentGA4MeasurementId);
   }
 
-  // إرسال مشاهدات الصفحات والأقسام والامتحانات تلقائياً إلى Google Analytics (GTM-WQSC9WGG)
+  // إرسال مشاهدات الصفحات والأقسام والامتحانات تلقائياً إلى Google Analytics
   try {
     const _origShowPageGA = window.showPage;
     if (typeof _origShowPageGA === 'function') {
@@ -14192,17 +14289,17 @@ ESSAY
     const rawVal = (inp ? inp.value : '').trim();
 
     if (rawVal && !/^(G-[A-Z0-9]{4,}|GTM-[A-Z0-9]{4,})$/i.test(rawVal)) {
-      return toast('❌ يرجى إدخال معرّف صحيح يبدأ بـ G- أو GTM- (مثال: GTM-M7KS3N9C أو G-XXXXXXXXXX)', 'error');
+      return toast('❌ يرجى إدخال معرّف صحيح يبدأ بـ G- أو GTM- (مثال: G-E6JNTDYEB6 أو GTM-WQSC9WGG)', 'error');
     }
 
     window._currentGA4MeasurementId = rawVal;
+    window._loadedGA4ScriptId = '';
     try {
       if (rawVal) {
         localStorage.setItem('bis_ga4_measurement_id_v1', rawVal);
         window.initGoogleAnalyticsGA4(rawVal);
       } else {
         localStorage.removeItem('bis_ga4_measurement_id_v1');
-        window._loadedGA4ScriptId = '';
       }
     } catch (e) {}
 
@@ -14213,11 +14310,50 @@ ESSAY
         updated_at: new Date().toISOString()
       };
       await window.saveSystemUserOverrides(overrides);
+      if (typeof window.broadcastRealtimeUserSync === 'function') {
+        window.broadcastRealtimeUserSync('ga4_updated', rawVal, String(Date.now()));
+      }
       await logAdminActivity(rawVal ? 'ربط Google Analytics / GTM' : 'إلغاء ربط Google Analytics', 'analytics', rawVal || 'تم مسح المعرّف');
       toast(rawVal ? `✅ تم تفعيل معرّف (${rawVal}) وتعميمه سحابياً على جميع الطلاب فوراً!` : '🗑️ تم إلغاء الربط');
       loadSuperAdminAnalytics();
     } catch (e) {
       toast('تعذر حفظ المعرّف', 'error');
+    }
+  };
+
+  window.resetSuperAdminAnalytics = async function () {
+    const ok = await showConfirm({
+      title: 'إعادة ضبط الإحصائيات (Reset)',
+      msg: 'سيتم تصفير إحصائيات المحاولات، متوسط الدرجات، نسبة الإجابات الصحيحة، والاختبارات الأكثر استخداماً في التحليلات ونظرة عامة (بدون حذف حسابات الطلاب أو الاختبارات). هل أنت متأكد؟',
+      type: 'danger',
+      icon: 'fa-undo-alt',
+      okText: 'نعم، صفّر الإحصائيات (Reset)'
+    });
+    if (!ok) return;
+
+    const resetTs = Date.now();
+    window._analyticsResetTs = resetTs;
+    try { localStorage.setItem('student_quiz_attempts', '[]'); } catch (e) {}
+
+    try {
+      const [overrides] = await Promise.all([
+        window.fetchSystemUserOverrides({ skipApplyLock: true }),
+        api('quiz_attempts?id=not.is.null', { method: 'DELETE' }).catch(() => {}),
+        api('active_visitors?id=not.is.null', { method: 'DELETE' }).catch(() => {})
+      ]);
+      overrides.__analytics_reset_ts__ = resetTs;
+      await window.saveSystemUserOverrides(overrides);
+      if (typeof window.broadcastRealtimeUserSync === 'function') {
+        window.broadcastRealtimeUserSync('analytics_reset', '__analytics__', String(resetTs));
+      }
+      await logAdminActivity('تصفير إحصائيات التحليلات (Reset)', 'analytics', new Date(resetTs).toLocaleString('ar-EG'));
+      toast('🔄 تم تصفير جميع إحصائيات التحليلات بنجاح!');
+      await loadSuperAdminAnalytics();
+      if (typeof window.loadAdminDashboardOverview === 'function') {
+        window.loadAdminDashboardOverview(true);
+      }
+    } catch (e) {
+      toast('تعذر تصفير الإحصائيات', 'error');
     }
   };
 
@@ -14243,11 +14379,14 @@ ESSAY
         window.initGoogleAnalyticsGA4(ga4Id);
       }
 
+      const resetTs = Number(overrides?.__analytics_reset_ts__ || window._analyticsResetTs || 0);
+      window._analyticsResetTs = resetTs;
+
       const profiles = pRes.ok ? await pRes.json() : [];
-      const dbAttempts = aRes.ok ? await aRes.json() : [];
-      const localAttempts = JSON.parse(localStorage.getItem('student_quiz_attempts') || '[]');
+      const dbAttempts = (aRes.ok ? await aRes.json() : []).filter(a => !resetTs || new Date(a.started_at || 0).getTime() >= resetTs);
+      const localAttempts = JSON.parse(localStorage.getItem('student_quiz_attempts') || '[]').filter(a => !resetTs || new Date(a.started_at || 0).getTime() >= resetTs);
       const resourcesAll = (rRes.ok ? await rRes.json() : []).filter(r => r.title !== '__folder__' && r.grade !== 'sys');
-      const visitors = vRes.ok ? await vRes.json() : [];
+      const visitors = (vRes.ok ? await vRes.json() : []).filter(v => !resetTs || new Date(v.last_seen || 0).getTime() >= resetTs);
 
       const mergedAttemptsMap = new Map();
       [...dbAttempts, ...localAttempts].forEach(a => mergedAttemptsMap.set(String(a.id), a));
@@ -14329,18 +14468,23 @@ ESSAY
           </div>
         </div>
 
-        <div class="admin-filter-bar">
-          <strong style="font-size:0.85rem;color:var(--teal)"><i class="fas fa-filter"></i> تصفية التحليلات:</strong>
-          <select id="analytics-filter-term" onchange="loadSuperAdminAnalytics()">
-            <option value="all" ${filterTerm === 'all' ? 'selected' : ''}>الترمان معاً</option>
-            <option value="1" ${filterTerm === '1' ? 'selected' : ''}>الترم الأول</option>
-            <option value="2" ${filterTerm === '2' ? 'selected' : ''}>الترم الثاني</option>
-          </select>
-          <select id="analytics-filter-days" onchange="loadSuperAdminAnalytics()">
-            <option value="0" ${filterDays === 0 ? 'selected' : ''}>كل الأوقات</option>
-            <option value="7" ${filterDays === 7 ? 'selected' : ''}>آخر 7 أيام</option>
-            <option value="30" ${filterDays === 30 ? 'selected' : ''}>آخر 30 يوماً</option>
-          </select>
+        <div class="admin-filter-bar" style="justify-content:space-between">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <strong style="font-size:0.85rem;color:var(--teal)"><i class="fas fa-filter"></i> تصفية التحليلات:</strong>
+            <select id="analytics-filter-term" onchange="loadSuperAdminAnalytics()">
+              <option value="all" ${filterTerm === 'all' ? 'selected' : ''}>الترمان معاً</option>
+              <option value="1" ${filterTerm === '1' ? 'selected' : ''}>الترم الأول</option>
+              <option value="2" ${filterTerm === '2' ? 'selected' : ''}>الترم الثاني</option>
+            </select>
+            <select id="analytics-filter-days" onchange="loadSuperAdminAnalytics()">
+              <option value="0" ${filterDays === 0 ? 'selected' : ''}>كل الأوقات</option>
+              <option value="7" ${filterDays === 7 ? 'selected' : ''}>آخر 7 أيام</option>
+              <option value="30" ${filterDays === 30 ? 'selected' : ''}>آخر 30 يوماً</option>
+            </select>
+          </div>
+          <button type="button" class="btn btn-danger" onclick="resetSuperAdminAnalytics()" style="padding:7px 14px;font-size:0.82rem;font-weight:800">
+            <i class="fas fa-undo-alt"></i> Reset الإحصائيات
+          </button>
         </div>
 
         <div class="kpi-grid">
@@ -15046,6 +15190,202 @@ ESSAY
   };
 
   // ─── 22. INITIALIZE ON PAGE LOAD + REAL-TIME LIVE SYNC ENGINE ───
+  let _studentLiveContentSyncInFlight = false;
+  let _lastStudentQuizzesSig = '';
+  let _lastStudentLecturesSig = '';
+  let _lastStudentSummariesSig = '';
+
+  window.syncStudentLiveContentRealTime = async function () {
+    if (window.IS_STANDALONE_SUPER_ADMIN || _studentLiveContentSyncInFlight) return;
+    _studentLiveContentSyncInFlight = true;
+    try {
+      const isVisible = (id) => {
+        const el = document.getElementById(id);
+        return Boolean(el && !el.classList.contains('hidden'));
+      };
+
+      // 1. المزامنة اللحظية أثناء حل الامتحان أو أسئلة المحاضرات (quiz-page)
+      if (isVisible('quiz-page') && currentQuiz && currentQuiz.id) {
+        const res = await api(`quizzes?select=*&id=eq.${currentQuiz.id}&limit=1`);
+        if (res.ok) {
+          const rows = await res.json();
+          const fresh = rows && rows[0];
+          if (!fresh || fresh.published === false) {
+            stopQuizTimer();
+            clearAutoSaveQuizProgress(currentQuiz.id);
+            currentQuiz = null;
+            toast('⚠️ تم إيقاف أو إخفاء هذا الاختبار حالياً من قِبل الإدارة', 'error');
+            openSection(currentSection || 'exams');
+            return;
+          }
+
+          const visibleFreshQs = (fresh.questions || []).filter(q => !q.hidden);
+          const freshRaw = { ...fresh, questions: visibleFreshQs };
+          const newSig = typeof window._getQuizSettingsSignature === 'function'
+            ? window._getQuizSettingsSignature(freshRaw)
+            : JSON.stringify(freshRaw);
+
+          if (currentQuiz._settingsSig && newSig !== currentQuiz._settingsSig) {
+            const oldTimeLimit = Number(currentQuiz.time_limit_minutes || 0);
+            const newTimeLimit = Number(freshRaw.time_limit_minutes || 0);
+            const oldTitle = currentQuiz.title;
+            const prevPrepared = currentQuiz.questions || [];
+
+            // حفظ إجابات الطالب الحالية بناءً على نص/معرّف السؤال قبل إعادة الترتيب أو التعديل
+            const answerByKey = new Map();
+            prevPrepared.forEach((pq, idx) => {
+              if (userAnswers[idx] !== undefined && userAnswers[idx] !== null) {
+                const selectedVal = (pq.type === 'mcq' && Array.isArray(pq.options)) ? pq.options[userAnswers[idx]] : userAnswers[idx];
+                answerByKey.set(String(pq.id || pq.question), selectedVal);
+              }
+            });
+
+            // تحديث وقت الامتحان فوراً إذا تغير
+            if (oldTimeLimit !== newTimeLimit) {
+              stopQuizTimer();
+              _quizRemainingSeconds = newTimeLimit > 0 ? newTimeLimit * 60 : 0;
+              currentQuiz.time_limit_minutes = freshRaw.time_limit_minutes;
+              startQuizTimerIfNeeded();
+              toast(newTimeLimit > 0
+                ? `⏱️ تم تحديث وقت الامتحان من الإدارة إلى ${newTimeLimit} دقيقة!`
+                : '⏱️ تم إلغاء المؤقت الزمني للامتحان من الإدارة!');
+            }
+
+            // تحديث الأسئلة والليميت والخلط فوراً
+            const newPrepared = prepareQuizQuestions(freshRaw);
+            const nextUserAnswers = {};
+            newPrepared.forEach((nq, idx) => {
+              const key = String(nq.id || nq.question);
+              if (answerByKey.has(key)) {
+                const prevSel = answerByKey.get(key);
+                if (nq.type === 'mcq' && Array.isArray(nq.options)) {
+                  const mappedIdx = nq.options.indexOf(prevSel);
+                  if (mappedIdx >= 0) nextUserAnswers[idx] = mappedIdx;
+                } else {
+                  nextUserAnswers[idx] = prevSel;
+                }
+              }
+            });
+
+            currentQuiz = { ...freshRaw, questions: newPrepared, _settingsSig: newSig };
+            userAnswers = nextUserAnswers;
+            if (currentQuestionIndex >= newPrepared.length) {
+              currentQuestionIndex = Math.max(0, newPrepared.length - 1);
+            }
+            selectedIndex = userAnswers[currentQuestionIndex] !== undefined ? userAnswers[currentQuestionIndex] : null;
+            if (oldTitle !== freshRaw.title) {
+              const titleEl = document.getElementById('quiz-title');
+              if (titleEl) titleEl.textContent = freshRaw.title;
+            }
+            if (typeof showCurrentQuestion === 'function') showCurrentQuestion();
+            if (typeof updateLiveScore === 'function') updateLiveScore();
+            if (typeof window.renderQuestionNavigatorDots === 'function') window.renderQuestionNavigatorDots();
+            autoSaveCurrentQuizProgress();
+            if (oldTimeLimit === newTimeLimit) {
+              toast('🔄 تم تحديث أسئلة وإعدادات الامتحان من الإدارة في الوقت الفعلي!');
+            }
+          }
+        }
+        return;
+      }
+
+      // 2. المزامنة اللحظية لقائمة الامتحانات أو أسئلة المحاضرات
+      if ((isVisible('home-page') || isVisible('lecture-quizzes-page')) && currentTerm) {
+        const secFilter = isVisible('lecture-quizzes-page') ? 'lecture-quizzes' : 'exams';
+        const res = await api(`quizzes?select=*&order=id&grade=eq.${currentGrade || 'bis'}&term=eq.${currentTerm}&section=eq.${secFilter}`);
+        if (res.ok) {
+          const freshList = await res.json();
+          const sig = JSON.stringify(freshList.map(q => ({
+            id: q.id, t: q.title, p: q.published, lqf: q.lq_folder,
+            tl: q.time_limit_minutes, ql: q.questions_count_limit, ma: q.max_attempts,
+            sq: q.shuffle_questions, so: q.shuffle_options, sa: q.show_correct_answers,
+            qc: (q.questions || []).filter(x => !x.hidden).length
+          })));
+          if (sig !== _lastStudentQuizzesSig) {
+            _lastStudentQuizzesSig = sig;
+            quizzes = freshList;
+            if (secFilter === 'lecture-quizzes' && typeof renderLectureQuizSubjects === 'function') {
+              renderLectureQuizSubjects();
+            } else if (typeof renderHome === 'function') {
+              renderHome();
+            }
+          }
+        }
+      }
+
+      // 3. المزامنة اللحظية لقسم المحاضرات + Owners
+      if (isVisible('lectures-page') && currentTerm) {
+        const [items, owners] = await Promise.all([
+          loadResources('lectures'),
+          loadPublicLectureOwnersData()
+        ]);
+        const sig = JSON.stringify({ items, owners });
+        if (sig !== _lastStudentLecturesSig) {
+          _lastStudentLecturesSig = sig;
+          _lecturesCache = items || [];
+          lectureOwnersPublicCache = owners || [];
+          if (currentPublicLectureOwner && typeof openPublicLectureOwner === 'function') {
+            const ownerItems = _lecturesCache.filter(r => Number(r.owner_id) === Number(currentPublicLectureOwner.id));
+            _publicOwnerItems = ownerItems;
+            if (typeof renderPublicLectureOwnerLectures === 'function') {
+              renderPublicLectureOwnerLectures(ownerItems, currentPublicLectureOwner.name);
+            }
+          } else if (typeof _renderLecturesUI === 'function') {
+            _renderLecturesUI();
+          }
+        }
+      }
+
+      // 4. المزامنة اللحظية لقسم الملخصات + Owners
+      if (isVisible('summaries-page') && currentTerm) {
+        const [items, owners] = await Promise.all([
+          loadResources('summaries'),
+          loadPublicSummaryOwnersData()
+        ]);
+        const sig = JSON.stringify({ items, owners });
+        if (sig !== _lastStudentSummariesSig) {
+          _lastStudentSummariesSig = sig;
+          _summariesCache = items || [];
+          summaryOwnersPublicCache = owners || [];
+          if (currentPublicOwner && typeof openPublicOwner === 'function') {
+            const ownerItems = _summariesCache.filter(r => Number(r.owner_id) === Number(currentPublicOwner.id));
+            if (typeof renderPublicOwnerSummaries === 'function') {
+              renderPublicOwnerSummaries(ownerItems, currentPublicOwner.name);
+            }
+          } else if (typeof _renderSummariesUI === 'function') {
+            _renderSummariesUI();
+          }
+        }
+      }
+    } catch (e) {
+    } finally {
+      _studentLiveContentSyncInFlight = false;
+    }
+  };
+
+  // ربط كل عمليات التعديل والحفظ والنشر والحذف في السوبر أدمن بالبث الفوري لصفحة الطلاب
+  [
+    'saveQuestion',
+    'deleteQuestion',
+    'togglePublish',
+    'deleteQuizFromDB',
+    'deleteResourceAdmin',
+    'saveOwner',
+    'deleteOwnerAdmin',
+    'deleteLectureOwnerAdmin'
+  ].forEach(fnName => {
+    const orig = window[fnName];
+    if (typeof orig === 'function') {
+      window[fnName] = async function (...args) {
+        const res = await orig.apply(this, args);
+        if (typeof window.broadcastRealtimeUserSync === 'function') {
+          window.broadcastRealtimeUserSync('content_updated', fnName, String(Date.now()));
+        }
+        return res;
+      };
+    }
+  });
+
   function handleIncomingRealtimeSync() {
     if (typeof window.loadStudentNotifications === 'function') {
       window.loadStudentNotifications(true);
@@ -15077,6 +15417,7 @@ ESSAY
       window.syncUserPermissionsFromDB({ realtime: true });
     }
     window.fetchSystemUserOverrides();
+    window.syncStudentLiveContentRealTime();
   }
 
   try {
@@ -15086,6 +15427,18 @@ ESSAY
         if (msg.action === 'platform_locked' || msg.action === 'platform_unlocked') {
           const lockTs = Number(msg.uid || msg.ts || Date.now());
           window.applyPlatformGlobalLockState(msg.action === 'platform_locked', lockTs, true);
+          return;
+        }
+        if (msg.action === 'analytics_reset') {
+          window._analyticsResetTs = Number(msg.uid || Date.now());
+          try { localStorage.setItem('student_quiz_attempts', '[]'); } catch (e) {}
+          return;
+        }
+        if (msg.action === 'ga4_updated' && msg.email) {
+          window._loadedGA4ScriptId = '';
+          if (typeof window.initGoogleAnalyticsGA4 === 'function') {
+            window.initGoogleAnalyticsGA4(msg.email);
+          }
           return;
         }
         handleIncomingRealtimeSync();
