@@ -6,12 +6,32 @@
   <script>
     window.dataLayer = window.dataLayer || [];
     function gtag(){dataLayer.push(arguments);}
+    window._ga4JsInitialized = true;
+    window._loadedGA4ScriptId = 'G-E6JNTDYEB6';
     gtag('js', new Date());
-    gtag('config', 'G-E6JNTDYEB6', {
-      page_title: document.title || 'كلية نظم ومعلومات (BIS)',
-      page_location: window.location.protocol === 'file:' ? 'https://star-boy-999.github.io/BIS/' : window.location.href,
-      send_page_view: true
-    });
+    (function(){
+      var isFile = window.location.protocol === 'file:';
+      var cid = '';
+      try {
+        cid = localStorage.getItem('bis_ga_cid_v1') || '';
+        if (!/^\d+\.\d+$/.test(cid)) {
+          cid = Math.floor(100000000 + Math.random() * 900000000) + '.' + Math.floor(Date.now() / 1000);
+          localStorage.setItem('bis_ga_cid_v1', cid);
+        }
+      } catch(e) { cid = '123456789.' + Math.floor(Date.now() / 1000); }
+      var cfg = {
+        page_title: document.title || 'كلية نظم ومعلومات (BIS)',
+        page_location: isFile ? 'https://star-boy-999.github.io/BIS/' : window.location.href,
+        page_path: isFile ? '/' : (window.location.pathname || '/'),
+        send_page_view: true,
+        transport_type: 'beacon'
+      };
+      if (isFile) {
+        cfg.cookie_domain = 'none';
+        cfg.client_id = cid;
+      }
+      gtag('config', 'G-E6JNTDYEB6', cfg);
+    })();
   </script>
   <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
   new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -14569,7 +14589,16 @@ ESSAY
 
     const isFileProto = window.location.protocol === 'file:';
     const safePageLoc = isFileProto ? 'https://star-boy-999.github.io/BIS/' : window.location.href;
-    const safeClientId = (typeof window.getOrCreateDeviceId === 'function' ? window.getOrCreateDeviceId() : 'bis_guest').replace(/[^a-zA-Z0-9._-]/g, '');
+    let safeClientId = '';
+    try {
+      safeClientId = localStorage.getItem('bis_ga_cid_v1') || '';
+      if (!/^\d+\.\d+$/.test(safeClientId)) {
+        safeClientId = `${Math.floor(100000000 + Math.random() * 900000000)}.${Math.floor(Date.now() / 1000)}`;
+        localStorage.setItem('bis_ga_cid_v1', safeClientId);
+      }
+    } catch (e) {
+      safeClientId = `123456789.${Math.floor(Date.now() / 1000)}`;
+    }
     const gaCfg = {
       page_title: document.title || 'كلية نظم ومعلومات (BIS)',
       page_location: safePageLoc,
