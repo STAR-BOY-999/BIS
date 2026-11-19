@@ -3270,6 +3270,182 @@
   box-shadow: 0 0 22px rgba(248, 113, 113, 0.55);
 }
 
+/* ─── COSMIC STUDENT TRAFFIC PICKER DROPDOWN ─── */
+.cosmic-student-picker {
+  position: relative;
+  width: 100%;
+  z-index: 60;
+}
+
+.cosmic-picker-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 16px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(12, 18, 38, 0.94), rgba(7, 11, 24, 0.96));
+  border: 1.5px solid rgba(45, 212, 191, 0.34);
+  color: #f0f9ff;
+  font-family: 'Cairo', sans-serif;
+  font-size: 0.88rem;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(125, 211, 252, 0.12);
+  transition: all 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+  text-align: right;
+}
+
+.cosmic-picker-trigger:hover,
+.cosmic-picker-trigger.open {
+  border-color: rgba(56, 189, 248, 0.72);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.6), 0 0 22px rgba(56, 189, 248, 0.2);
+}
+
+.cosmic-picker-trigger .picker-chevron {
+  color: var(--teal);
+  font-size: 0.85rem;
+  transition: transform 0.25s ease;
+  flex-shrink: 0;
+}
+
+.cosmic-picker-trigger.open .picker-chevron {
+  transform: rotate(180deg);
+}
+
+.cosmic-picker-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  background: linear-gradient(170deg, rgba(8, 12, 30, 0.985), rgba(4, 6, 16, 0.995));
+  border: 1.5px solid rgba(56, 189, 248, 0.42);
+  border-radius: 18px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.88), 0 0 38px rgba(56, 189, 248, 0.16);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  padding: 0.75rem;
+  z-index: 250;
+  animation: scaleIn 0.2s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.cosmic-picker-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 0.65rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid rgba(100, 160, 255, 0.14);
+  flex-wrap: wrap;
+}
+
+.cosmic-picker-filter-pill {
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-family: 'Cairo', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 800;
+  border: 1px solid rgba(100, 160, 255, 0.2);
+  background: rgba(15, 23, 42, 0.7);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.cosmic-picker-filter-pill.active {
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.22), rgba(245, 158, 11, 0.14));
+  border-color: rgba(251, 191, 36, 0.65);
+  color: #fde68a;
+  box-shadow: 0 0 14px rgba(251, 191, 36, 0.2);
+}
+
+.cosmic-picker-list {
+  max-height: 310px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-left: 4px;
+}
+
+.cosmic-student-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(13, 19, 40, 0.62);
+  border: 1px solid rgba(100, 160, 255, 0.08);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.cosmic-student-option:hover {
+  background: rgba(45, 212, 191, 0.1);
+  border-color: rgba(45, 212, 191, 0.42);
+  transform: translateX(-3px);
+}
+
+.cosmic-student-option.selected {
+  background: linear-gradient(135deg, rgba(45, 212, 191, 0.16), rgba(56, 189, 248, 0.14));
+  border-color: rgba(56, 189, 248, 0.65);
+  box-shadow: 0 0 18px rgba(56, 189, 248, 0.16);
+}
+
+.cosmic-student-option.has-traffic {
+  border-color: rgba(251, 191, 36, 0.26);
+}
+
+.cosmic-student-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(45, 212, 191, 0.18), rgba(56, 189, 248, 0.18));
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: #38bdf8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  font-weight: 900;
+  flex-shrink: 0;
+}
+
+.cosmic-traffic-bang-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.22), rgba(245, 158, 11, 0.14));
+  border: 1px solid rgba(251, 191, 36, 0.58);
+  color: #fde68a;
+  font-size: 0.74rem;
+  font-weight: 900;
+  flex-shrink: 0;
+  box-shadow: 0 0 14px rgba(251, 191, 36, 0.22);
+}
+
+.cosmic-traffic-bang-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  color: #090d16;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 900;
+  box-shadow: 0 0 10px rgba(251, 191, 36, 0.65);
+}
+
+
 
 
 
@@ -14686,21 +14862,193 @@ ESSAY
   };
 
   window._analyticsStateCache = null;
+  window._analyticsTrafficOnlyFilter = false;
 
-  window.filterAnalyticsStudentDropdown = function (query) {
-    const sel = document.getElementById('analytics-student-select');
-    if (!sel || !window._analyticsStateCache) return;
-    const q = (query || '').trim().toLowerCase();
-    const accounts = window._analyticsStateCache.accounts || [];
-    const currentVal = sel.value;
-    const filtered = accounts.filter(u =>
-      !q ||
-      (u.email || '').toLowerCase().includes(q) ||
-      (u.full_name || '').toLowerCase().includes(q)
+  window.getStudentTrafficCountSummary = function (acc) {
+    const cache = window._analyticsStateCache;
+    if (!cache || !acc) return { total: 0, attempts: 0, traffic: 0 };
+    const email = (acc.email || '').toLowerCase();
+    const uid = acc.id || '';
+    const normEmail = window.normalizeEmailStrict ? window.normalizeEmailStrict(email) : email;
+    const studentResetCutoff = Math.max(
+      Number(cache.allStudentsResetTs || 0),
+      Number((cache.perStudentResetMap || {})[email] || 0)
     );
-    sel.innerHTML = `<option value="">-- اختر حساب الطالب لعرض تحركاته وإحصائياته (${filtered.length}) --</option>` +
-      filtered.map(u => `<option value="${(u.email || '').toLowerCase()}" ${currentVal === (u.email || '').toLowerCase() ? 'selected' : ''}>${u.full_name || u.email} (${u.email})</option>`).join('');
+
+    const attCount = (cache.allStudentAttempts || []).filter(a => {
+      const matches = (uid && String(a.student_id) === String(uid)) || ((a.student_email || '').toLowerCase() === email);
+      if (!matches) return false;
+      if (studentResetCutoff && new Date(a.started_at || 0).getTime() < studentResetCutoff) return false;
+      return true;
+    }).length;
+
+    const trafCount = (cache.trafficLogs || []).filter(ev => {
+      const matches = (ev.email && (window.normalizeEmailStrict ? window.normalizeEmailStrict(ev.email) === normEmail : ev.email.toLowerCase() === email)) ||
+        (uid && ev.uid && String(ev.uid) === String(uid));
+      if (!matches) return false;
+      if (studentResetCutoff && new Date(ev.created_at || 0).getTime() < studentResetCutoff) return false;
+      return true;
+    }).length;
+
+    return { total: attCount + trafCount, attempts: attCount, traffic: trafCount };
   };
+
+  window.renderCosmicStudentPickerOptions = function () {
+    const listEl = document.getElementById('analytics-student-picker-list');
+    const countAllEl = document.getElementById('picker-count-all');
+    const countTrafficEl = document.getElementById('picker-count-traffic');
+    const selInp = document.getElementById('analytics-student-select');
+    const searchInp = document.getElementById('analytics-student-search');
+    if (!listEl || !window._analyticsStateCache) return;
+
+    const q = (searchInp?.value || '').trim().toLowerCase();
+    const currentVal = (selInp?.value || '').trim().toLowerCase();
+    const accounts = window._analyticsStateCache.accounts || [];
+
+    const enriched = accounts.map(u => ({
+      acc: u,
+      email: (u.email || '').toLowerCase(),
+      stats: window.getStudentTrafficCountSummary(u)
+    }));
+
+    // ترتيب الحسابات التي عليها ترافيك أولاً مع إبقاء الباقي مرتباً أبجدياً
+    enriched.sort((a, b) => {
+      if ((b.stats.total > 0) !== (a.stats.total > 0)) return b.stats.total > 0 ? 1 : -1;
+      return (a.acc.full_name || a.email).localeCompare(b.acc.full_name || b.email, 'ar');
+    });
+
+    const trafficTotalUsers = enriched.filter(x => x.stats.total > 0).length;
+    if (countAllEl) countAllEl.textContent = enriched.length;
+    if (countTrafficEl) countTrafficEl.textContent = trafficTotalUsers;
+
+    const filtered = enriched.filter(item => {
+      if (window._analyticsTrafficOnlyFilter && item.stats.total === 0) return false;
+      if (!q) return true;
+      return item.email.includes(q) || (item.acc.full_name || '').toLowerCase().includes(q);
+    });
+
+    if (!filtered.length) {
+      listEl.innerHTML = `<div style="text-align:center;padding:1.2rem;color:var(--text-dim);font-size:0.82rem">لا توجد حسابات مطابقة للبحث.</div>`;
+      return;
+    }
+
+    listEl.innerHTML = filtered.map(({ acc, email, stats }) => {
+      const hasTraf = stats.total > 0;
+      const isSelected = currentVal === email;
+      const rawName = acc.full_name || email;
+      const initials = rawName.trim().charAt(0).toUpperCase();
+      const hl = (txt) => {
+        if (!q) return txt;
+        const idx = txt.toLowerCase().indexOf(q);
+        if (idx === -1) return txt;
+        return txt.slice(0, idx) + `<mark style="background:rgba(56,189,248,0.28);color:#fff;border-radius:4px;padding:0 2px">${txt.slice(idx, idx + q.length)}</mark>` + txt.slice(idx + q.length);
+      };
+      return `
+        <div class="cosmic-student-option ${hasTraf ? 'has-traffic' : ''} ${isSelected ? 'selected' : ''}" data-email="${email}" onclick="selectCosmicStudentAccount('${email.replace(/'/g, "\\'")}')">
+          <div style="display:flex;align-items:center;gap:10px;min-width:0;flex:1">
+            <div class="cosmic-student-avatar">${initials}</div>
+            <div style="min-width:0;flex:1">
+              <div style="font-size:0.86rem;font-weight:800;color:#f8fafc;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                <span>${hl(rawName)}</span>
+                ${hasTraf ? `<span class="cosmic-traffic-bang-icon" title="يوجد ترافيك ونشاط مسجل لهذا الحساب">!</span>` : ''}
+              </div>
+              <div style="font-size:0.75rem;color:var(--teal);font-family:monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" dir="ltr">${hl(email)}</div>
+            </div>
+          </div>
+          ${hasTraf
+            ? `<span class="cosmic-traffic-bang-badge" title="اضغط لعرض الترافيك الخاص به"><span>❗</span><span>${stats.total} نشاط</span></span>`
+            : `<span style="font-size:0.72rem;color:var(--text-dim);flex-shrink:0">لا يوجد نشاط</span>`}
+        </div>`;
+    }).join('');
+  };
+
+  window.toggleCosmicStudentPicker = function (e) {
+    if (e) e.stopPropagation();
+    const menu = document.getElementById('analytics-student-picker-menu');
+    const trig = document.getElementById('analytics-student-picker-btn');
+    if (!menu || !trig) return;
+    const isHidden = menu.classList.contains('hidden');
+    if (isHidden) {
+      window.renderCosmicStudentPickerOptions();
+      menu.classList.remove('hidden');
+      trig.classList.add('open');
+    } else {
+      menu.classList.add('hidden');
+      trig.classList.remove('open');
+    }
+  };
+
+  window.setCosmicPickerTrafficFilter = function (onlyTraffic) {
+    window._analyticsTrafficOnlyFilter = Boolean(onlyTraffic);
+    const btnAll = document.getElementById('picker-filter-all-btn');
+    const btnTraf = document.getElementById('picker-filter-traffic-btn');
+    if (btnAll) btnAll.classList.toggle('active', !window._analyticsTrafficOnlyFilter);
+    if (btnTraf) btnTraf.classList.toggle('active', window._analyticsTrafficOnlyFilter);
+    window.renderCosmicStudentPickerOptions();
+  };
+
+  window.selectCosmicStudentAccount = function (email) {
+    const cleanEmail = (email || '').trim().toLowerCase();
+    const selInp = document.getElementById('analytics-student-select');
+    const trigLabel = document.getElementById('analytics-student-picker-label');
+    const menu = document.getElementById('analytics-student-picker-menu');
+    const trig = document.getElementById('analytics-student-picker-btn');
+    if (selInp) selInp.value = cleanEmail;
+
+    if (trigLabel && window._analyticsStateCache) {
+      const acc = (window._analyticsStateCache.accounts || []).find(u => (u.email || '').toLowerCase() === cleanEmail);
+      if (acc) {
+        const stats = window.getStudentTrafficCountSummary(acc);
+        trigLabel.innerHTML = `
+          <span style="display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span>👤 ${acc.full_name || cleanEmail}</span>
+            <span style="color:var(--teal);font-family:monospace;font-size:0.78rem" dir="ltr">(${cleanEmail})</span>
+            ${stats.total > 0 ? `<span class="cosmic-traffic-bang-badge" style="padding:2px 8px;font-size:0.7rem">❗ ${stats.total} نشاط</span>` : ''}
+          </span>`;
+      }
+    }
+    if (menu) menu.classList.add('hidden');
+    if (trig) trig.classList.remove('open');
+    window.renderSelectedStudentAnalytics(cleanEmail);
+  };
+
+  window.filterAnalyticsStudentDropdown = function (query, forceOpen = true) {
+    const menu = document.getElementById('analytics-student-picker-menu');
+    const trig = document.getElementById('analytics-student-picker-btn');
+    if (menu && forceOpen && menu.classList.contains('hidden')) {
+      menu.classList.remove('hidden');
+      if (trig) trig.classList.add('open');
+    }
+    window.renderCosmicStudentPickerOptions();
+  };
+
+  window.handleStudentSearchKeydown = function (e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const firstOpt = document.querySelector('#analytics-student-picker-list .cosmic-student-option[data-email]');
+      if (firstOpt) {
+        window.selectCosmicStudentAccount(firstOpt.getAttribute('data-email'));
+      }
+    } else if (e.key === 'Escape') {
+      const menu = document.getElementById('analytics-student-picker-menu');
+      const trig = document.getElementById('analytics-student-picker-btn');
+      if (menu) menu.classList.add('hidden');
+      if (trig) trig.classList.remove('open');
+    }
+  };
+
+  document.addEventListener('click', (e) => {
+    const picker = document.getElementById('analytics-student-picker');
+    const menu = document.getElementById('analytics-student-picker-menu');
+    const trig = document.getElementById('analytics-student-picker-btn');
+    const searchInp = document.getElementById('analytics-student-search');
+    if (picker && menu && !menu.classList.contains('hidden')) {
+      if (!picker.contains(e.target) && e.target !== searchInp) {
+        menu.classList.add('hidden');
+        if (trig) trig.classList.remove('open');
+      }
+    }
+  });
 
   window.toggleGuestDevicesDrawer = function () {
     const box = document.getElementById('analytics-guest-devices-drawer');
@@ -14998,6 +15346,10 @@ ESSAY
         if (newSig !== _lastStudentReportSig) {
           _lastStudentReportSig = newSig;
           window.renderSelectedStudentAnalytics(prevSelectedEmail);
+          const menu = document.getElementById('analytics-student-picker-menu');
+          if (menu && !menu.classList.contains('hidden')) {
+            window.renderCosmicStudentPickerOptions();
+          }
         }
         return;
       }
@@ -15130,32 +15482,51 @@ ESSAY
         </div>
 
         <!-- إحصائيات وتحركات كل طالب باختيار الإيميل (Student Traffic Inspector) -->
-        <div class="glass-card" style="padding:1.4rem;margin-bottom:1.2rem;border:1.5px solid rgba(45,212,191,0.28)">
+        <div class="glass-card" style="padding:1.4rem;margin-bottom:1.2rem;border:1.5px solid rgba(45,212,191,0.28);overflow:visible !important;position:relative;z-index:20">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:0.9rem">
             <div>
               <h4 style="font-size:1.05rem;font-weight:900;margin:0;color:var(--teal)"><i class="fas fa-user-secret" style="margin-left:6px"></i> إحصائيات وتحركات كل طالب (Student Traffic)</h4>
-              <p style="font-size:0.8rem;color:var(--text-dim);margin:2px 0 0 0">اختر إيميل أي طالب مسجل في المنصة لعرض امتحاناته، درجاته، الملفات التي حمّلها ومن أي قسم، وكل تحركاته لحظياً</p>
+              <p style="font-size:0.8rem;color:var(--text-dim);margin:2px 0 0 0">اختر إيميل أي طالب مسجل في المنصة لعرض امتحاناته، درجاته، الملفات التي حمّلها ومن أي قسم، وكل تحركاته لحظياً — الحسابات التي بها علامة <b>❗</b> لديها ترافيك مسجل</p>
             </div>
             <button type="button" class="btn btn-danger" onclick="resetAllStudentsAnalytics()" style="padding:7px 14px;font-size:0.79rem;font-weight:800">
               <i class="fas fa-users-slash"></i> Reset إحصائيات الحسابات كلها
             </button>
           </div>
-          <div style="display:grid;grid-template-columns:1fr 2fr;gap:8px;align-items:center">
+          <div style="display:grid;grid-template-columns:1fr 2fr;gap:10px;align-items:center">
             <input
               type="text"
               id="analytics-student-search"
-              placeholder="🔍 ابحث بالاسم أو الإيميل..."
-              oninput="filterAnalyticsStudentDropdown(this.value)"
-              style="padding:9px 12px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-family:'Cairo',sans-serif;font-size:0.85rem"
+              placeholder="🔍 اكتب اسم أو حرف أو إيميل لعرض الاقتراحات..."
+              onfocus="filterAnalyticsStudentDropdown(this.value, true)"
+              oninput="filterAnalyticsStudentDropdown(this.value, true)"
+              onkeydown="handleStudentSearchKeydown(event)"
+              style="padding:11px 14px;border-radius:14px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-family:'Cairo',sans-serif;font-size:0.85rem;outline:none"
             >
-            <select
-              id="analytics-student-select"
-              onchange="renderSelectedStudentAnalytics(this.value)"
-              style="padding:9px 12px;border-radius:10px;border:1px solid rgba(45,212,191,0.35);background:var(--surface2);color:var(--text);font-family:'Cairo',sans-serif;font-size:0.86rem;font-weight:800"
-            >
-              <option value="">-- اختر حساب الطالب لعرض تحركاته وإحصائياته (${allAccounts.length}) --</option>
-              ${allAccounts.map(u => `<option value="${u.email}" ${prevSelectedEmail === u.email ? 'selected' : ''}>${u.full_name || u.email} (${u.email})</option>`).join('')}
-            </select>
+            <div id="analytics-student-picker" class="cosmic-student-picker">
+              <input type="hidden" id="analytics-student-select" value="${prevSelectedEmail}">
+              <button type="button" id="analytics-student-picker-btn" class="cosmic-picker-trigger" onclick="toggleCosmicStudentPicker(event)">
+                <span id="analytics-student-picker-label">
+                  ${prevSelectedEmail
+                    ? (() => {
+                        const selAcc = allAccounts.find(u => u.email === prevSelectedEmail);
+                        return selAcc ? `👤 ${selAcc.full_name || selAcc.email} (${selAcc.email})` : `-- اختر حساب الطالب لعرض تحركاته وإحصائياته (${allAccounts.length}) --`;
+                      })()
+                    : `-- اختر حساب الطالب لعرض تحركاته وإحصائياته (${allAccounts.length}) --`}
+                </span>
+                <i class="fas fa-chevron-down picker-chevron"></i>
+              </button>
+              <div id="analytics-student-picker-menu" class="cosmic-picker-menu hidden">
+                <div class="cosmic-picker-toolbar">
+                  <button type="button" id="picker-filter-all-btn" class="cosmic-picker-filter-pill ${!window._analyticsTrafficOnlyFilter ? 'active' : ''}" onclick="setCosmicPickerTrafficFilter(false)">
+                    👥 كل الحسابات (<span id="picker-count-all">${allAccounts.length}</span>)
+                  </button>
+                  <button type="button" id="picker-filter-traffic-btn" class="cosmic-picker-filter-pill ${window._analyticsTrafficOnlyFilter ? 'active' : ''}" onclick="setCosmicPickerTrafficFilter(true)">
+                    ❗ حسابات عليها ترافيك فقط (<span id="picker-count-traffic">0</span>)
+                  </button>
+                </div>
+                <div id="analytics-student-picker-list" class="cosmic-picker-list"></div>
+              </div>
+            </div>
           </div>
           <div id="analytics-student-report-container"></div>
         </div>
