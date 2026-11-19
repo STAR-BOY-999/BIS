@@ -11310,6 +11310,9 @@ ESSAY
     if (!window.IS_STANDALONE_SUPER_ADMIN && typeof window.pingCurrentUserPresence === 'function') {
       window.pingCurrentUserPresence(true);
     }
+    if (!window.IS_STANDALONE_SUPER_ADMIN && typeof window.recordGuestDeviceVisit === 'function') {
+      window.recordGuestDeviceVisit(false, true);
+    }
     try {
       if (typeof window.logAdminActivity === 'function') {
         window.logAdminActivity('تسجيل دخول طالب', 'user', `${profile.full_name || user.email} (${lowerEmail})`, profile.id || user.id);
@@ -11342,6 +11345,9 @@ ESSAY
     updateNavbarAuthUI();
     if (typeof window.loadStudentNotifications === 'function') {
       window.loadStudentNotifications(true);
+    }
+    if (!window.IS_STANDALONE_SUPER_ADMIN && typeof window.recordGuestDeviceVisit === 'function') {
+      window.recordGuestDeviceVisit(true, false);
     }
     showGradeSelection();
     toast('تم تسجيل الخروج بنجاح');
@@ -14604,11 +14610,12 @@ ESSAY
   };
 
   let _lastGuestPingTs = 0;
-  window.recordGuestDeviceVisit = async function (force = false) {
+  window.recordGuestDeviceVisit = async function (force = false, isLoggedInNow = null) {
     if (window.IS_STANDALONE_SUPER_ADMIN) return;
-    if (window.authSession?.user?.id) return; // مسجل دخول بالفعل
+    const actuallyLoggedIn = (isLoggedInNow !== null) ? Boolean(isLoggedInNow) : Boolean(window.authSession?.user?.id);
+    if (actuallyLoggedIn && isLoggedInNow === null) return;
     const now = Date.now();
-    if (!force && (now - _lastGuestPingTs < 25000)) return;
+    if (!force && (now - _lastGuestPingTs < 4000)) return;
     _lastGuestPingTs = now;
 
     try {
@@ -14634,6 +14641,7 @@ ESSAY
         device_id: devId,
         os,
         browser,
+        is_logged_in: actuallyLoggedIn,
         first_seen: prev.first_seen || new Date(now).toISOString(),
         last_seen: new Date(now).toISOString(),
         visits_count: Number(prev.visits_count || 0) + (force ? 1 : 0) || 1
@@ -14660,6 +14668,9 @@ ESSAY
             subject: 'sys', title: '__folder__', url: JSON.stringify(map), file_type: 'link'
           })
         });
+      }
+      if (typeof window.broadcastRealtimeUserSync === 'function') {
+        window.broadcastRealtimeUserSync('guest_visit', devId, actuallyLoggedIn ? 'logged_in' : 'guest');
       }
     } catch (e) {}
   };
@@ -14892,14 +14903,39 @@ ESSAY
       });
       const allAccounts = Array.from(accMap.values()).sort((a, b) => (a.full_name || a.email).localeCompare(b.full_name || b.email, 'ar'));
 
-      // حساب الأجهزة التي دخلت بدون تسجيل أكونت
-      const boundDevices = overrides?.__device_bindings__ || {};
+      // حساب الأجهزة التي دخلت بدون تسجيل أكونت حالياً
       const guestDevicesList = Object.values(guestDevicesRaw || {}).filter(d => {
         if (!d || !d.device_id) return false;
-        if (boundDevices[d.device_id]) return false;
+        if (d.is_logged_in === true) return false;
         if (generalResetTs && new Date(d.last_seen || 0).getTime() < generalResetTs) return false;
         return true;
       }).sort((a, b) => new Date(b.last_seen || 0) - new Date(a.last_seen || 0));
+
+      const buildGuestDevicesInnerHtml = (list) => {
+        const nowMs = Date.now();
+        return `
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.8rem">
+            <h4 style="margin:0;font-size:0.95rem;font-weight:900;color:var(--amber)"><i class="fas fa-mobile-alt" style="margin-left:6px"></i> الأجهزة التي دخلت المنصة بدون تسجيل حساب (${list.length})</h4>
+            <button type="button" class="btn btn-ghost" style="padding:4px 10px;font-size:0.75rem" onclick="toggleGuestDevicesDrawer()">إغلاق</button>
+          </div>
+          ${list.length === 0
+            ? `<p style="font-size:0.82rem;color:var(--text-dim);margin:0">لا توجد أجهزة زائرة غير مسجلة حالياً.</p>`
+            : `<div style="max-height:220px;overflow-y:auto">
+                ${list.map(d => {
+                  const isLiveNow = (nowMs - new Date(d.last_seen || 0).getTime()) < 15000;
+                  return `
+                  <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:0.8rem;gap:10px;flex-wrap:wrap">
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                      <span style="padding:2px 8px;border-radius:12px;font-size:0.7rem;font-weight:900;background:${isLiveNow ? 'rgba(0,230,118,0.16)' : 'rgba(148,163,184,0.14)'};color:${isLiveNow ? '#00e676' : '#94a3b8'}">${isLiveNow ? '🟢 فاتح الآن' : '⚫ زار سابقاً'}</span>
+                      <strong style="color:var(--text)">${d.os || 'جهاز'} • ${d.browser || 'متصفح'}</strong>
+                      <span style="color:var(--accent);font-family:monospace;font-size:0.74rem" dir="ltr">#${String(d.device_id).slice(-8)}</span>
+                      <span style="color:var(--teal);font-size:0.74rem">(${d.visits_count || 1} زيارة)</span>
+                    </div>
+                    <span style="color:var(--text-dim);font-size:0.72rem">آخر ظهور: ${new Date(d.last_seen).toLocaleString('ar-EG')}</span>
+                  </div>`;
+                }).join('')}
+              </div>`}`;
+      };
 
       const allAttemptsMap = new Map();
       [...rawDbAttempts, ...rawLocalAttempts].forEach(a => allAttemptsMap.set(String(a.id), a));
@@ -14936,6 +14972,11 @@ ESSAY
         setTxt('analytics-kpi-solved', solvedNow);
         setTxt('analytics-kpi-avg', `${avgNow}%`);
         setTxt('analytics-kpi-ratio', `${ratioNow}%`);
+
+        const guestDrawerEl = document.getElementById('analytics-guest-devices-drawer');
+        if (guestDrawerEl) {
+          guestDrawerEl.innerHTML = buildGuestDevicesInnerHtml(guestDevicesList);
+        }
 
         const newSig = JSON.stringify({
           e: prevSelectedEmail,
@@ -15075,23 +15116,7 @@ ESSAY
 
         <!-- تفاصيل الأجهزة التي دخلت بدون تسجيل حساب -->
         <div id="analytics-guest-devices-drawer" class="glass-card hidden" style="padding:1.2rem;margin-bottom:1.2rem;border:1px solid rgba(251,191,36,0.35)">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.8rem">
-            <h4 style="margin:0;font-size:0.95rem;font-weight:900;color:var(--amber)"><i class="fas fa-mobile-alt" style="margin-left:6px"></i> الأجهزة التي دخلت المنصة بدون تسجيل حساب (${guestDevicesList.length})</h4>
-            <button type="button" class="btn btn-ghost" style="padding:4px 10px;font-size:0.75rem" onclick="toggleGuestDevicesDrawer()">إغلاق</button>
-          </div>
-          ${guestDevicesList.length === 0
-            ? `<p style="font-size:0.82rem;color:var(--text-dim);margin:0">لا توجد أجهزة زائرة غير مسجلة حالياً.</p>`
-            : `<div style="max-height:220px;overflow-y:auto">
-                ${guestDevicesList.map(d => `
-                  <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:0.8rem;gap:10px;flex-wrap:wrap">
-                    <div>
-                      <strong style="color:var(--text)">${d.os || 'جهاز'} • ${d.browser || 'متصفح'}</strong>
-                      <span style="color:var(--accent);font-family:monospace;font-size:0.74rem;margin-right:8px" dir="ltr">#${String(d.device_id).slice(-8)}</span>
-                      <span style="color:var(--teal);font-size:0.74rem;margin-right:6px">(${d.visits_count || 1} زيارة)</span>
-                    </div>
-                    <span style="color:var(--text-dim);font-size:0.72rem">آخر ظهور: ${new Date(d.last_seen).toLocaleString('ar-EG')}</span>
-                  </div>`).join('')}
-              </div>`}
+          ${buildGuestDevicesInnerHtml(guestDevicesList)}
         </div>
 
         <!-- إحصائيات وتحركات كل طالب باختيار الإيميل (Student Traffic Inspector) -->
@@ -17199,12 +17224,12 @@ ESSAY
 
     document.addEventListener('DOMContentLoaded', () => {
       if (!window.IS_STANDALONE_SUPER_ADMIN && typeof window.recordGuestDeviceVisit === 'function') {
-        setTimeout(() => window.recordGuestDeviceVisit(true), 1200);
+        setTimeout(() => window.recordGuestDeviceVisit(true), 250);
         setInterval(() => {
           if (!document.hidden && !window.authSession?.user?.id) {
             window.recordGuestDeviceVisit(false);
           }
-        }, 30000);
+        }, 5000);
       }
     });
   } catch (e) {}
