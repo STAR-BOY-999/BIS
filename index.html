@@ -14509,8 +14509,11 @@ ESSAY
             })
           });
         }
+        if (typeof window.broadcastRealtimeUserSync === 'function') {
+          window.broadcastRealtimeUserSync('student_traffic', email, actionType);
+        }
       } catch (e) {}
-    }, 450);
+    }, 80);
   };
 
   let _lastGuestPingTs = 0;
@@ -14633,6 +14636,7 @@ ESSAY
     const actionLabels = {
       download_file: '📥 تحميل / فتح ملف',
       open_section: '📂 دخول قسم',
+      open_subject: '📚 فتح مادة',
       open_owner: '👑 فتح مجلد Owner',
       start_quiz: '▶️ بدء اختبار',
       finish_quiz: '✅ تسليم اختبار',
@@ -14731,7 +14735,9 @@ ESSAY
       </div>`;
   };
 
-  window.loadSuperAdminAnalytics = async function () {
+  let _lastStudentReportSig = '';
+
+  window.loadSuperAdminAnalytics = async function (silent = false) {
     const container = document.getElementById('admin-section-analytics');
     if (!container) return;
 
@@ -14803,6 +14809,39 @@ ESSAY
         trafficLogs,
         guestDevicesList
       };
+
+      // إذا كانت لوحة التحليلات مرسومة بالفعل، نحدّث الأرقام وتقرير الطالب المختار في مكانه (Real-Time) بدون إعادة بناء الصفحة
+      if (silent && document.getElementById('analytics-student-select')) {
+        const setTxt = (id, val) => {
+          const el = document.getElementById(id);
+          const s = String(val);
+          if (el && el.textContent !== s) el.textContent = s;
+        };
+        const solvedNow = attempts.length;
+        const avgNow = solvedNow ? Math.round(attempts.reduce((s, a) => s + Number(a.score_pct || 0), 0) / solvedNow) : 0;
+        const corrNow = attempts.reduce((s, a) => s + Number(a.correct_count || 0), 0);
+        const wrongNow = attempts.reduce((s, a) => s + Number(a.wrong_count || 0), 0);
+        const ratioNow = (corrNow + wrongNow) > 0 ? Math.round((corrNow / (corrNow + wrongNow)) * 100) : 0;
+        setTxt('analytics-kpi-students', profiles.filter(p => p.role === 'student').length);
+        setTxt('analytics-kpi-active', Math.max(visitors.length, new Set(attempts.map(a => a.student_id)).size));
+        setTxt('analytics-kpi-guests', guestDevicesList.length);
+        setTxt('analytics-kpi-solved', solvedNow);
+        setTxt('analytics-kpi-avg', `${avgNow}%`);
+        setTxt('analytics-kpi-ratio', `${ratioNow}%`);
+
+        const newSig = JSON.stringify({
+          e: prevSelectedEmail,
+          tc: trafficLogs.length,
+          tl: trafficLogs[0]?.id || '',
+          ac: attempts.length,
+          gc: guestDevicesList.length
+        });
+        if (newSig !== _lastStudentReportSig) {
+          _lastStudentReportSig = newSig;
+          window.renderSelectedStudentAnalytics(prevSelectedEmail);
+        }
+        return;
+      }
 
       if (filterTerm !== 'all') {
         attempts = attempts.filter(a => Number(a.term) === Number(filterTerm));
@@ -14901,27 +14940,27 @@ ESSAY
 
         <div class="kpi-grid">
           <div class="kpi-card">
-            <div class="kpi-val" style="color:var(--teal)">${totalStudents}</div>
+            <div class="kpi-val" id="analytics-kpi-students" style="color:var(--teal)">${totalStudents}</div>
             <div class="kpi-label">إجمالي الطلاب المسجلين</div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-val" style="color:var(--accent)">${activeUsers}</div>
+            <div class="kpi-val" id="analytics-kpi-active" style="color:var(--accent)">${activeUsers}</div>
             <div class="kpi-label">المستخدمون النشطون</div>
           </div>
           <div class="kpi-card" style="cursor:pointer;border:1px solid rgba(251,191,36,0.3)" onclick="toggleGuestDevicesDrawer()" title="اضغط لعرض تفاصيل الأجهزة التي دخلت بدون تسجيل">
-            <div class="kpi-val" style="color:var(--amber)">${guestDevicesList.length}</div>
+            <div class="kpi-val" id="analytics-kpi-guests" style="color:var(--amber)">${guestDevicesList.length}</div>
             <div class="kpi-label">أجهزة دخلت بدون تسجيل حساب <span style="font-size:0.68rem;color:var(--teal)">(اضغط للتفاصيل)</span></div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-val" style="color:var(--amber)">${solvedCount}</div>
+            <div class="kpi-val" id="analytics-kpi-solved" style="color:var(--amber)">${solvedCount}</div>
             <div class="kpi-label">الاختبارات التي تم حلها</div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-val" style="color:var(--violet)">${avgScore}%</div>
+            <div class="kpi-val" id="analytics-kpi-avg" style="color:var(--violet)">${avgScore}%</div>
             <div class="kpi-label">متوسط درجات الطلاب</div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-val" style="color:var(--teal)">${correctRatio}%</div>
+            <div class="kpi-val" id="analytics-kpi-ratio" style="color:var(--teal)">${correctRatio}%</div>
             <div class="kpi-label">نسبة الإجابات الصحيحة (${totalCorrect} صح / ${totalWrong} خطأ)</div>
           </div>
         </div>
@@ -15876,6 +15915,10 @@ ESSAY
       const logsPanel = document.getElementById('admin-section-logs');
       if (logsPanel && !logsPanel.classList.contains('hidden')) {
         loadAdminActivityLogsView(true);
+      }
+      const analyticsPanel = document.getElementById('admin-section-analytics');
+      if (analyticsPanel && !analyticsPanel.classList.contains('hidden') && typeof window.loadSuperAdminAnalytics === 'function') {
+        window.loadSuperAdminAnalytics(true);
       }
       return;
     }
@@ -16868,17 +16911,41 @@ ESSAY
       try {
         const card = link.closest('.resource-card') || link;
         const fileTitle = card.querySelector('h4')?.textContent?.trim() || link.textContent?.trim() || 'ملف';
-        const subTxt = card.querySelector('p')?.textContent?.trim() || '';
         const isLec = Boolean(link.closest('#lectures-list, #lectures-subjects-list')) || (typeof currentSection !== 'undefined' && currentSection === 'lectures');
         const isSum = Boolean(link.closest('#summaries-list')) || (typeof currentSection !== 'undefined' && currentSection === 'summaries');
         const secLabel = isLec ? 'المحاضرات' : (isSum ? 'الملخصات' : 'بحث شامل');
         const ownerName = isLec ? (typeof currentPublicLectureOwner !== 'undefined' && currentPublicLectureOwner?.name ? currentPublicLectureOwner.name : '')
           : (isSum ? (typeof currentPublicOwner !== 'undefined' && currentPublicOwner?.name ? currentPublicOwner.name : '') : '');
+
+        // استخراج اسم المادة / الفولدر بدقة من الكونتينر الأب أو الفولدر النشط
+        let detectedSubject = '';
+        const folderGroup = card.closest('div[style*="margin-bottom"]');
+        if (folderGroup && folderGroup.previousElementSibling) {
+          const prevHdr = folderGroup.previousElementSibling;
+          detectedSubject = prevHdr.querySelector('h4, span[style*="font-weight:900"]')?.textContent?.trim() || '';
+        }
+        if (!detectedSubject && isLec && typeof _publicOwnerFolder !== 'undefined' && _publicOwnerFolder) {
+          detectedSubject = _publicOwnerFolder;
+        }
+        if (!detectedSubject && isSum && window._activeTrafficSubject) {
+          detectedSubject = window._activeTrafficSubject;
+        }
+        if (!detectedSubject) {
+          const matchedRes = [
+            ...(typeof _lecturesCache !== 'undefined' && Array.isArray(_lecturesCache) ? _lecturesCache : []),
+            ...(typeof _summariesCache !== 'undefined' && Array.isArray(_summariesCache) ? _summariesCache : [])
+          ].find(r => r && (r.title === fileTitle || r.url === link.getAttribute('href')));
+          if (matchedRes && matchedRes.subject) detectedSubject = matchedRes.subject;
+        }
+        if (!detectedSubject) {
+          detectedSubject = card.querySelector('p')?.textContent?.trim() || 'عام';
+        }
+
         if (typeof window.trackStudentTrafficEvent === 'function') {
           window.trackStudentTrafficEvent('download_file', {
             section: secLabel,
             title: fileTitle,
-            subject: subTxt,
+            subject: detectedSubject,
             owner_name: ownerName
           });
         }
@@ -16947,6 +17014,36 @@ ESSAY
           });
         }
         return _origOpenPubLecOwner.apply(this, arguments);
+      };
+    }
+
+    const _origToggleLecFolder = window._toggleLectureFolder;
+    if (typeof _origToggleLecFolder === 'function') {
+      window._toggleLectureFolder = function (sub) {
+        window._activeTrafficSubject = sub;
+        if (!window.IS_STANDALONE_SUPER_ADMIN && typeof window.trackStudentTrafficEvent === 'function') {
+          window.trackStudentTrafficEvent('open_subject', {
+            section: 'المحاضرات',
+            title: sub,
+            subject: sub
+          });
+        }
+        return _origToggleLecFolder.apply(this, arguments);
+      };
+    }
+
+    const _origToggleSumFolder = window._toggleSummaryFolder;
+    if (typeof _origToggleSumFolder === 'function') {
+      window._toggleSummaryFolder = function (sub) {
+        window._activeTrafficSubject = sub;
+        if (!window.IS_STANDALONE_SUPER_ADMIN && typeof window.trackStudentTrafficEvent === 'function') {
+          window.trackStudentTrafficEvent('open_subject', {
+            section: 'الملخصات',
+            title: sub,
+            subject: sub
+          });
+        }
+        return _origToggleSumFolder.apply(this, arguments);
       };
     }
 
