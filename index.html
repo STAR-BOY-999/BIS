@@ -11985,7 +11985,7 @@ ESSAY
       const qList = qRes.ok ? await qRes.json() : [];
       const rList = (rRes.ok ? await rRes.json() : []).filter(r => r.title !== '__folder__');
       const pList = pRes.ok ? await pRes.json() : [];
-      const resetTs = Number(overrides?.__analytics_reset_ts__ || 0);
+      const resetTs = Number(overrides?.__general_analytics_reset_ts__ || overrides?.__analytics_reset_ts__ || 0);
       const dbAttempts = (aRes.ok ? await aRes.json() : []).filter(a => !resetTs || new Date(a.started_at || 0).getTime() >= resetTs);
       const localAttempts = JSON.parse(localStorage.getItem('student_quiz_attempts') || '[]').filter(a => !resetTs || new Date(a.started_at || 0).getTime() >= resetTs);
       const totalAttempts = Math.max(dbAttempts.length, localAttempts.length);
@@ -13007,6 +13007,15 @@ ESSAY
       }
       if (!overrides.__analytics_reset_ts__ && prevCached.__analytics_reset_ts__) {
         overrides.__analytics_reset_ts__ = prevCached.__analytics_reset_ts__;
+      }
+      if (!overrides.__general_analytics_reset_ts__ && prevCached.__general_analytics_reset_ts__) {
+        overrides.__general_analytics_reset_ts__ = prevCached.__general_analytics_reset_ts__;
+      }
+      if (!overrides.__all_students_reset_ts__ && prevCached.__all_students_reset_ts__) {
+        overrides.__all_students_reset_ts__ = prevCached.__all_students_reset_ts__;
+      }
+      if (!overrides.__per_student_reset_ts__ && prevCached.__per_student_reset_ts__) {
+        overrides.__per_student_reset_ts__ = prevCached.__per_student_reset_ts__;
       }
     } catch (e) {}
 
@@ -14377,45 +14386,123 @@ ESSAY
 
   window.resetSuperAdminAnalytics = async function () {
     const ok = await showConfirm({
-      title: 'إعادة ضبط الإحصائيات (Reset)',
-      msg: 'سيتم تصفير إحصائيات المحاولات، متوسط الدرجات، نسبة الإجابات الصحيحة، سجل تحركات الطلاب، وأجهزة الزوار في التحليلات ونظرة عامة (بدون حذف حسابات الطلاب أو الاختبارات). هل أنت متأكد؟',
+      title: 'تصفير الإحصائيات العامة فقط (Reset General)',
+      msg: 'سيتم تصفير الإحصائيات العامة للمنصة فقط (عدد الاختبارات المحلولة، متوسط الدرجات، نسبة الإجابات الصحيحة، الأكثر استخداماً، وأجهزة الزوار غير المسجلين) مع الإبقاء على إحصائيات وتحركات كل طالب منفرداً كما هي. هل أنت متأكد؟',
       type: 'danger',
       icon: 'fa-undo-alt',
-      okText: 'نعم، صفّر الإحصائيات (Reset)'
+      okText: 'نعم، صفّر الإحصائيات العامة فقط'
     });
     if (!ok) return;
 
     const resetTs = Date.now();
-    window._analyticsResetTs = resetTs;
+    window._generalAnalyticsResetTs = resetTs;
+
+    try {
+      const [overrides] = await Promise.all([
+        window.fetchSystemUserOverrides({ skipApplyLock: true }),
+        api('active_visitors?id=not.is.null', { method: 'DELETE' }).catch(() => {}),
+        api('resources?type=eq.guest_devices_log&grade=eq.sys', {
+          method: 'PATCH',
+          body: JSON.stringify({ url: '{}' })
+        }).catch(() => {})
+      ]);
+      overrides.__general_analytics_reset_ts__ = resetTs;
+      await window.saveSystemUserOverrides(overrides);
+      await logAdminActivity('تصفير الإحصائيات العامة فقط (Reset)', 'analytics', new Date(resetTs).toLocaleString('ar-EG'));
+      toast('🔄 تم تصفير الإحصائيات العامة بنجاح!');
+      await loadSuperAdminAnalytics();
+      if (typeof window.loadAdminDashboardOverview === 'function') {
+        window.loadAdminDashboardOverview(true);
+      }
+    } catch (e) {
+      toast('تعذر تصفير الإحصائيات العامة', 'error');
+    }
+  };
+
+  window.resetAllStudentsAnalytics = async function () {
+    const ok = await showConfirm({
+      title: 'تصفير إحصائيات الحسابات كلها',
+      msg: 'سيتم تصفير جميع امتحانات وتحركات وملفات جميع حسابات الطلاب المسجلين في قسم Student Traffic نهائياً (بدون حذف الحسابات نفسها). هل أنت متأكد؟',
+      type: 'danger',
+      icon: 'fa-users-slash',
+      okText: 'نعم، صفّر إحصائيات الحسابات كلها'
+    });
+    if (!ok) return;
+
+    const resetTs = Date.now();
+    window._allStudentsResetTs = resetTs;
     try { localStorage.setItem('student_quiz_attempts', '[]'); } catch (e) {}
 
     try {
       const [overrides] = await Promise.all([
         window.fetchSystemUserOverrides({ skipApplyLock: true }),
         api('quiz_attempts?id=not.is.null', { method: 'DELETE' }).catch(() => {}),
-        api('active_visitors?id=not.is.null', { method: 'DELETE' }).catch(() => {}),
         api('resources?type=eq.student_traffic_logs&grade=eq.sys', {
           method: 'PATCH',
           body: JSON.stringify({ url: '[]' })
-        }).catch(() => {}),
-        api('resources?type=eq.guest_devices_log&grade=eq.sys', {
-          method: 'PATCH',
-          body: JSON.stringify({ url: '{}' })
         }).catch(() => {})
       ]);
-      overrides.__analytics_reset_ts__ = resetTs;
+      overrides.__all_students_reset_ts__ = resetTs;
+      overrides.__per_student_reset_ts__ = {};
       await window.saveSystemUserOverrides(overrides);
       if (typeof window.broadcastRealtimeUserSync === 'function') {
         window.broadcastRealtimeUserSync('analytics_reset', '__analytics__', String(resetTs));
       }
-      await logAdminActivity('تصفير إحصائيات التحليلات (Reset)', 'analytics', new Date(resetTs).toLocaleString('ar-EG'));
-      toast('🔄 تم تصفير جميع إحصائيات التحليلات بنجاح!');
+      await logAdminActivity('تصفير إحصائيات جميع الحسابات (Reset)', 'analytics', new Date(resetTs).toLocaleString('ar-EG'));
+      toast('🔄 تم تصفير إحصائيات وتحركات جميع الحسابات بنجاح!');
       await loadSuperAdminAnalytics();
-      if (typeof window.loadAdminDashboardOverview === 'function') {
-        window.loadAdminDashboardOverview(true);
-      }
     } catch (e) {
-      toast('تعذر تصفير الإحصائيات', 'error');
+      toast('تعذر تصفير إحصائيات الحسابات', 'error');
+    }
+  };
+
+  window.resetSelectedStudentAnalytics = async function (targetEmail) {
+    const email = (targetEmail || '').trim().toLowerCase();
+    if (!email) return;
+    const ok = await showConfirm({
+      title: 'تصفير إحصائيات هذا الحساب',
+      msg: `سيتم تصفير جميع الامتحانات المحلولة وسجل التحركات والملفات المحمّلة للحساب (${email}) فقط دون التأثير على باقي الحسابات. هل أنت متأكد؟`,
+      type: 'danger',
+      icon: 'fa-user-clock',
+      okText: 'نعم، صفّر إحصائيات هذا الحساب'
+    });
+    if (!ok) return;
+
+    const resetTs = Date.now();
+    const acc = (window._analyticsStateCache?.accounts || []).find(u => (u.email || '').toLowerCase() === email);
+    const uid = acc?.id || '';
+
+    try {
+      const overrides = await window.fetchSystemUserOverrides({ skipApplyLock: true });
+      if (!overrides.__per_student_reset_ts__ || typeof overrides.__per_student_reset_ts__ !== 'object') {
+        overrides.__per_student_reset_ts__ = {};
+      }
+      overrides.__per_student_reset_ts__[email] = resetTs;
+
+      const ops = [window.saveSystemUserOverrides(overrides)];
+      if (uid) {
+        ops.push(api(`quiz_attempts?student_id=eq.${encodeURIComponent(uid)}`, { method: 'DELETE' }).catch(() => {}));
+      }
+      // إزالة تحركات هذا الطالب من student_traffic_logs
+      const existingTraffic = await window.fetchStudentTrafficLogs();
+      const normEmail = window.normalizeEmailStrict ? window.normalizeEmailStrict(email) : email;
+      const filteredTraffic = existingTraffic.filter(ev => {
+        const evNorm = ev.email && window.normalizeEmailStrict ? window.normalizeEmailStrict(ev.email) : (ev.email || '').toLowerCase();
+        return evNorm !== normEmail && (!uid || String(ev.uid) !== String(uid));
+      });
+      ops.push(
+        api('resources?type=eq.student_traffic_logs&grade=eq.sys', {
+          method: 'PATCH',
+          body: JSON.stringify({ url: JSON.stringify(filteredTraffic) })
+        }).catch(() => {})
+      );
+
+      await Promise.all(ops);
+      await logAdminActivity('تصفير إحصائيات حساب طالب', 'analytics', email);
+      toast(`🔄 تم تصفير إحصائيات الحساب (${email}) بنجاح!`);
+      await loadSuperAdminAnalytics();
+    } catch (e) {
+      toast('تعذر تصفير إحصائيات الحساب', 'error');
     }
   };
 
@@ -14616,16 +14703,25 @@ ESSAY
     const acc = (cache.accounts || []).find(u => (u.email || '').toLowerCase() === email);
     const uid = acc?.id || '';
     const normEmail = window.normalizeEmailStrict ? window.normalizeEmailStrict(email) : email;
-
-    const studentAttempts = (cache.attempts || []).filter(a =>
-      (uid && String(a.student_id) === String(uid)) ||
-      ((a.student_email || '').toLowerCase() === email)
+    const studentResetCutoff = Math.max(
+      Number(cache.allStudentsResetTs || 0),
+      Number((cache.perStudentResetMap || {})[email] || 0)
     );
 
-    const studentTraffic = (cache.trafficLogs || []).filter(ev =>
-      (ev.email && (window.normalizeEmailStrict ? window.normalizeEmailStrict(ev.email) === normEmail : ev.email.toLowerCase() === email)) ||
-      (uid && ev.uid && String(ev.uid) === String(uid))
-    );
+    const studentAttempts = (cache.allStudentAttempts || []).filter(a => {
+      const matches = (uid && String(a.student_id) === String(uid)) || ((a.student_email || '').toLowerCase() === email);
+      if (!matches) return false;
+      if (studentResetCutoff && new Date(a.started_at || 0).getTime() < studentResetCutoff) return false;
+      return true;
+    });
+
+    const studentTraffic = (cache.trafficLogs || []).filter(ev => {
+      const matches = (ev.email && (window.normalizeEmailStrict ? window.normalizeEmailStrict(ev.email) === normEmail : ev.email.toLowerCase() === email)) ||
+        (uid && ev.uid && String(ev.uid) === String(uid));
+      if (!matches) return false;
+      if (studentResetCutoff && new Date(ev.created_at || 0).getTime() < studentResetCutoff) return false;
+      return true;
+    });
 
     const downloads = studentTraffic.filter(ev => ev.action === 'download_file');
     const solvedCount = studentAttempts.length;
@@ -14652,9 +14748,12 @@ ESSAY
             <h5 style="margin:0;font-size:1.05rem;font-weight:900;color:var(--text)">👤 ${acc?.full_name || email}</h5>
             <div style="font-size:0.8rem;color:var(--teal);font-family:monospace;margin-top:2px" dir="ltr">${email}</div>
           </div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;font-size:0.76rem">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:0.76rem">
             <span style="padding:4px 10px;border-radius:20px;background:rgba(45,212,191,0.14);color:var(--teal);font-weight:800">${acc?.term ? (Number(acc.term) === 2 ? '🌙 الترم الثاني' : '☀️ الترم الأول') : 'طالب'}</span>
             ${acc?.bound_device_id ? `<span style="padding:4px 10px;border-radius:20px;background:rgba(56,189,248,0.14);color:var(--accent);font-weight:800" dir="ltr">Device: #${String(acc.bound_device_id).slice(-8)}</span>` : ''}
+            <button type="button" class="btn btn-danger" onclick="resetSelectedStudentAnalytics('${email.replace(/'/g, "\\'")}')" style="padding:5px 12px;font-size:0.76rem;font-weight:800">
+              <i class="fas fa-undo-alt"></i> Reset إحصائيات هذا الحساب
+            </button>
           </div>
         </div>
 
@@ -14762,16 +14861,19 @@ ESSAY
         window.initGoogleAnalyticsGA4(ga4Id);
       }
 
-      const resetTs = Number(overrides?.__analytics_reset_ts__ || window._analyticsResetTs || 0);
-      window._analyticsResetTs = resetTs;
+      const generalResetTs = Number(overrides?.__general_analytics_reset_ts__ || overrides?.__analytics_reset_ts__ || window._generalAnalyticsResetTs || 0);
+      const allStudentsResetTs = Number(overrides?.__all_students_reset_ts__ || overrides?.__analytics_reset_ts__ || window._allStudentsResetTs || 0);
+      const perStudentResetMap = overrides?.__per_student_reset_ts__ || {};
+      window._generalAnalyticsResetTs = generalResetTs;
+      window._allStudentsResetTs = allStudentsResetTs;
 
       const profiles = pRes.ok ? await pRes.json() : [];
-      const dbAttempts = (aRes.ok ? await aRes.json() : []).filter(a => !resetTs || new Date(a.started_at || 0).getTime() >= resetTs);
-      const localAttempts = JSON.parse(localStorage.getItem('student_quiz_attempts') || '[]').filter(a => !resetTs || new Date(a.started_at || 0).getTime() >= resetTs);
+      const rawDbAttempts = aRes.ok ? await aRes.json() : [];
+      const rawLocalAttempts = JSON.parse(localStorage.getItem('student_quiz_attempts') || '[]');
       const resourcesAll = (rRes.ok ? await rRes.json() : []).filter(r => r.title !== '__folder__' && r.grade !== 'sys');
-      const visitors = (vRes.ok ? await vRes.json() : []).filter(v => !resetTs || new Date(v.last_seen || 0).getTime() >= resetTs);
+      const visitors = (vRes.ok ? await vRes.json() : []).filter(v => !generalResetTs || new Date(v.last_seen || 0).getTime() >= generalResetTs);
 
-      const trafficLogs = (trafficLogsRaw || []).filter(ev => !resetTs || new Date(ev.created_at || 0).getTime() >= resetTs);
+      const trafficLogs = (trafficLogsRaw || []).filter(ev => !allStudentsResetTs || new Date(ev.created_at || 0).getTime() >= allStudentsResetTs);
 
       // بناء قائمة جميع الحسابات المسجلة (من profiles + overrides) للبحث واختيار الطالب
       const accMap = new Map();
@@ -14795,19 +14897,25 @@ ESSAY
       const guestDevicesList = Object.values(guestDevicesRaw || {}).filter(d => {
         if (!d || !d.device_id) return false;
         if (boundDevices[d.device_id]) return false;
-        if (resetTs && new Date(d.last_seen || 0).getTime() < resetTs) return false;
+        if (generalResetTs && new Date(d.last_seen || 0).getTime() < generalResetTs) return false;
         return true;
       }).sort((a, b) => new Date(b.last_seen || 0) - new Date(a.last_seen || 0));
 
-      const mergedAttemptsMap = new Map();
-      [...dbAttempts, ...localAttempts].forEach(a => mergedAttemptsMap.set(String(a.id), a));
-      let attempts = Array.from(mergedAttemptsMap.values());
+      const allAttemptsMap = new Map();
+      [...rawDbAttempts, ...rawLocalAttempts].forEach(a => allAttemptsMap.set(String(a.id), a));
+      const allStudentAttempts = Array.from(allAttemptsMap.values());
+
+      // الإحصائيات العامة تتصفّر فقط عند الضغط على Reset الإحصائيات العامة
+      let attempts = allStudentAttempts.filter(a => !generalResetTs || new Date(a.started_at || 0).getTime() >= generalResetTs);
 
       window._analyticsStateCache = {
         accounts: allAccounts,
         attempts,
+        allStudentAttempts,
         trafficLogs,
-        guestDevicesList
+        guestDevicesList,
+        allStudentsResetTs,
+        perStudentResetMap
       };
 
       // إذا كانت لوحة التحليلات مرسومة بالفعل، نحدّث الأرقام وتقرير الطالب المختار في مكانه (Real-Time) بدون إعادة بناء الصفحة
@@ -14934,7 +15042,7 @@ ESSAY
             </select>
           </div>
           <button type="button" class="btn btn-danger" onclick="resetSuperAdminAnalytics()" style="padding:7px 14px;font-size:0.82rem;font-weight:800">
-            <i class="fas fa-undo-alt"></i> Reset الإحصائيات
+            <i class="fas fa-undo-alt"></i> Reset الإحصائيات العامة فقط
           </button>
         </div>
 
@@ -14993,6 +15101,9 @@ ESSAY
               <h4 style="font-size:1.05rem;font-weight:900;margin:0;color:var(--teal)"><i class="fas fa-user-secret" style="margin-left:6px"></i> إحصائيات وتحركات كل طالب (Student Traffic)</h4>
               <p style="font-size:0.8rem;color:var(--text-dim);margin:2px 0 0 0">اختر إيميل أي طالب مسجل في المنصة لعرض امتحاناته، درجاته، الملفات التي حمّلها ومن أي قسم، وكل تحركاته لحظياً</p>
             </div>
+            <button type="button" class="btn btn-danger" onclick="resetAllStudentsAnalytics()" style="padding:7px 14px;font-size:0.79rem;font-weight:800">
+              <i class="fas fa-users-slash"></i> Reset إحصائيات الحسابات كلها
+            </button>
           </div>
           <div style="display:grid;grid-template-columns:1fr 2fr;gap:8px;align-items:center">
             <input
