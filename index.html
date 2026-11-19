@@ -16334,11 +16334,22 @@ ESSAY
 
   window.openPublicSummaryOwnerFolder = function (folderName) {
     _publicSummaryOwnerFolder = folderName;
+    window._activeSummaryOwnerFolder = folderName;
+    window._activeTrafficSubject = folderName;
+    if (!window.IS_STANDALONE_SUPER_ADMIN && typeof window.trackStudentTrafficEvent === 'function') {
+      window.trackStudentTrafficEvent('open_subject', {
+        section: 'الملخصات',
+        title: folderName,
+        subject: folderName,
+        owner_name: (typeof currentPublicOwner !== 'undefined' && currentPublicOwner?.name) ? currentPublicOwner.name : ''
+      });
+    }
     renderPublicOwnerSummaries(_publicSummaryOwnerItems, currentPublicOwner?.name || '');
   };
 
   window.exitPublicSummaryOwnerFolder = function () {
     _publicSummaryOwnerFolder = null;
+    window._activeSummaryOwnerFolder = null;
     renderPublicOwnerSummaries(_publicSummaryOwnerItems, currentPublicOwner?.name || '');
   };
 
@@ -16917,28 +16928,36 @@ ESSAY
         const ownerName = isLec ? (typeof currentPublicLectureOwner !== 'undefined' && currentPublicLectureOwner?.name ? currentPublicLectureOwner.name : '')
           : (isSum ? (typeof currentPublicOwner !== 'undefined' && currentPublicOwner?.name ? currentPublicOwner.name : '') : '');
 
-        // استخراج اسم المادة / الفولدر بدقة من الكونتينر الأب أو الفولدر النشط
+        // استخراج اسم المادة / الفولدر بدقة (مع تجاهل أي .resource-card مجاور)
         let detectedSubject = '';
-        const folderGroup = card.closest('div[style*="margin-bottom"]');
-        if (folderGroup && folderGroup.previousElementSibling) {
-          const prevHdr = folderGroup.previousElementSibling;
-          detectedSubject = prevHdr.querySelector('h4, span[style*="font-weight:900"]')?.textContent?.trim() || '';
-        }
-        if (!detectedSubject && isLec && typeof _publicOwnerFolder !== 'undefined' && _publicOwnerFolder) {
+        if (isLec && typeof _publicOwnerFolder !== 'undefined' && _publicOwnerFolder) {
           detectedSubject = _publicOwnerFolder;
+        } else if (isSum && window._activeSummaryOwnerFolder) {
+          detectedSubject = window._activeSummaryOwnerFolder;
         }
-        if (!detectedSubject && isSum && window._activeTrafficSubject) {
+        if (!detectedSubject) {
+          const folderContainer = card.parentElement;
+          const prevHdr = folderContainer ? folderContainer.previousElementSibling : null;
+          if (prevHdr && !prevHdr.classList.contains('resource-card')) {
+            detectedSubject = prevHdr.querySelector('.owner-leader-content h4, h4, span[style*="font-weight:900"]')?.textContent?.trim() || '';
+          }
+        }
+        if (!detectedSubject) {
+          const hrefVal = link.getAttribute('href') || '';
+          const matchedRes = [
+            ...(typeof _publicOwnerItems !== 'undefined' && Array.isArray(_publicOwnerItems) ? _publicOwnerItems : []),
+            ...(typeof _lecturesCache !== 'undefined' && Array.isArray(_lecturesCache) ? _lecturesCache : []),
+            ...(typeof _summariesCache !== 'undefined' && Array.isArray(_summariesCache) ? _summariesCache : [])
+          ].find(r => r && (r.url === hrefVal || r.title === fileTitle));
+          if (matchedRes && matchedRes.subject && matchedRes.subject !== ownerName) {
+            detectedSubject = matchedRes.subject;
+          }
+        }
+        if (!detectedSubject && window._activeTrafficSubject) {
           detectedSubject = window._activeTrafficSubject;
         }
         if (!detectedSubject) {
-          const matchedRes = [
-            ...(typeof _lecturesCache !== 'undefined' && Array.isArray(_lecturesCache) ? _lecturesCache : []),
-            ...(typeof _summariesCache !== 'undefined' && Array.isArray(_summariesCache) ? _summariesCache : [])
-          ].find(r => r && (r.title === fileTitle || r.url === link.getAttribute('href')));
-          if (matchedRes && matchedRes.subject) detectedSubject = matchedRes.subject;
-        }
-        if (!detectedSubject) {
-          detectedSubject = card.querySelector('p')?.textContent?.trim() || 'عام';
+          detectedSubject = 'عام';
         }
 
         if (typeof window.trackStudentTrafficEvent === 'function') {
@@ -17044,6 +17063,26 @@ ESSAY
           });
         }
         return _origToggleSumFolder.apply(this, arguments);
+      };
+    }
+
+    const _origOpenPubOwnerFolder = window.openPublicOwnerFolder;
+    if (typeof _origOpenPubOwnerFolder === 'function') {
+      window.openPublicOwnerFolder = function (idx) {
+        const res = _origOpenPubOwnerFolder.apply(this, arguments);
+        const folderName = (typeof _publicOwnerFolder !== 'undefined' && _publicOwnerFolder) ? _publicOwnerFolder : ((window._publicOwnerFolderNames || [])[idx] || '');
+        if (folderName) {
+          window._activeTrafficSubject = folderName;
+          if (!window.IS_STANDALONE_SUPER_ADMIN && typeof window.trackStudentTrafficEvent === 'function') {
+            window.trackStudentTrafficEvent('open_subject', {
+              section: 'المحاضرات',
+              title: folderName,
+              subject: folderName,
+              owner_name: (typeof currentPublicLectureOwner !== 'undefined' && currentPublicLectureOwner?.name) ? currentPublicLectureOwner.name : ''
+            });
+          }
+        }
+        return res;
       };
     }
 
