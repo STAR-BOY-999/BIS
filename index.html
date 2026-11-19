@@ -2136,6 +2136,20 @@
   z-index: 400;
   padding: 1rem;
   animation: scaleIn 0.25s ease both;
+  transition: width 0.28s cubic-bezier(0.22, 1, 0.36, 1), max-height 0.28s ease, left 0.28s ease, top 0.28s ease, transform 0.28s ease;
+}
+
+.notif-dropdown.notif-expanded {
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  width: min(820px, 94vw) !important;
+  max-width: 94vw !important;
+  max-height: 84vh !important;
+  padding: 1.35rem !important;
+  border-color: rgba(56, 189, 248, 0.45) !important;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.85), 0 0 50px rgba(56, 189, 248, 0.2) !important;
+  z-index: 550 !important;
 }
 
 .notif-item {
@@ -4451,6 +4465,7 @@ ESSAY
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.8rem;gap:8px;flex-wrap:wrap">
     <h4 style="font-size:0.92rem;font-weight:900;margin:0"><i class="fas fa-bell" style="color:var(--teal);margin-left:6px"></i> <span id="notif-dropdown-title">الإشعارات</span></h4>
     <div style="display:flex;align-items:center;gap:6px">
+      <button id="notif-expand-btn" class="btn btn-blue" style="padding:4px 9px;font-size:0.73rem" onclick="toggleNotificationsDropdownExpand(event)" title="تكبير / تصغير شاشة الإشعارات"><i class="fas fa-expand-alt"></i> تكبير</button>
       <button class="btn btn-ghost" style="padding:4px 9px;font-size:0.73rem" onclick="markAllNotificationsRead()">تعليم كمقروء</button>
       <button id="notif-clear-all-btn" class="btn btn-danger" style="padding:4px 9px;font-size:0.73rem" onclick="deleteAllNotificationsFromBell()" title="حذف جميع الإشعارات"><i class="fas fa-trash-alt"></i> حذف الكل</button>
     </div>
@@ -9225,8 +9240,12 @@ ESSAY
   function updateNotificationBadge() {
     const badge = document.getElementById('notif-unread-badge');
     const clearAllBtn = document.getElementById('notif-clear-all-btn');
+    const expandBtn = document.getElementById('notif-expand-btn');
     if (clearAllBtn) {
       clearAllBtn.style.display = (window.notificationsList && window.notificationsList.length > 0) ? 'inline-flex' : 'none';
+    }
+    if (expandBtn) {
+      expandBtn.style.display = window.IS_STANDALONE_SUPER_ADMIN ? 'inline-flex' : 'none';
     }
     if (!badge) return;
     if (!window.IS_STANDALONE_SUPER_ADMIN && !window.isStudentRegisteredForNotifications()) {
@@ -9243,6 +9262,19 @@ ESSAY
     }
   }
 
+  window.toggleNotificationsDropdownExpand = function (e) {
+    if (e) e.stopPropagation();
+    const dd = document.getElementById('notif-dropdown');
+    const btn = document.getElementById('notif-expand-btn');
+    if (!dd) return;
+    const isExpanded = dd.classList.toggle('notif-expanded');
+    if (btn) {
+      btn.innerHTML = isExpanded
+        ? '<i class="fas fa-compress-alt"></i> تصغير'
+        : '<i class="fas fa-expand-alt"></i> تكبير';
+    }
+  };
+
   window.toggleNotificationsDropdown = function (e) {
     if (e) e.stopPropagation();
     const dd = document.getElementById('notif-dropdown');
@@ -9254,6 +9286,9 @@ ESSAY
       dd.classList.remove('hidden');
     } else {
       dd.classList.add('hidden');
+      dd.classList.remove('notif-expanded');
+      const btn = document.getElementById('notif-expand-btn');
+      if (btn) btn.innerHTML = '<i class="fas fa-expand-alt"></i> تكبير';
     }
   };
 
@@ -9927,6 +9962,7 @@ ESSAY
     const attemptRecord = {
       id: _activeAttemptDbId || Date.now(),
       student_id: window.authSession?.user?.id || 'guest',
+      student_email: (window.authSession?.user?.email || '').toLowerCase(),
       student_name: window.authSession?.profile?.full_name || 'طالب',
       quiz_id: currentQuiz.id,
       quiz_title: currentQuiz.title,
@@ -9943,6 +9979,14 @@ ESSAY
       score_pct: pct,
       status
     };
+
+    if (typeof window.trackStudentTrafficEvent === 'function') {
+      window.trackStudentTrafficEvent('finish_quiz', {
+        section: currentQuiz.section === 'lecture-quizzes' ? 'أسئلة المحاضرات' : 'الامتحانات',
+        title: currentQuiz.title,
+        extra: `النتيجة: ${pct}% (${correct} صح / ${wrong} خطأ)`
+      });
+    }
 
     // Always store locally for immediate offline/guest history + sync to Supabase
     const localAttempts = JSON.parse(localStorage.getItem('student_quiz_attempts') || '[]');
@@ -12723,8 +12767,13 @@ ESSAY
       window.renderSuperAdminPlatformLockBar();
     }
 
-    // لوحة السوبر أدمن المستقلة فقط (super-admin.html) تظل مفتوحة للتحكم، بينما منصة الطلاب (index101.html / index.html) تقفل بالكامل على الجميع
-    if (window.IS_STANDALONE_SUPER_ADMIN) {
+    // عند قفل المنصة، تقفل على الجميع (طلاب، زوار، أدمنز، كونتنت مانجر) إلا السوبر أدمن فقط
+    const isSuperAdminUser = Boolean(
+      window.IS_STANDALONE_SUPER_ADMIN ||
+      window.currentAdminRole === 'super_admin' ||
+      window.authSession?.profile?.role === 'super_admin'
+    );
+    if (isSuperAdminUser) {
       document.querySelectorAll('#platform-global-lock-overlay, [id="platform-global-lock-overlay"]').forEach(el => el.remove());
       document.body.style.overflow = '';
       return;
@@ -12798,10 +12847,15 @@ ESSAY
     }
   };
 
-  // حارس مستمر (Lock Guardian): يمنع فتح المنصة عند الضغط المتكرر على الشاشة ويفتحها فوراً عند إلغاء القفل
+  // حارس مستمر (Lock Guardian): يمنع فتح المنصة عند الضغط المتكرر على الشاشة ويفتحها فوراً عند إلغاء القفل (إلا للسوبر أدمن)
   if (!window.IS_STANDALONE_SUPER_ADMIN) {
     setInterval(() => {
-      const isLocked = Boolean(window._isPlatformLockedGlobal);
+      const isSuperAdminUser = Boolean(
+        window.IS_STANDALONE_SUPER_ADMIN ||
+        window.currentAdminRole === 'super_admin' ||
+        window.authSession?.profile?.role === 'super_admin'
+      );
+      const isLocked = Boolean(window._isPlatformLockedGlobal) && !isSuperAdminUser;
       const overlays = document.querySelectorAll('#platform-global-lock-overlay, [id="platform-global-lock-overlay"]');
       if (isLocked) {
         if (overlays.length === 0) {
@@ -14324,7 +14378,7 @@ ESSAY
   window.resetSuperAdminAnalytics = async function () {
     const ok = await showConfirm({
       title: 'إعادة ضبط الإحصائيات (Reset)',
-      msg: 'سيتم تصفير إحصائيات المحاولات، متوسط الدرجات، نسبة الإجابات الصحيحة، والاختبارات الأكثر استخداماً في التحليلات ونظرة عامة (بدون حذف حسابات الطلاب أو الاختبارات). هل أنت متأكد؟',
+      msg: 'سيتم تصفير إحصائيات المحاولات، متوسط الدرجات، نسبة الإجابات الصحيحة، سجل تحركات الطلاب، وأجهزة الزوار في التحليلات ونظرة عامة (بدون حذف حسابات الطلاب أو الاختبارات). هل أنت متأكد؟',
       type: 'danger',
       icon: 'fa-undo-alt',
       okText: 'نعم، صفّر الإحصائيات (Reset)'
@@ -14339,7 +14393,15 @@ ESSAY
       const [overrides] = await Promise.all([
         window.fetchSystemUserOverrides({ skipApplyLock: true }),
         api('quiz_attempts?id=not.is.null', { method: 'DELETE' }).catch(() => {}),
-        api('active_visitors?id=not.is.null', { method: 'DELETE' }).catch(() => {})
+        api('active_visitors?id=not.is.null', { method: 'DELETE' }).catch(() => {}),
+        api('resources?type=eq.student_traffic_logs&grade=eq.sys', {
+          method: 'PATCH',
+          body: JSON.stringify({ url: '[]' })
+        }).catch(() => {}),
+        api('resources?type=eq.guest_devices_log&grade=eq.sys', {
+          method: 'PATCH',
+          body: JSON.stringify({ url: '{}' })
+        }).catch(() => {})
       ]);
       overrides.__analytics_reset_ts__ = resetTs;
       await window.saveSystemUserOverrides(overrides);
@@ -14357,21 +14419,336 @@ ESSAY
     }
   };
 
+  // ─── STUDENT TRAFFIC & GUEST DEVICES CLOUD TRACKER ───
+  window.fetchStudentTrafficLogs = async function () {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/resources?select=id,url&type=eq.student_traffic_logs&grade=eq.sys&order=id.desc&limit=1`, {
+        headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Cache-Control': 'no-cache' },
+        cache: 'no-store'
+      });
+      if (res.ok) {
+        const rows = await res.json();
+        if (rows && rows[0] && rows[0].url) {
+          const parsed = JSON.parse(rows[0].url);
+          return Array.isArray(parsed) ? parsed : [];
+        }
+      }
+    } catch (e) {}
+    return [];
+  };
+
+  window.fetchGuestDevicesLog = async function () {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/resources?select=id,url&type=eq.guest_devices_log&grade=eq.sys&order=id.desc&limit=1`, {
+        headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Cache-Control': 'no-cache' },
+        cache: 'no-store'
+      });
+      if (res.ok) {
+        const rows = await res.json();
+        if (rows && rows[0] && rows[0].url) {
+          const parsed = JSON.parse(rows[0].url);
+          return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+        }
+      }
+    } catch (e) {}
+    return {};
+  };
+
+  let _trafficFlushTimer = null;
+  let _pendingTrafficQueue = [];
+
+  window.trackStudentTrafficEvent = function (actionType, details = {}) {
+    if (window.IS_STANDALONE_SUPER_ADMIN) return;
+    const email = (window.authSession?.user?.email || '').trim().toLowerCase();
+    const uid = window.authSession?.user?.id || '';
+    if (!email || !uid) return;
+
+    const ev = {
+      id: `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      email,
+      uid,
+      name: window.authSession?.profile?.full_name || email.split('@')[0],
+      device_id: (typeof window.getOrCreateDeviceId === 'function' ? window.getOrCreateDeviceId() : '').slice(-8),
+      action: actionType,
+      section: details.section || '',
+      title: details.title || '',
+      subject: details.subject || '',
+      owner_name: details.owner_name || '',
+      term: Number(details.term || (typeof currentTerm !== 'undefined' ? currentTerm : 1) || 1),
+      extra: details.extra || '',
+      created_at: new Date().toISOString()
+    };
+    _pendingTrafficQueue.push(ev);
+
+    clearTimeout(_trafficFlushTimer);
+    _trafficFlushTimer = setTimeout(async () => {
+      if (!_pendingTrafficQueue.length) return;
+      const batch = _pendingTrafficQueue.splice(0, _pendingTrafficQueue.length);
+      try {
+        const existing = await window.fetchStudentTrafficLogs();
+        const combined = [...batch.reverse(), ...existing].slice(0, 1500);
+        const headers = {
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${SUPABASE_KEY}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=representation'
+        };
+        const patchRes = await fetch(`${SUPABASE_URL}/rest/v1/resources?type=eq.student_traffic_logs&grade=eq.sys`, {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify({ url: JSON.stringify(combined) })
+        });
+        const patched = patchRes.ok ? await patchRes.json().catch(() => []) : [];
+        if (!Array.isArray(patched) || patched.length === 0) {
+          await fetch(`${SUPABASE_URL}/rest/v1/resources`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              grade: 'sys', term: 1, type: 'student_traffic_logs',
+              subject: 'sys', title: '__folder__', url: JSON.stringify(combined), file_type: 'link'
+            })
+          });
+        }
+      } catch (e) {}
+    }, 450);
+  };
+
+  let _lastGuestPingTs = 0;
+  window.recordGuestDeviceVisit = async function (force = false) {
+    if (window.IS_STANDALONE_SUPER_ADMIN) return;
+    if (window.authSession?.user?.id) return; // مسجل دخول بالفعل
+    const now = Date.now();
+    if (!force && (now - _lastGuestPingTs < 25000)) return;
+    _lastGuestPingTs = now;
+
+    try {
+      const devId = typeof window.getOrCreateDeviceId === 'function' ? window.getOrCreateDeviceId() : '';
+      if (!devId) return;
+      const ua = navigator.userAgent || '';
+      let os = 'غير معروف';
+      if (/Windows/i.test(ua)) os = 'Windows';
+      else if (/Android/i.test(ua)) os = 'Android';
+      else if (/iPhone|iPad|iPod/i.test(ua)) os = 'iOS';
+      else if (/Mac OS/i.test(ua)) os = 'Mac';
+      else if (/Linux/i.test(ua)) os = 'Linux';
+
+      let browser = 'متصفح';
+      if (/Edg\//i.test(ua)) browser = 'Edge';
+      else if (/Chrome\//i.test(ua)) browser = 'Chrome';
+      else if (/Firefox\//i.test(ua)) browser = 'Firefox';
+      else if (/Safari\//i.test(ua) && !/Chrome\//i.test(ua)) browser = 'Safari';
+
+      const map = await window.fetchGuestDevicesLog();
+      const prev = map[devId] || {};
+      map[devId] = {
+        device_id: devId,
+        os,
+        browser,
+        first_seen: prev.first_seen || new Date(now).toISOString(),
+        last_seen: new Date(now).toISOString(),
+        visits_count: Number(prev.visits_count || 0) + (force ? 1 : 0) || 1
+      };
+
+      const headers = {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=representation'
+      };
+      const patchRes = await fetch(`${SUPABASE_URL}/rest/v1/resources?type=eq.guest_devices_log&grade=eq.sys`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ url: JSON.stringify(map) })
+      });
+      const patched = patchRes.ok ? await patchRes.json().catch(() => []) : [];
+      if (!Array.isArray(patched) || patched.length === 0) {
+        await fetch(`${SUPABASE_URL}/rest/v1/resources`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            grade: 'sys', term: 1, type: 'guest_devices_log',
+            subject: 'sys', title: '__folder__', url: JSON.stringify(map), file_type: 'link'
+          })
+        });
+      }
+    } catch (e) {}
+  };
+
+  window._analyticsStateCache = null;
+
+  window.filterAnalyticsStudentDropdown = function (query) {
+    const sel = document.getElementById('analytics-student-select');
+    if (!sel || !window._analyticsStateCache) return;
+    const q = (query || '').trim().toLowerCase();
+    const accounts = window._analyticsStateCache.accounts || [];
+    const currentVal = sel.value;
+    const filtered = accounts.filter(u =>
+      !q ||
+      (u.email || '').toLowerCase().includes(q) ||
+      (u.full_name || '').toLowerCase().includes(q)
+    );
+    sel.innerHTML = `<option value="">-- اختر حساب الطالب لعرض تحركاته وإحصائياته (${filtered.length}) --</option>` +
+      filtered.map(u => `<option value="${(u.email || '').toLowerCase()}" ${currentVal === (u.email || '').toLowerCase() ? 'selected' : ''}>${u.full_name || u.email} (${u.email})</option>`).join('');
+  };
+
+  window.toggleGuestDevicesDrawer = function () {
+    const box = document.getElementById('analytics-guest-devices-drawer');
+    if (box) box.classList.toggle('hidden');
+  };
+
+  window.renderSelectedStudentAnalytics = function (selectedEmail) {
+    const out = document.getElementById('analytics-student-report-container');
+    if (!out || !window._analyticsStateCache) return;
+    const email = (selectedEmail || '').trim().toLowerCase();
+    if (!email) {
+      out.innerHTML = `
+        <div style="text-align:center;padding:1.6rem 1rem;color:var(--text-dim);font-size:0.88rem">
+          <i class="fas fa-user-chart" style="font-size:2rem;opacity:0.4;margin-bottom:0.5rem;display:block;color:var(--teal)"></i>
+          اختر إيميل الطالب من القائمة بالأعلى لعرض جميع امتحاناته، درجاته، الملفات التي حملها، وكل تحركاته على المنصة.
+        </div>`;
+      return;
+    }
+
+    const cache = window._analyticsStateCache;
+    const acc = (cache.accounts || []).find(u => (u.email || '').toLowerCase() === email);
+    const uid = acc?.id || '';
+    const normEmail = window.normalizeEmailStrict ? window.normalizeEmailStrict(email) : email;
+
+    const studentAttempts = (cache.attempts || []).filter(a =>
+      (uid && String(a.student_id) === String(uid)) ||
+      ((a.student_email || '').toLowerCase() === email)
+    );
+
+    const studentTraffic = (cache.trafficLogs || []).filter(ev =>
+      (ev.email && (window.normalizeEmailStrict ? window.normalizeEmailStrict(ev.email) === normEmail : ev.email.toLowerCase() === email)) ||
+      (uid && ev.uid && String(ev.uid) === String(uid))
+    );
+
+    const downloads = studentTraffic.filter(ev => ev.action === 'download_file');
+    const solvedCount = studentAttempts.length;
+    const avgScore = solvedCount ? Math.round(studentAttempts.reduce((s, a) => s + Number(a.score_pct || 0), 0) / solvedCount) : 0;
+    const totalCorrect = studentAttempts.reduce((s, a) => s + Number(a.correct_count || 0), 0);
+    const totalWrong = studentAttempts.reduce((s, a) => s + Number(a.wrong_count || 0), 0);
+
+    const actionLabels = {
+      download_file: '📥 تحميل / فتح ملف',
+      open_section: '📂 دخول قسم',
+      open_owner: '👑 فتح مجلد Owner',
+      start_quiz: '▶️ بدء اختبار',
+      finish_quiz: '✅ تسليم اختبار',
+      login: '🔓 تسجيل دخول',
+      register: '🆕 إنشاء حساب',
+      search: '🔍 بحث'
+    };
+
+    out.innerHTML = `
+      <div style="background:rgba(10,16,36,0.65);border:1px solid rgba(56,189,248,0.28);border-radius:16px;padding:1.1rem;margin-top:0.8rem">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:1rem;padding-bottom:0.8rem;border-bottom:1px solid var(--border)">
+          <div>
+            <h5 style="margin:0;font-size:1.05rem;font-weight:900;color:var(--text)">👤 ${acc?.full_name || email}</h5>
+            <div style="font-size:0.8rem;color:var(--teal);font-family:monospace;margin-top:2px" dir="ltr">${email}</div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;font-size:0.76rem">
+            <span style="padding:4px 10px;border-radius:20px;background:rgba(45,212,191,0.14);color:var(--teal);font-weight:800">${acc?.term ? (Number(acc.term) === 2 ? '🌙 الترم الثاني' : '☀️ الترم الأول') : 'طالب'}</span>
+            ${acc?.bound_device_id ? `<span style="padding:4px 10px;border-radius:20px;background:rgba(56,189,248,0.14);color:var(--accent);font-weight:800" dir="ltr">Device: #${String(acc.bound_device_id).slice(-8)}</span>` : ''}
+          </div>
+        </div>
+
+        <div class="kpi-grid" style="margin-bottom:1rem">
+          <div class="kpi-card" style="padding:0.9rem">
+            <div class="kpi-val" style="font-size:1.5rem;color:var(--amber)">${solvedCount}</div>
+            <div class="kpi-label">الامتحانات المحلولة</div>
+          </div>
+          <div class="kpi-card" style="padding:0.9rem">
+            <div class="kpi-val" style="font-size:1.5rem;color:var(--violet)">${avgScore}%</div>
+            <div class="kpi-label">متوسط الدرجات (${totalCorrect} صح / ${totalWrong} خطأ)</div>
+          </div>
+          <div class="kpi-card" style="padding:0.9rem">
+            <div class="kpi-val" style="font-size:1.5rem;color:#00e676">${downloads.length}</div>
+            <div class="kpi-label">الملفات التي حمّلها</div>
+          </div>
+          <div class="kpi-card" style="padding:0.9rem">
+            <div class="kpi-val" style="font-size:1.5rem;color:var(--accent)">${studentTraffic.length}</div>
+            <div class="kpi-label">إجمالي التحركات (Traffic)</div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1rem">
+          <!-- الامتحانات والدرجات -->
+          <div style="background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:1rem">
+            <h6 style="margin:0 0 0.7rem 0;font-size:0.9rem;font-weight:900;color:var(--amber)"><i class="fas fa-file-alt" style="margin-left:5px"></i> الامتحانات وأسئلة المحاضرات (${studentAttempts.length})</h6>
+            <div style="max-height:240px;overflow-y:auto">
+              ${studentAttempts.length === 0
+                ? `<p style="font-size:0.8rem;color:var(--text-dim);margin:0">لم يحل أي اختبار بعد.</p>`
+                : studentAttempts.map(a => `
+                  <div style="padding:8px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:0.8rem">
+                    <div>
+                      <div style="font-weight:800;color:var(--text)">${a.quiz_title || `اختبار #${a.quiz_id}`}</div>
+                      <div style="font-size:0.72rem;color:var(--text-dim)">${new Date(a.started_at).toLocaleString('ar-EG')} • ✅ ${a.correct_count || 0} / ❌ ${a.wrong_count || 0}</div>
+                    </div>
+                    <span style="padding:3px 10px;border-radius:14px;font-weight:900;background:${Number(a.score_pct || 0) >= 50 ? 'rgba(0,230,118,0.16)' : 'rgba(248,113,113,0.16)'};color:${Number(a.score_pct || 0) >= 50 ? '#00e676' : '#f87171'}">${a.score_pct || 0}%</span>
+                  </div>`).join('')}
+            </div>
+          </div>
+
+          <!-- الملفات المحملة -->
+          <div style="background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:1rem">
+            <h6 style="margin:0 0 0.7rem 0;font-size:0.9rem;font-weight:900;color:#00e676"><i class="fas fa-download" style="margin-left:5px"></i> الملفات والمحاضرات التي حمّلها (${downloads.length})</h6>
+            <div style="max-height:240px;overflow-y:auto">
+              ${downloads.length === 0
+                ? `<p style="font-size:0.8rem;color:var(--text-dim);margin:0">لم يقم بتحميل أو فتح أي ملفات مسجلة بعد.</p>`
+                : downloads.map(d => `
+                  <div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:0.8rem">
+                    <div style="font-weight:800;color:var(--text)">${d.title || 'ملف'}</div>
+                    <div style="font-size:0.72rem;color:var(--teal);margin-top:2px">
+                      القسم: <b>${d.section || 'عام'}</b> ${d.subject ? `• المادة: <b>${d.subject}</b>` : ''} ${d.owner_name ? `• Owner: <b>${d.owner_name}</b>` : ''}
+                    </div>
+                    <div style="font-size:0.7rem;color:var(--text-dim);margin-top:2px">${new Date(d.created_at).toLocaleString('ar-EG')}</div>
+                  </div>`).join('')}
+            </div>
+          </div>
+        </div>
+
+        <!-- خط الزمن لكل تحركات الطالب -->
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:1rem;margin-top:1rem">
+          <h6 style="margin:0 0 0.7rem 0;font-size:0.9rem;font-weight:900;color:var(--accent)"><i class="fas fa-route" style="margin-left:5px"></i> سجل التحركات الكامل للطالب (Traffic Timeline)</h6>
+          <div style="max-height:260px;overflow-y:auto">
+            ${studentTraffic.length === 0
+              ? `<p style="font-size:0.8rem;color:var(--text-dim);margin:0">لا توجد تحركات مسجلة لهذا الطالب حتى الآن.</p>`
+              : studentTraffic.map(ev => `
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);font-size:0.79rem;gap:10px;flex-wrap:wrap">
+                  <div>
+                    <span style="font-weight:800;color:var(--teal)">${actionLabels[ev.action] || ev.action}</span>
+                    ${ev.section ? `<span style="color:var(--amber);font-weight:700"> [${ev.section}]</span>` : ''}
+                    ${ev.title ? ` — <b>${ev.title}</b>` : ''}
+                    ${ev.subject ? ` <span style="color:var(--text-dim)">(${ev.subject})</span>` : ''}
+                    ${ev.extra ? ` <span style="color:var(--accent)">• ${ev.extra}</span>` : ''}
+                  </div>
+                  <span style="color:var(--text-dim);font-size:0.72rem;white-space:nowrap">${new Date(ev.created_at).toLocaleString('ar-EG')}</span>
+                </div>`).join('')}
+          </div>
+        </div>
+      </div>`;
+  };
+
   window.loadSuperAdminAnalytics = async function () {
     const container = document.getElementById('admin-section-analytics');
     if (!container) return;
 
     const filterTerm = document.getElementById('analytics-filter-term')?.value || 'all';
     const filterDays = parseInt(document.getElementById('analytics-filter-days')?.value) || 0;
+    const prevSelectedEmail = document.getElementById('analytics-student-select')?.value || '';
 
     try {
-      const [pRes, aRes, qRes, rRes, vRes, overrides] = await Promise.all([
-        api('profiles?select=id,role,grade,term,created_at'),
+      const [pRes, aRes, qRes, rRes, vRes, overrides, trafficLogsRaw, guestDevicesRaw] = await Promise.all([
+        api('profiles?select=id,email,full_name,role,grade,term,created_at'),
         api('quiz_attempts?select=*&order=started_at.desc'),
         api('quizzes?select=id,title,grade,term,section,subject'),
         api('resources?select=id,type,subject,grade,term,title'),
         api('active_visitors?select=id,last_seen'),
-        window.fetchSystemUserOverrides({ skipApplyLock: true })
+        window.fetchSystemUserOverrides({ skipApplyLock: true }),
+        window.fetchStudentTrafficLogs(),
+        window.fetchGuestDevicesLog()
       ]);
 
       const ga4Id = overrides?.__ga4_config__?.measurement_id || window._currentGA4MeasurementId || '';
@@ -14388,9 +14765,44 @@ ESSAY
       const resourcesAll = (rRes.ok ? await rRes.json() : []).filter(r => r.title !== '__folder__' && r.grade !== 'sys');
       const visitors = (vRes.ok ? await vRes.json() : []).filter(v => !resetTs || new Date(v.last_seen || 0).getTime() >= resetTs);
 
+      const trafficLogs = (trafficLogsRaw || []).filter(ev => !resetTs || new Date(ev.created_at || 0).getTime() >= resetTs);
+
+      // بناء قائمة جميع الحسابات المسجلة (من profiles + overrides) للبحث واختيار الطالب
+      const accMap = new Map();
+      profiles.forEach(p => {
+        if (!p || !p.email) return;
+        const em = p.email.toLowerCase();
+        const ov = overrides[em] || overrides[p.id] || {};
+        if (ov.deleted) return;
+        accMap.set(em, { ...p, ...ov, email: em });
+      });
+      Object.values(overrides || {}).forEach(ov => {
+        if (ov && ov.email && !ov.deleted) {
+          const em = ov.email.toLowerCase();
+          if (!accMap.has(em)) accMap.set(em, { ...ov, email: em });
+        }
+      });
+      const allAccounts = Array.from(accMap.values()).sort((a, b) => (a.full_name || a.email).localeCompare(b.full_name || b.email, 'ar'));
+
+      // حساب الأجهزة التي دخلت بدون تسجيل أكونت
+      const boundDevices = overrides?.__device_bindings__ || {};
+      const guestDevicesList = Object.values(guestDevicesRaw || {}).filter(d => {
+        if (!d || !d.device_id) return false;
+        if (boundDevices[d.device_id]) return false;
+        if (resetTs && new Date(d.last_seen || 0).getTime() < resetTs) return false;
+        return true;
+      }).sort((a, b) => new Date(b.last_seen || 0) - new Date(a.last_seen || 0));
+
       const mergedAttemptsMap = new Map();
       [...dbAttempts, ...localAttempts].forEach(a => mergedAttemptsMap.set(String(a.id), a));
       let attempts = Array.from(mergedAttemptsMap.values());
+
+      window._analyticsStateCache = {
+        accounts: allAccounts,
+        attempts,
+        trafficLogs,
+        guestDevicesList
+      };
 
       if (filterTerm !== 'all') {
         attempts = attempts.filter(a => Number(a.term) === Number(filterTerm));
@@ -14496,6 +14908,10 @@ ESSAY
             <div class="kpi-val" style="color:var(--accent)">${activeUsers}</div>
             <div class="kpi-label">المستخدمون النشطون</div>
           </div>
+          <div class="kpi-card" style="cursor:pointer;border:1px solid rgba(251,191,36,0.3)" onclick="toggleGuestDevicesDrawer()" title="اضغط لعرض تفاصيل الأجهزة التي دخلت بدون تسجيل">
+            <div class="kpi-val" style="color:var(--amber)">${guestDevicesList.length}</div>
+            <div class="kpi-label">أجهزة دخلت بدون تسجيل حساب <span style="font-size:0.68rem;color:var(--teal)">(اضغط للتفاصيل)</span></div>
+          </div>
           <div class="kpi-card">
             <div class="kpi-val" style="color:var(--amber)">${solvedCount}</div>
             <div class="kpi-label">الاختبارات التي تم حلها</div>
@@ -14508,6 +14924,55 @@ ESSAY
             <div class="kpi-val" style="color:var(--teal)">${correctRatio}%</div>
             <div class="kpi-label">نسبة الإجابات الصحيحة (${totalCorrect} صح / ${totalWrong} خطأ)</div>
           </div>
+        </div>
+
+        <!-- تفاصيل الأجهزة التي دخلت بدون تسجيل حساب -->
+        <div id="analytics-guest-devices-drawer" class="glass-card hidden" style="padding:1.2rem;margin-bottom:1.2rem;border:1px solid rgba(251,191,36,0.35)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.8rem">
+            <h4 style="margin:0;font-size:0.95rem;font-weight:900;color:var(--amber)"><i class="fas fa-mobile-alt" style="margin-left:6px"></i> الأجهزة التي دخلت المنصة بدون تسجيل حساب (${guestDevicesList.length})</h4>
+            <button type="button" class="btn btn-ghost" style="padding:4px 10px;font-size:0.75rem" onclick="toggleGuestDevicesDrawer()">إغلاق</button>
+          </div>
+          ${guestDevicesList.length === 0
+            ? `<p style="font-size:0.82rem;color:var(--text-dim);margin:0">لا توجد أجهزة زائرة غير مسجلة حالياً.</p>`
+            : `<div style="max-height:220px;overflow-y:auto">
+                ${guestDevicesList.map(d => `
+                  <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:0.8rem;gap:10px;flex-wrap:wrap">
+                    <div>
+                      <strong style="color:var(--text)">${d.os || 'جهاز'} • ${d.browser || 'متصفح'}</strong>
+                      <span style="color:var(--accent);font-family:monospace;font-size:0.74rem;margin-right:8px" dir="ltr">#${String(d.device_id).slice(-8)}</span>
+                      <span style="color:var(--teal);font-size:0.74rem;margin-right:6px">(${d.visits_count || 1} زيارة)</span>
+                    </div>
+                    <span style="color:var(--text-dim);font-size:0.72rem">آخر ظهور: ${new Date(d.last_seen).toLocaleString('ar-EG')}</span>
+                  </div>`).join('')}
+              </div>`}
+        </div>
+
+        <!-- إحصائيات وتحركات كل طالب باختيار الإيميل (Student Traffic Inspector) -->
+        <div class="glass-card" style="padding:1.4rem;margin-bottom:1.2rem;border:1.5px solid rgba(45,212,191,0.28)">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:0.9rem">
+            <div>
+              <h4 style="font-size:1.05rem;font-weight:900;margin:0;color:var(--teal)"><i class="fas fa-user-secret" style="margin-left:6px"></i> إحصائيات وتحركات كل طالب (Student Traffic)</h4>
+              <p style="font-size:0.8rem;color:var(--text-dim);margin:2px 0 0 0">اختر إيميل أي طالب مسجل في المنصة لعرض امتحاناته، درجاته، الملفات التي حمّلها ومن أي قسم، وكل تحركاته لحظياً</p>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 2fr;gap:8px;align-items:center">
+            <input
+              type="text"
+              id="analytics-student-search"
+              placeholder="🔍 ابحث بالاسم أو الإيميل..."
+              oninput="filterAnalyticsStudentDropdown(this.value)"
+              style="padding:9px 12px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-family:'Cairo',sans-serif;font-size:0.85rem"
+            >
+            <select
+              id="analytics-student-select"
+              onchange="renderSelectedStudentAnalytics(this.value)"
+              style="padding:9px 12px;border-radius:10px;border:1px solid rgba(45,212,191,0.35);background:var(--surface2);color:var(--text);font-family:'Cairo',sans-serif;font-size:0.86rem;font-weight:800"
+            >
+              <option value="">-- اختر حساب الطالب لعرض تحركاته وإحصائياته (${allAccounts.length}) --</option>
+              ${allAccounts.map(u => `<option value="${u.email}" ${prevSelectedEmail === u.email ? 'selected' : ''}>${u.full_name || u.email} (${u.email})</option>`).join('')}
+            </select>
+          </div>
+          <div id="analytics-student-report-container"></div>
         </div>
 
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1.2rem">
@@ -14535,6 +15000,7 @@ ESSAY
                 </div>`).join('')}
           </div>
         </div>`;
+      window.renderSelectedStudentAnalytics(prevSelectedEmail);
     } catch (e) {
       container.innerHTML = `<div class="empty"><p>تعذر تحميل التحليلات</p></div>`;
     }
@@ -16389,7 +16855,7 @@ ESSAY
     };
   }
 
-  // اعتراض أي محاولة لتحميل ملف أو محاضرة أو ملخص (سواء من الأقسام أو من نتائج البحث) إذا لم يكن مسجلاً بحسابه
+  // اعتراض أي محاولة لتحميل ملف أو محاضرة أو ملخص (سواء من الأقسام أو من نتائج البحث) إذا لم يكن مسجلاً بحسابه + تسجيل التحميل في Traffic
   document.addEventListener('click', (e) => {
     if (window.IS_STANDALONE_SUPER_ADMIN) return;
     const link = e.target.closest('.resource-card a[href], a.resource-card[href], #lectures-list a[href], #lectures-subjects-list a[href], #summaries-list a[href], #global-search-results a[href]');
@@ -16397,9 +16863,104 @@ ESSAY
       if (!window.requireDatabaseAccount('🔒 لا يمكن تحميل أو فتح أي محتوى إلا بعد تسجيل الدخول بحسابك المسجل في المنصة')) {
         e.preventDefault();
         e.stopPropagation();
+        return;
       }
+      try {
+        const card = link.closest('.resource-card') || link;
+        const fileTitle = card.querySelector('h4')?.textContent?.trim() || link.textContent?.trim() || 'ملف';
+        const subTxt = card.querySelector('p')?.textContent?.trim() || '';
+        const isLec = Boolean(link.closest('#lectures-list, #lectures-subjects-list')) || (typeof currentSection !== 'undefined' && currentSection === 'lectures');
+        const isSum = Boolean(link.closest('#summaries-list')) || (typeof currentSection !== 'undefined' && currentSection === 'summaries');
+        const secLabel = isLec ? 'المحاضرات' : (isSum ? 'الملخصات' : 'بحث شامل');
+        const ownerName = isLec ? (typeof currentPublicLectureOwner !== 'undefined' && currentPublicLectureOwner?.name ? currentPublicLectureOwner.name : '')
+          : (isSum ? (typeof currentPublicOwner !== 'undefined' && currentPublicOwner?.name ? currentPublicOwner.name : '') : '');
+        if (typeof window.trackStudentTrafficEvent === 'function') {
+          window.trackStudentTrafficEvent('download_file', {
+            section: secLabel,
+            title: fileTitle,
+            subject: subTxt,
+            owner_name: ownerName
+          });
+        }
+      } catch (err) {}
     }
   }, true);
+
+  // تسجيل فتح الأقسام وبدء الاختبارات وزيارات الأجهزة غير المسجلة في Traffic
+  try {
+    const _origOpenSecTraffic = window.openSection;
+    if (typeof _origOpenSecTraffic === 'function') {
+      window.openSection = function (section) {
+        const res = _origOpenSecTraffic.apply(this, arguments);
+        const secMap = {
+          exams: 'الامتحانات',
+          lectures: 'المحاضرات',
+          'lecture-quizzes': 'أسئلة المحاضرات',
+          summaries: 'الملخصات'
+        };
+        if (!window.IS_STANDALONE_SUPER_ADMIN && typeof window.trackStudentTrafficEvent === 'function') {
+          window.trackStudentTrafficEvent('open_section', {
+            section: secMap[section] || section,
+            title: secMap[section] || section
+          });
+        }
+        return res;
+      };
+    }
+
+    const _origStartQuizTraffic = window.startQuiz;
+    if (typeof _origStartQuizTraffic === 'function') {
+      window.startQuiz = async function (id) {
+        const res = await _origStartQuizTraffic.apply(this, arguments);
+        if (!window.IS_STANDALONE_SUPER_ADMIN && typeof currentQuiz !== 'undefined' && currentQuiz && typeof window.trackStudentTrafficEvent === 'function') {
+          window.trackStudentTrafficEvent('start_quiz', {
+            section: currentQuiz.section === 'lecture-quizzes' ? 'أسئلة المحاضرات' : 'الامتحانات',
+            title: currentQuiz.title
+          });
+        }
+        return res;
+      };
+    }
+
+    const _origOpenPubOwner = window.openPublicOwner;
+    if (typeof _origOpenPubOwner === 'function') {
+      window.openPublicOwner = function (id, name) {
+        if (!window.IS_STANDALONE_SUPER_ADMIN && typeof window.trackStudentTrafficEvent === 'function') {
+          window.trackStudentTrafficEvent('open_owner', {
+            section: 'الملخصات',
+            title: name || `Owner #${id}`,
+            owner_name: name || ''
+          });
+        }
+        return _origOpenPubOwner.apply(this, arguments);
+      };
+    }
+
+    const _origOpenPubLecOwner = window.openPublicLectureOwner;
+    if (typeof _origOpenPubLecOwner === 'function') {
+      window.openPublicLectureOwner = function (id, name) {
+        if (!window.IS_STANDALONE_SUPER_ADMIN && typeof window.trackStudentTrafficEvent === 'function') {
+          window.trackStudentTrafficEvent('open_owner', {
+            section: 'المحاضرات',
+            title: name || `Owner #${id}`,
+            owner_name: name || ''
+          });
+        }
+        return _origOpenPubLecOwner.apply(this, arguments);
+      };
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      if (!window.IS_STANDALONE_SUPER_ADMIN && typeof window.recordGuestDeviceVisit === 'function') {
+        setTimeout(() => window.recordGuestDeviceVisit(true), 1200);
+        setInterval(() => {
+          if (!document.hidden && !window.authSession?.user?.id) {
+            window.recordGuestDeviceVisit(false);
+          }
+        }, 30000);
+      }
+    });
+  } catch (e) {}
 
 })();
 
