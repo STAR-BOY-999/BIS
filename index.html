@@ -1,18 +1,24 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-  <!-- Google Tag Manager (GTM-WQSC9WGG) + Dynamic GA4 -->
+  <!-- Google Analytics 4 (G-E6JNTDYEB6) + Google Tag Manager (GTM-WQSC9WGG) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-E6JNTDYEB6"></script>
   <script>
     window.dataLayer = window.dataLayer || [];
     function gtag(){dataLayer.push(arguments);}
     gtag('js', new Date());
+    gtag('config', 'G-E6JNTDYEB6', {
+      page_title: document.title || 'كلية نظم ومعلومات (BIS)',
+      page_location: window.location.protocol === 'file:' ? 'https://star-boy-999.github.io/BIS/' : window.location.href,
+      send_page_view: true
+    });
   </script>
   <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
   new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
   j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
   'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
   })(window,document,'script','dataLayer','GTM-WQSC9WGG');</script>
-  <!-- End Google Tag Manager -->
+  <!-- End Google Analytics + GTM -->
 
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -14265,42 +14271,46 @@ ESSAY
     if (typeof window.gtag !== 'function') {
       window.gtag = function () { window.dataLayer.push(arguments); };
     }
-    window.gtag('js', new Date());
+
+    const isFileProto = window.location.protocol === 'file:';
+    const safePageLoc = isFileProto ? 'https://star-boy-999.github.io/BIS/' : window.location.href;
+    const safeClientId = (typeof window.getOrCreateDeviceId === 'function' ? window.getOrCreateDeviceId() : 'bis_guest').replace(/[^a-zA-Z0-9._-]/g, '');
+    const gaCfg = {
+      page_title: document.title || 'كلية نظم ومعلومات (BIS)',
+      page_location: safePageLoc,
+      page_path: isFileProto ? '/' : (window.location.pathname || '/'),
+      send_page_view: true
+    };
+    if (isFileProto) {
+      gaCfg.cookie_domain = 'none';
+      gaCfg.client_id = safeClientId;
+    }
 
     if (cleanId.startsWith('GTM-')) {
-      // Google Tag Manager loader
       (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
       new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
       j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
       'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
       })(window,document,'script','dataLayer',cleanId);
     } else {
-      // Direct GA4 measurement ID (G-XXXXXXXXXX)
-      const existingScript = document.getElementById('bis-ga4-gtag-script');
-      if (existingScript) existingScript.remove();
-      const s = document.createElement('script');
-      s.id = 'bis-ga4-gtag-script';
-      s.async = true;
-      s.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(cleanId)}`;
-      s.onload = function () {
-        try {
-          window.gtag('config', cleanId, {
-            page_title: document.title || 'كلية نظم ومعلومات (BIS)',
-            page_location: window.location.href,
-            page_path: window.location.pathname || '/',
-            send_page_view: true
-          });
-        } catch (e) {}
-      };
-      document.head.appendChild(s);
+      window.gtag('js', new Date());
+      window.gtag('config', cleanId, gaCfg);
 
-      // Queue config immediately as well so gtag.js processes it as soon as it executes
-      window.gtag('config', cleanId, {
-        page_title: document.title || 'كلية نظم ومعلومات (BIS)',
-        page_location: window.location.href,
-        page_path: window.location.pathname || '/',
-        send_page_view: true
-      });
+      const alreadyInHead = Boolean(document.querySelector(`script[src*="googletagmanager.com/gtag/js?id=${cleanId}"]`));
+      if (!alreadyInHead) {
+        const existingScript = document.getElementById('bis-ga4-gtag-script');
+        if (existingScript) existingScript.remove();
+        const s = document.createElement('script');
+        s.id = 'bis-ga4-gtag-script';
+        s.async = true;
+        s.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(cleanId)}`;
+        s.onload = function () {
+          try {
+            window.gtag('config', cleanId, gaCfg);
+          } catch (e) {}
+        };
+        document.head.appendChild(s);
+      }
     }
     return true;
   };
