@@ -14864,9 +14864,34 @@ ESSAY
   window._analyticsStateCache = null;
   window._analyticsTrafficOnlyFilter = false;
 
+  window.getStudentTrafficSeenMap = function () {
+    try {
+      return JSON.parse(localStorage.getItem('bis_seen_student_traffic_ts_v1') || '{}');
+    } catch {
+      return {};
+    }
+  };
+
+  window.markStudentTrafficSeen = function (email, latestTs = 0) {
+    const clean = (email || '').trim().toLowerCase();
+    if (!clean) return;
+    const map = window.getStudentTrafficSeenMap();
+    map[clean] = Math.max(Number(map[clean] || 0), Number(latestTs || 0), Date.now());
+    try { localStorage.setItem('bis_seen_student_traffic_ts_v1', JSON.stringify(map)); } catch (e) {}
+  };
+
+  window.updateLiveTrafficAccountsBadge = function () {
+    const liveBadgeEl = document.getElementById('picker-live-traffic-badge');
+    if (!liveBadgeEl || !window._analyticsStateCache) return;
+    const accounts = window._analyticsStateCache.accounts || [];
+    const unreadAccCount = accounts.filter(u => window.getStudentTrafficCountSummary(u).unread > 0).length;
+    liveBadgeEl.style.display = unreadAccCount > 0 ? 'inline-flex' : 'none';
+    liveBadgeEl.innerHTML = `<span>❗</span><span>${unreadAccCount} ${unreadAccCount === 1 ? 'حساب عليه ترافيك جديد' : 'حسابات عليها ترافيك جديد'}</span>`;
+  };
+
   window.getStudentTrafficCountSummary = function (acc) {
     const cache = window._analyticsStateCache;
-    if (!cache || !acc) return { total: 0, attempts: 0, traffic: 0 };
+    if (!cache || !acc) return { total: 0, attempts: 0, traffic: 0, unread: 0, latestTs: 0 };
     const email = (acc.email || '').toLowerCase();
     const uid = acc.id || '';
     const normEmail = window.normalizeEmailStrict ? window.normalizeEmailStrict(email) : email;
@@ -14874,23 +14899,34 @@ ESSAY
       Number(cache.allStudentsResetTs || 0),
       Number((cache.perStudentResetMap || {})[email] || 0)
     );
+    const seenMap = window.getStudentTrafficSeenMap();
+    const seenTs = Number(seenMap[email] || 0);
 
-    const attCount = (cache.allStudentAttempts || []).filter(a => {
+    let latestTs = 0;
+    let unread = 0;
+
+    const matchingAtts = (cache.allStudentAttempts || []).filter(a => {
       const matches = (uid && String(a.student_id) === String(uid)) || ((a.student_email || '').toLowerCase() === email);
       if (!matches) return false;
-      if (studentResetCutoff && new Date(a.started_at || 0).getTime() < studentResetCutoff) return false;
+      const ts = new Date(a.completed_at || a.started_at || 0).getTime() || 0;
+      if (studentResetCutoff && ts < studentResetCutoff) return false;
+      if (ts > latestTs) latestTs = ts;
+      if (ts > seenTs) unread++;
       return true;
-    }).length;
+    });
 
-    const trafCount = (cache.trafficLogs || []).filter(ev => {
+    const matchingTraf = (cache.trafficLogs || []).filter(ev => {
       const matches = (ev.email && (window.normalizeEmailStrict ? window.normalizeEmailStrict(ev.email) === normEmail : ev.email.toLowerCase() === email)) ||
         (uid && ev.uid && String(ev.uid) === String(uid));
       if (!matches) return false;
-      if (studentResetCutoff && new Date(ev.created_at || 0).getTime() < studentResetCutoff) return false;
+      const ts = new Date(ev.created_at || 0).getTime() || 0;
+      if (studentResetCutoff && ts < studentResetCutoff) return false;
+      if (ts > latestTs) latestTs = ts;
+      if (ts > seenTs) unread++;
       return true;
-    }).length;
+    });
 
-    return { total: attCount + trafCount, attempts: attCount, traffic: trafCount };
+    return { total: matchingAtts.length + matchingTraf.length, attempts: matchingAtts.length, traffic: matchingTraf.length, unread, latestTs };
   };
 
   window.renderCosmicStudentPickerOptions = function () {
@@ -14911,8 +14947,9 @@ ESSAY
       stats: window.getStudentTrafficCountSummary(u)
     }));
 
-    // ترتيب الحسابات التي عليها ترافيك أولاً مع إبقاء الباقي مرتباً أبجدياً
+    // ترتيب الحسابات التي عليها ترافيك جديد (غير مقروء) أولاً، ثم التي عليها ترافيك سابق، ثم الباقي
     enriched.sort((a, b) => {
+      if ((b.stats.unread > 0) !== (a.stats.unread > 0)) return b.stats.unread > 0 ? 1 : -1;
       if ((b.stats.total > 0) !== (a.stats.total > 0)) return b.stats.total > 0 ? 1 : -1;
       return (a.acc.full_name || a.email).localeCompare(b.acc.full_name || b.email, 'ar');
     });
@@ -14934,6 +14971,7 @@ ESSAY
 
     listEl.innerHTML = filtered.map(({ acc, email, stats }) => {
       const hasTraf = stats.total > 0;
+      const hasUnread = stats.unread > 0;
       const isSelected = currentVal === email;
       const rawName = acc.full_name || email;
       const initials = rawName.trim().charAt(0).toUpperCase();
@@ -14944,20 +14982,22 @@ ESSAY
         return txt.slice(0, idx) + `<mark style="background:rgba(56,189,248,0.28);color:#fff;border-radius:4px;padding:0 2px">${txt.slice(idx, idx + q.length)}</mark>` + txt.slice(idx + q.length);
       };
       return `
-        <div class="cosmic-student-option ${hasTraf ? 'has-traffic' : ''} ${isSelected ? 'selected' : ''}" data-email="${email}" onclick="selectCosmicStudentAccount('${email.replace(/'/g, "\\'")}')">
+        <div class="cosmic-student-option ${hasUnread ? 'has-traffic' : ''} ${isSelected ? 'selected' : ''}" data-email="${email}" onclick="selectCosmicStudentAccount('${email.replace(/'/g, "\\'")}')">
           <div style="display:flex;align-items:center;gap:10px;min-width:0;flex:1">
             <div class="cosmic-student-avatar">${initials}</div>
             <div style="min-width:0;flex:1">
               <div style="font-size:0.86rem;font-weight:800;color:#f8fafc;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
                 <span>${hl(rawName)}</span>
-                ${hasTraf ? `<span class="cosmic-traffic-bang-icon" title="يوجد ترافيك ونشاط مسجل لهذا الحساب">!</span>` : ''}
+                ${hasUnread ? `<span class="cosmic-traffic-bang-icon" title="يوجد ترافيك جديد لهذا الحساب">!</span>` : ''}
               </div>
               <div style="font-size:0.75rem;color:var(--teal);font-family:monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" dir="ltr">${hl(email)}</div>
             </div>
           </div>
-          ${hasTraf
-            ? `<span class="cosmic-traffic-bang-badge" title="اضغط لعرض الترافيك الخاص به"><span>❗</span><span>${stats.total} نشاط</span></span>`
-            : `<span style="font-size:0.72rem;color:var(--text-dim);flex-shrink:0">لا يوجد نشاط</span>`}
+          ${hasUnread
+            ? `<span class="cosmic-traffic-bang-badge" title="اضغط لعرض الترافيك الجديد"><span>❗</span><span>${stats.unread} جديد</span></span>`
+            : (hasTraf
+              ? `<span style="font-size:0.72rem;color:var(--teal);font-weight:700;flex-shrink:0">✓ ${stats.total} نشاط</span>`
+              : `<span style="font-size:0.72rem;color:var(--text-dim);flex-shrink:0">لا يوجد نشاط</span>`)}
         </div>`;
     }).join('');
   };
@@ -14999,16 +15039,17 @@ ESSAY
       const acc = (window._analyticsStateCache.accounts || []).find(u => (u.email || '').toLowerCase() === cleanEmail);
       if (acc) {
         const stats = window.getStudentTrafficCountSummary(acc);
+        window.markStudentTrafficSeen(cleanEmail, stats.latestTs);
         trigLabel.innerHTML = `
           <span style="display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap">
             <span>👤 ${acc.full_name || cleanEmail}</span>
             <span style="color:var(--teal);font-family:monospace;font-size:0.78rem" dir="ltr">(${cleanEmail})</span>
-            ${stats.total > 0 ? `<span class="cosmic-traffic-bang-badge" style="padding:2px 8px;font-size:0.7rem">❗ ${stats.total} نشاط</span>` : ''}
           </span>`;
       }
     }
     if (menu) menu.classList.add('hidden');
     if (trig) trig.classList.remove('open');
+    window.updateLiveTrafficAccountsBadge();
     window.renderSelectedStudentAnalytics(cleanEmail);
   };
 
@@ -15081,6 +15122,13 @@ ESSAY
 
     const cache = window._analyticsStateCache;
     const acc = (cache.accounts || []).find(u => (u.email || '').toLowerCase() === email);
+    if (acc) {
+      const s = window.getStudentTrafficCountSummary(acc);
+      if (s.unread > 0) {
+        window.markStudentTrafficSeen(email, s.latestTs);
+        window.updateLiveTrafficAccountsBadge();
+      }
+    }
     const uid = acc?.id || '';
     const normEmail = window.normalizeEmailStrict ? window.normalizeEmailStrict(email) : email;
     const studentResetCutoff = Math.max(
@@ -15350,12 +15398,7 @@ ESSAY
           guestDrawerEl.innerHTML = buildGuestDevicesInnerHtml(guestDevicesList);
         }
 
-        const liveTrafficAccCount = allAccounts.filter(u => window.getStudentTrafficCountSummary(u).total > 0).length;
-        const liveBadgeEl = document.getElementById('picker-live-traffic-badge');
-        if (liveBadgeEl) {
-          liveBadgeEl.style.display = liveTrafficAccCount > 0 ? 'inline-flex' : 'none';
-          liveBadgeEl.innerHTML = `<span>❗</span><span>${liveTrafficAccCount} ${liveTrafficAccCount === 1 ? 'حساب عليه ترافيك' : 'حسابات عليها ترافيك'}</span>`;
-        }
+        window.updateLiveTrafficAccountsBadge();
 
         const newSig = JSON.stringify({
           e: prevSelectedEmail,
@@ -15536,8 +15579,8 @@ ESSAY
                 </span>
                 <span style="display:inline-flex;align-items:center;gap:8px;flex-shrink:0">
                   ${(() => {
-                    const liveTrafficAccCount = allAccounts.filter(u => window.getStudentTrafficCountSummary(u).total > 0).length;
-                    return `<span id="picker-live-traffic-badge" class="cosmic-traffic-bang-badge" style="display:${liveTrafficAccCount > 0 ? 'inline-flex' : 'none'};padding:3px 10px;font-size:0.74rem"><span>❗</span><span>${liveTrafficAccCount} ${liveTrafficAccCount === 1 ? 'حساب عليه ترافيك' : 'حسابات عليها ترافيك'}</span></span>`;
+                    const unreadAccCount = allAccounts.filter(u => window.getStudentTrafficCountSummary(u).unread > 0).length;
+                    return `<span id="picker-live-traffic-badge" class="cosmic-traffic-bang-badge" style="display:${unreadAccCount > 0 ? 'inline-flex' : 'none'};padding:3px 10px;font-size:0.74rem"><span>❗</span><span>${unreadAccCount} ${unreadAccCount === 1 ? 'حساب عليه ترافيك جديد' : 'حسابات عليها ترافيك جديد'}</span></span>`;
                   })()}
                   <i class="fas fa-chevron-down picker-chevron"></i>
                 </span>
