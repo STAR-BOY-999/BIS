@@ -9532,7 +9532,7 @@ ESSAY
       try {
         await api('notifications?grade=eq.sys_admin', { method: 'DELETE' });
         if (_knownSuperAdminAlertIds) _knownSuperAdminAlertIds.clear();
-        toast('🗑️ تم مسح جميع إشعارات السوبر أدمن');
+        toast('🗑️ تم مسح جميع إشعارات من صفحة المطور');
       } catch (e) {
         await Promise.all(idsToDelete.map(id => api(`notifications?id=eq.${id}`, { method: 'DELETE' }).catch(() => {})));
       }
@@ -10789,7 +10789,7 @@ ESSAY
           errEl.style.color = 'var(--amber)';
           errEl.innerHTML = `⏳ تم تسجيل بيانات حسابك كـ <b>طالب</b> في المنصة، ولكن تم تجاوز الحد المؤقت لإرسال رسائل التأكيد. يمكن للسوبر أدمن الضغط على «تأكيد الحساب» لك فوراً أو يمكنك إعادة المحاولة بعد قليل.`;
         }
-        toast('⏳ تم تسجيل حسابك كطالب — بانتظار تأكيد الإيميل أو تفعيل السوبر أدمن');
+        toast('⏳ تم تسجيل حسابك كطالب — بانتظار تأكيد الإيميل أو التفعيل من المطور');
         return;
       }
 
@@ -10831,7 +10831,7 @@ ESSAY
       if (res.ok) {
         toast('📩 تمت إعادة إرسال رابط تأكيد الحساب إلى بريدك الإلكتروني (تفقد البريد الوارد و Spam)');
       } else {
-        toast('⚠️ تم إرسال الرسالة بالفعل مؤخراً — انتظر دقيقة أو تواصل مع السوبر أدمن لتأكيد الحساب فوراً', 'error');
+        toast('⚠️ تم إرسال الرسالة بالفعل مؤخراً — انتظر دقيقة أو تواصل مع المطور لتأكيد الحساب فوراً', 'error');
       }
     } catch (e) {
       toast('تعذر إعادة إرسال الرابط حالياً', 'error');
@@ -10873,7 +10873,7 @@ ESSAY
         if (errCode === 'over_email_send_rate_limit' || msg.includes('email rate limit exceeded')) {
           if (errEl) {
             errEl.style.color = 'var(--amber)';
-            errEl.innerHTML = `⚠️ <b>وصل سيرفر الإيميلات المجاني في Supabase للحد الأقصى المؤقت (3 إيميلات في الساعة).</b><br>حلول فورية:<br>1️⃣ انتظر حتى تتجدد حصة الساعة أو اربط Gmail SMTP مجاني في Supabase.<br>2️⃣ أو من <b>لوحة السوبر أدمن</b> اضغط زر <b>"🔑 تغيير الباسورد"</b> بجانب الإيميل لتعيين الباسورد الجديد فوراً.`;
+            errEl.innerHTML = `⚠️ <b>وصل سيرفر الإيميلات المجاني في Supabase للحد الأقصى المؤقت (3 إيميلات في الساعة).</b><br>حلول فورية:<br>1️⃣ انتظر حتى تتجدد حصة الساعة أو اربط Gmail SMTP مجاني في Supabase.<br>2️⃣ أو من <b>لوحة المطور</b> اضغط زر <b>"🔑 تغيير الباسورد"</b> بجانب الإيميل لتعيين الباسورد الجديد فوراً.`;
           }
           toast('⚠️ تم استنفاذ حد الإيميلات المجاني في السيرفر لهذه الساعة (3 رسائل/ساعة)', 'error');
           return;
@@ -11112,7 +11112,7 @@ ESSAY
     }
   };
 
-  // قناة المزامنة اللحظية (Real-Time Sync) بين لوحة السوبر أدمن ومنصة الطلاب بدون ريفريش
+  // قناة المزامنة اللحظية (Real-Time Sync) بين لوحة المطور ومنصة الطلاب بدون ريفريش
   let _bisRealtimeChannel = null;
   try {
     if (typeof BroadcastChannel !== 'undefined') {
@@ -11977,7 +11977,7 @@ ESSAY
     if (!document.getElementById('admin-page')?.classList.contains('hidden')) {
       if (typeof showGradeSelection === 'function') showGradeSelection();
     }
-    toast('⛔ ليس لديك صلاحيات إدارية لفتح لوحة التحكم — يجب أن يمنحك السوبر أدمن الصلاحيات أولاً', 'error');
+    toast('⛔ ليس لديك صلاحيات إدارية لفتح لوحة التحكم — يجب أن يمنحك المطور الصلاحيات أولاً', 'error');
   };
 
   // Upgrade submitPwd to use secure RPC verify_admin_key first, then fallback to gradePasswords (Super Admin page only)
@@ -12324,7 +12324,7 @@ ESSAY
                 <button type="button" class="btn btn-blue" style="padding:5px 11px;font-size:0.76rem" onclick="startEditStudentNotification('${n.id}')" title="تعديل هذا الإشعار">
                   <i class="fas fa-edit"></i> تعديل
                 </button>
-                <button type="button" class="btn btn-danger" style="padding:5px 11px;font-size:0.76rem" onclick="deleteStudentNotificationPermanently('${n.id}')" title="حذف الإشعار نهائياً من الطلاب والسوبر أدمن">
+                <button type="button" class="btn btn-danger" style="padding:5px 11px;font-size:0.76rem" onclick="deleteStudentNotificationPermanently('${n.id}')" title="حذف الإشعار نهائياً من الطلاب والمطور">
                   <i class="fas fa-trash-alt"></i> حذف نهائياً
                 </button>
               </div>
@@ -12548,7 +12548,7 @@ ESSAY
     const titleStr = item ? item.title : `#${notifId}`;
     const ok = await showConfirm({
       title: 'حذف الإشعار نهائياً',
-      msg: `سيتم حذف الإشعار "${titleStr}" نهائياً من صفحة الطلاب ومن السوبر أدمن فوراً. هل أنت متأكد؟`,
+      msg: `سيتم حذف الإشعار "${titleStr}" نهائياً من صفحة الطلاب ومن صقحة المطور فوراً. هل أنت متأكد؟`,
       type: 'danger',
       icon: 'fa-trash-alt',
       okText: 'نعم، احذف نهائياً'
@@ -12566,7 +12566,7 @@ ESSAY
         window.broadcastRealtimeUserSync('student_notif_deleted', titleStr, String(notifId));
       }
       await loadAdminDashboardOverview(true);
-      toast('🗑️ تم حذف الإشعار نهائياً من صفحة الطلاب والسوبر أدمن!');
+      toast('🗑️ تم حذف الإشعار نهائياً من صفحة الطلاب وصفحة الادمن!');
     } catch (e) {
       toast('تعذر حذف الإشعار', 'error');
     }
@@ -12577,7 +12577,7 @@ ESSAY
     if (!count) return;
     const ok = await showConfirm({
       title: 'حذف جميع إشعارات الطلاب نهائياً',
-      msg: `سيتم حذف جميع الإشعارات المرسلة للطلاب (${count} إشعار) نهائياً من صفحة الطلاب ومن السوبر أدمن. هل أنت متأكد؟`,
+      msg: `سيتم حذف جميع الإشعارات المرسلة للطلاب (${count} إشعار) نهائياً من صفحة الطلاب ومن صفحة المطور. هل أنت متأكد؟`,
       type: 'danger',
       icon: 'fa-trash-alt',
       okText: 'نعم، احذف الكل نهائياً'
@@ -12593,7 +12593,7 @@ ESSAY
         window.broadcastRealtimeUserSync('student_notif_deleted', 'all', 'all');
       }
       await loadAdminDashboardOverview(true);
-      toast('🗑️ تم حذف جميع إشعارات الطلاب نهائياً من المنصة والسوبر أدمن!');
+      toast('🗑️ تم حذف جميع إشعارات الطلاب نهائياً من المنصة وصحفة المطور');
     } catch (e) {
       toast('تعذر حذف جميع الإشعارات', 'error');
     }
@@ -17531,7 +17531,7 @@ ESSAY
   const _origShowAddOwnerModal = window.showAddOwnerModal;
   window.showAddOwnerModal = function (...args) {
     if (!window.IS_STANDALONE_SUPER_ADMIN) {
-      toast('⛔ إضافة Owner متاحة فقط من لوحة السوبر أدمن الرئيسية', 'error');
+      toast('⛔ إضافة Owner متاحة فقط من لوحة المطور الرئيسية', 'error');
       return;
     }
     if (!window.checkAdminPermission('owners', 'summaries')) {
@@ -17544,7 +17544,7 @@ ESSAY
   const _origShowAddLectureOwnerModal = window.showAddLectureOwnerModal;
   window.showAddLectureOwnerModal = function (...args) {
     if (!window.IS_STANDALONE_SUPER_ADMIN) {
-      toast('⛔ إضافة Owner متاحة فقط من لوحة السوبر أدمن الرئيسية', 'error');
+      toast('⛔ إضافة Owner متاحة فقط من لوحة المطور الرئيسية', 'error');
       return;
     }
     if (!window.checkAdminPermission('owners', 'lectures')) {
