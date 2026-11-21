@@ -4100,31 +4100,33 @@ nav, footer {
   }
 
   nav {
-    padding: 0 0.65rem !important;
-    height: 60px !important;
-    gap: 6px !important;
+    padding: 0 8px !important;
+    height: 56px !important;
+    gap: 4px !important;
     width: 100% !important;
     max-width: 100% !important;
+    box-sizing: border-box !important;
   }
 
   .nav-brand {
-    font-size: 0.85rem !important;
-    gap: 7px !important;
+    font-size: 0.78rem !important;
+    gap: 5px !important;
     white-space: nowrap !important;
-    flex-shrink: 0 !important;
+    flex-shrink: 1 !important;
+    min-width: 0 !important;
     letter-spacing: 0 !important;
   }
 
   .nav-brand .logo-icon {
-    width: 31px !important;
-    height: 31px !important;
-    border-radius: 9px !important;
-    font-size: 0.84rem !important;
+    width: 28px !important;
+    height: 28px !important;
+    border-radius: 8px !important;
+    font-size: 0.78rem !important;
     flex-shrink: 0 !important;
   }
 
   .nav-actions {
-    gap: 5px !important;
+    gap: 4px !important;
     flex-shrink: 0 !important;
     flex-wrap: nowrap !important;
     align-items: center !important;
@@ -4133,34 +4135,32 @@ nav, footer {
   .nav-icon-btn,
   .btn-about,
   .theme-toggle,
+  .user-nav-pill,
   nav .nav-actions .btn {
-    width: 34px !important;
-    height: 34px !important;
+    width: 30px !important;
+    height: 30px !important;
+    min-width: 30px !important;
     padding: 0 !important;
-    border-radius: 10px !important;
-    font-size: 0.88rem !important;
+    border-radius: 9px !important;
+    font-size: 0.8rem !important;
     display: inline-flex !important;
     align-items: center !important;
     justify-content: center !important;
     flex-shrink: 0 !important;
+    position: relative;
+  }
+
+  .user-nav-pill #nav-student-label,
+  .user-nav-pill .role-tag-badge {
+    display: none !important;
   }
 
   .notif-badge {
     top: -3px !important;
     right: -3px !important;
-    min-width: 16px !important;
-    height: 16px !important;
-    font-size: 0.62rem !important;
-  }
-
-  .user-nav-pill {
-    height: 34px !important;
-    padding: 0 9px !important;
-    border-radius: 10px !important;
-    font-size: 0.74rem !important;
-    gap: 5px !important;
-    white-space: nowrap !important;
-    flex-shrink: 0 !important;
+    min-width: 15px !important;
+    height: 15px !important;
+    font-size: 0.6rem !important;
   }
 
   #main {
@@ -4371,32 +4371,16 @@ nav, footer {
 }
 
 @media (max-width: 460px) {
-  .user-nav-pill {
-    width: 34px !important;
-    height: 34px !important;
-    padding: 0 !important;
-    justify-content: center !important;
-  }
-
-  .user-nav-pill #nav-student-label,
-  .user-nav-pill .role-tag-badge {
-    display: none !important;
-  }
-
   .user-nav-pill.logged-in::after {
     content: '';
     position: absolute;
-    top: 4px;
-    right: 4px;
-    width: 7px;
-    height: 7px;
+    top: 3px;
+    right: 3px;
+    width: 6px;
+    height: 6px;
     border-radius: 50%;
     background: #00e676;
     box-shadow: 0 0 8px #00e676;
-  }
-
-  .user-nav-pill {
-    position: relative;
   }
 }
 
