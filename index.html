@@ -2824,7 +2824,7 @@
   border-bottom: 1px solid rgba(45, 212, 191, 0.22) !important;
 }
 
-/* ─── DEEP-SPACE COSMIC ASTRAL OWNER CARDS (Super Admin & Student Platform) ─── */
+/* ─── HYPER-ASTRAL SOVEREIGN OWNER CARDS v2 (Super Admin & Student Platform) ─── */
 @keyframes cosmicAuroraBeam {
   0%   { background-position: 0% 50%; }
   100% { background-position: 200% 50%; }
@@ -2832,7 +2832,7 @@
 
 @keyframes cosmicNebulaPulse {
   0%   { opacity: 0.55; transform: scale(1) translate(0, 0); }
-  50%  { opacity: 0.9;  transform: scale(1.06) translate(0, -3px); }
+  50%  { opacity: 0.92; transform: scale(1.06) translate(0, -3px); }
   100% { opacity: 0.65; transform: scale(0.98) translate(0, 2px); }
 }
 
@@ -2848,75 +2848,97 @@
 
 @keyframes cosmicStarTwinkle {
   0%, 100% { opacity: 0.25; transform: scale(0.85); }
-  50%      { opacity: 1;    transform: scale(1.35); }
+  50%      { opacity: 1;    transform: scale(1.38); }
 }
 
 @keyframes cosmicHaloWave {
   0%, 100% { transform: scale(1);    opacity: 0.35; }
-  50%      { transform: scale(1.12); opacity: 0.75; }
+  50%      { transform: scale(1.13); opacity: 0.8; }
+}
+
+@keyframes ownerCrownFloat {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50%      { transform: translateY(-2px) scale(1.08); }
+}
+
+@keyframes ownerJewelPulse {
+  0%, 100% { box-shadow: 0 0 10px rgba(56, 189, 248, 0.7), 0 0 20px rgba(45, 212, 191, 0.4); transform: translate(-50%, -50%) rotate(45deg) scale(1); }
+  50%      { box-shadow: 0 0 16px rgba(45, 212, 191, 0.95), 0 0 28px rgba(167, 139, 250, 0.65); transform: translate(-50%, -50%) rotate(45deg) scale(1.22); }
 }
 
 #admin-owners-list,
 #admin-lecture-owners-list {
-  padding-top: 1rem;
+  padding-top: 1.25rem;
 }
 
 .owner-leader-card {
   position: relative;
-  margin-top: 1.7rem !important;
-  margin-bottom: 2.2rem !important;
+  margin-top: 2rem !important;
+  margin-bottom: 2.35rem !important;
   cursor: pointer;
-  transition: transform 0.42s cubic-bezier(0.22, 1, 0.36, 1) !important;
+  perspective: 1100px;
+  transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1), filter 0.45s ease !important;
 }
 
 .owner-leader-card:hover {
-  transform: translateY(-7px) scale(1.008);
+  transform: translateY(-8px) scale(1.01);
 }
 
-/* Deep Space Nebula & Starfield Glass Interior */
+/* Deep Space Multi-Layered Nebula, Micro-Grid & Interactive Spotlight Interior */
 .owner-leader-inner {
   position: relative;
   background:
+    /* Interactive mouse spotlight */
+    radial-gradient(420px circle at var(--mx, 50%) var(--my, 15%), rgba(56, 189, 248, 0.14), rgba(45, 212, 191, 0.06) 42%, transparent 78%),
     /* Subtle internal cosmic starfield dots */
-    radial-gradient(1.5px 1.5px at 12% 32%, rgba(224, 242, 254, 0.75) 50%, transparent 100%),
-    radial-gradient(1px 1px at 22% 68%, rgba(45, 212, 191, 0.7) 50%, transparent 100%),
-    radial-gradient(1.5px 1.5px at 34% 24%, rgba(167, 139, 250, 0.75) 50%, transparent 100%),
-    radial-gradient(1px 1px at 66% 26%, rgba(56, 189, 248, 0.75) 50%, transparent 100%),
-    radial-gradient(1.5px 1.5px at 78% 64%, rgba(224, 242, 254, 0.7) 50%, transparent 100%),
-    radial-gradient(1.2px 1.2px at 89% 35%, rgba(45, 212, 191, 0.75) 50%, transparent 100%),
-    /* Deep Space Nebula clouds matching platform theme */
-    radial-gradient(ellipse 60% 70% at 50% -5%, rgba(56, 189, 248, 0.2) 0%, rgba(167, 139, 250, 0.11) 45%, transparent 80%),
-    radial-gradient(circle at 10% 90%, rgba(45, 212, 191, 0.12) 0%, transparent 50%),
-    radial-gradient(circle at 90% 90%, rgba(167, 139, 250, 0.12) 0%, transparent 50%),
-    linear-gradient(170deg, rgba(6, 8, 24, 0.88) 0%, rgba(4, 5, 16, 0.94) 60%, rgba(2, 3, 10, 0.97) 100%) !important;
-  border: 1px solid rgba(56, 189, 248, 0.24) !important;
-  border-radius: 24px !important;
+    radial-gradient(1.6px 1.6px at 10% 30%, rgba(224, 242, 254, 0.85) 50%, transparent 100%),
+    radial-gradient(1.2px 1.2px at 19% 72%, rgba(45, 212, 191, 0.78) 50%, transparent 100%),
+    radial-gradient(1.6px 1.6px at 31% 22%, rgba(167, 139, 250, 0.82) 50%, transparent 100%),
+    radial-gradient(1.2px 1.2px at 68% 24%, rgba(56, 189, 248, 0.82) 50%, transparent 100%),
+    radial-gradient(1.6px 1.6px at 81% 66%, rgba(251, 191, 36, 0.75) 50%, transparent 100%),
+    radial-gradient(1.3px 1.3px at 91% 34%, rgba(45, 212, 191, 0.82) 50%, transparent 100%),
+    /* Holographic architectural micro-grid */
+    linear-gradient(rgba(56, 189, 248, 0.028) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(56, 189, 248, 0.028) 1px, transparent 1px),
+    /* Deep Space Nebula clouds */
+    radial-gradient(ellipse 64% 76% at 50% -6%, rgba(56, 189, 248, 0.24) 0%, rgba(139, 92, 246, 0.14) 46%, transparent 82%),
+    radial-gradient(circle at 8% 92%, rgba(45, 212, 191, 0.14) 0%, transparent 52%),
+    radial-gradient(circle at 92% 92%, rgba(167, 139, 250, 0.14) 0%, transparent 52%),
+    linear-gradient(170deg, rgba(7, 11, 29, 0.92) 0%, rgba(4, 6, 18, 0.96) 58%, rgba(2, 3, 11, 0.99) 100%) !important;
+  background-size:
+    100% 100%,
+    100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%,
+    26px 26px, 26px 26px,
+    100% 100%, 100% 100%, 100% 100%, 100% 100% !important;
+  border: 1.5px solid rgba(56, 189, 248, 0.28) !important;
+  border-radius: 26px !important;
   overflow: hidden;
-  padding-top: 38px !important;
-  backdrop-filter: blur(22px) saturate(170%) !important;
-  -webkit-backdrop-filter: blur(22px) saturate(170%) !important;
+  padding-top: 44px !important;
+  backdrop-filter: blur(24px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
   box-shadow:
-    0 16px 45px -8px rgba(0, 0, 0, 0.82),
-    0 0 35px rgba(56, 189, 248, 0.08),
-    0 0 60px rgba(45, 212, 191, 0.05),
-    inset 0 1px 0 rgba(125, 211, 252, 0.14) !important;
-  transition: all 0.42s cubic-bezier(0.22, 1, 0.36, 1) !important;
+    0 20px 52px -10px rgba(0, 0, 0, 0.88),
+    0 0 40px rgba(56, 189, 248, 0.1),
+    0 0 70px rgba(45, 212, 191, 0.06),
+    inset 0 1px 0 rgba(186, 230, 253, 0.2),
+    inset 0 -1px 0 rgba(167, 139, 250, 0.18) !important;
+  transition: all 0.44s cubic-bezier(0.22, 1, 0.36, 1) !important;
 }
 
-/* Flowing Cosmic Aurora Laser Beam along Top Edge */
+/* Flowing Cosmic Aurora Laser Beam along Top Edge + Bottom Horizon Reflection */
 .owner-leader-inner::before {
   content: '';
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
-  height: 2px;
-  background: linear-gradient(90deg, transparent 5%, #2dd4bf 25%, #38bdf8 50%, #a78bfa 75%, transparent 95%);
+  height: 2.5px;
+  background: linear-gradient(90deg, transparent 4%, #2dd4bf 22%, #38bdf8 44%, #fbbf24 52%, #a78bfa 78%, transparent 96%);
   background-size: 200% 100%;
-  animation: cosmicAuroraBeam 4s linear infinite;
+  animation: cosmicAuroraBeam 3.8s linear infinite;
   z-index: 3;
   pointer-events: none;
-  box-shadow: 0 0 16px rgba(56, 189, 248, 0.55);
+  box-shadow: 0 0 18px rgba(56, 189, 248, 0.65);
 }
 
 /* Holographic Warp Sweep & Nebula Glow on Hover */
@@ -2924,30 +2946,31 @@
   content: '';
   position: absolute;
   inset: 0;
-  border-radius: 24px;
+  border-radius: 26px;
   background:
-    linear-gradient(115deg, transparent 30%, rgba(56, 189, 248, 0.08) 46%, rgba(167, 139, 250, 0.12) 50%, rgba(45, 212, 191, 0.08) 54%, transparent 70%),
-    radial-gradient(ellipse 65% 60% at 50% 0%, rgba(56, 189, 248, 0.18), rgba(167, 139, 250, 0.1) 50%, transparent 80%);
+    linear-gradient(115deg, transparent 28%, rgba(56, 189, 248, 0.09) 45%, rgba(251, 191, 36, 0.08) 49%, rgba(167, 139, 250, 0.14) 52%, rgba(45, 212, 191, 0.09) 56%, transparent 72%),
+    radial-gradient(ellipse 70% 62% at 50% 0%, rgba(56, 189, 248, 0.22), rgba(167, 139, 250, 0.12) 52%, transparent 82%);
   background-size: 250% 100%, 100% 100%;
   background-position: 180% 0, 0 0;
   opacity: 0;
-  transition: opacity 0.4s ease, background-position 0.75s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: opacity 0.42s ease, background-position 0.8s cubic-bezier(0.22, 1, 0.36, 1);
   pointer-events: none;
 }
 
 .owner-leader-card:hover .owner-leader-inner {
-  border-color: rgba(56, 189, 248, 0.58) !important;
+  border-color: rgba(45, 212, 191, 0.68) !important;
   transform: none !important;
   box-shadow:
-    0 24px 60px -8px rgba(0, 0, 0, 0.9),
-    0 0 45px rgba(56, 189, 248, 0.22),
-    0 0 75px rgba(167, 139, 250, 0.15),
-    inset 0 0 30px rgba(45, 212, 191, 0.07) !important;
+    0 28px 68px -10px rgba(0, 0, 0, 0.94),
+    0 0 52px rgba(56, 189, 248, 0.26),
+    0 0 88px rgba(167, 139, 250, 0.18),
+    inset 0 0 36px rgba(45, 212, 191, 0.09),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28) !important;
 }
 
 .owner-leader-card:hover .owner-leader-inner::after {
   opacity: 1;
-  background-position: -60% 0, 0 0;
+  background-position: -65% 0, 0 0;
 }
 
 /* Cosmic Constellation & Portal Header SVG */
@@ -2956,7 +2979,7 @@
   top: 0;
   left: 0;
   right: 0;
-  height: 66px !important;
+  height: 74px !important;
   z-index: 1;
   pointer-events: none;
 }
@@ -2964,8 +2987,8 @@
 .owner-leader-header svg {
   display: block;
   width: 100% !important;
-  height: 66px !important;
-  filter: drop-shadow(0 4px 16px rgba(56, 189, 248, 0.24));
+  height: 74px !important;
+  filter: drop-shadow(0 6px 18px rgba(56, 189, 248, 0.28));
 }
 
 .owner-leader-header path.owner-hdr-fill-path {
@@ -2989,101 +3012,105 @@
 .owner-leader-header .c-star.s5 { animation-delay: 0.8s; animation-duration: 2.7s; }
 .owner-leader-header .c-star.s6 { animation-delay: 1.9s; animation-duration: 3.5s; }
 
-/* Cosmic Crystal Nebula Ribbon */
+/* Royal Faceted Crown Nebula Ribbon */
 .owner-leader-ribbon {
   position: absolute;
   top: 0;
-  right: 22px !important;
-  width: 30px !important;
-  padding: 7px 0 14px !important;
-  background: linear-gradient(180deg, #2dd4bf 0%, #38bdf8 48%, #8b5cf6 100%) !important;
+  right: 24px !important;
+  width: 34px !important;
+  padding: 9px 0 16px !important;
+  background: linear-gradient(180deg, #fbbf24 0%, #2dd4bf 38%, #0ea5e9 72%, #8b5cf6 100%) !important;
   color: #ffffff !important;
-  font-size: 0.8rem !important;
+  font-size: 0.86rem !important;
   display: flex;
   align-items: center;
   justify-content: center;
-  clip-path: polygon(0 0, 100% 0, 100% 82%, 50% 100%, 0 82%);
-  box-shadow: 0 6px 20px rgba(56, 189, 248, 0.45) !important;
+  clip-path: polygon(0 0, 100% 0, 100% 80%, 50% 100%, 0 80%);
+  box-shadow: 0 8px 24px rgba(56, 189, 248, 0.52), inset 0 1px 0 rgba(255, 255, 255, 0.45) !important;
   z-index: 3;
-  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.35s ease;
+  transition: transform 0.38s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.38s ease;
 }
 
 .owner-leader-ribbon i {
-  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.8));
+  filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.95));
+  animation: ownerCrownFloat 3s ease-in-out infinite;
 }
 
 .owner-leader-card:hover .owner-leader-ribbon {
-  transform: translateY(3px) scale(1.08);
-  box-shadow: 0 8px 26px rgba(45, 212, 191, 0.65) !important;
+  transform: translateY(4px) scale(1.1);
+  box-shadow: 0 10px 30px rgba(45, 212, 191, 0.72) !important;
 }
 
-/* Planetary Avatar with Dual Rotating Orbital Rings */
+/* Planetary Medallion Avatar with Triple Rotating Orbital Rings */
 .owner-leader-photo-wrap {
   position: absolute;
-  top: -39px !important;
+  top: -43px !important;
   left: 50%;
   transform: translateX(-50%);
   z-index: 4;
-  width: 84px !important;
-  height: 84px !important;
+  width: 92px !important;
+  height: 92px !important;
   border-radius: 50%;
-  padding: 3px !important;
-  background: conic-gradient(from 0deg, #2dd4bf, #38bdf8, #a78bfa, #38bdf8, #2dd4bf) !important;
+  padding: 3.5px !important;
+  background: conic-gradient(from 0deg, #2dd4bf, #38bdf8, #a78bfa, #fbbf24, #38bdf8, #2dd4bf) !important;
   box-shadow:
-    0 0 26px rgba(56, 189, 248, 0.42),
-    0 0 0 4px rgba(3, 5, 16, 0.95),
-    0 0 0 5.5px rgba(56, 189, 248, 0.32) !important;
-  transition: transform 0.42s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.42s ease !important;
+    0 0 32px rgba(56, 189, 248, 0.5),
+    0 0 0 4.5px rgba(3, 5, 16, 0.96),
+    0 0 0 6px rgba(56, 189, 248, 0.38) !important;
+  transition: transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.45s ease !important;
 }
 
-/* Outer Rotating Dashed Planetary Orbit Ring + Glowing Satellite Node */
+/* Outer Rotating Dashed Planetary Orbit Ring */
 .owner-leader-photo-wrap::before {
   content: '';
   position: absolute;
-  inset: -9px;
+  inset: -10px;
   border-radius: 50%;
-  border: 1.5px dashed rgba(56, 189, 248, 0.45);
+  border: 1.8px dashed rgba(56, 189, 248, 0.55);
   border-top-color: #2dd4bf;
+  border-right-color: #fbbf24;
   border-bottom-color: #a78bfa;
-  animation: cosmicPlanetOrbit 9s linear infinite;
+  animation: cosmicPlanetOrbit 8.5s linear infinite;
   pointer-events: none;
   transition: border-color 0.35s ease, inset 0.35s ease;
 }
 
-/* Pulsing Nebula Shockwave Halo Ring */
+/* Pulsing Counter-Orbit Nebula Halo Ring */
 .owner-leader-photo-wrap::after {
   content: '';
   position: absolute;
-  inset: -15px;
+  inset: -17px;
   border-radius: 50%;
-  border: 1px solid rgba(167, 139, 250, 0.25);
-  box-shadow: 0 0 18px rgba(56, 189, 248, 0.18);
+  border: 1.2px solid rgba(167, 139, 250, 0.32);
+  border-left-color: rgba(45, 212, 191, 0.65);
+  box-shadow: 0 0 22px rgba(56, 189, 248, 0.22);
   animation: cosmicHaloWave 3.2s ease-in-out infinite;
   pointer-events: none;
 }
 
 .owner-leader-card:hover .owner-leader-photo-wrap {
-  transform: translateX(-50%) translateY(-3px) scale(1.08) !important;
+  transform: translateX(-50%) translateY(-4px) scale(1.09) !important;
   box-shadow:
-    0 0 38px rgba(45, 212, 191, 0.6),
-    0 0 60px rgba(167, 139, 250, 0.4),
-    0 0 0 4px rgba(3, 5, 16, 0.96),
-    0 0 0 6px rgba(45, 212, 191, 0.55) !important;
+    0 0 44px rgba(45, 212, 191, 0.72),
+    0 0 68px rgba(167, 139, 250, 0.48),
+    0 0 0 4.5px rgba(3, 5, 16, 0.98),
+    0 0 0 6.5px rgba(45, 212, 191, 0.68) !important;
 }
 
 .owner-leader-card:hover .owner-leader-photo-wrap::before {
-  inset: -11px;
-  border-color: rgba(45, 212, 191, 0.8);
+  inset: -12px;
+  border-color: rgba(45, 212, 191, 0.88);
   border-top-color: #38bdf8;
+  border-right-color: #fde68a;
   border-bottom-color: #c084fc;
-  animation-duration: 4s;
+  animation-duration: 3.8s;
 }
 
 .owner-leader-photo {
   width: 100%;
   height: 100%;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 25%, #0f172a, #030510) !important;
+  background: radial-gradient(circle at 35% 25%, #111c38, #030510) !important;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3091,6 +3118,7 @@
   border: 3px solid #030510 !important;
   position: relative;
   z-index: 2;
+  box-shadow: inset 0 0 16px rgba(56, 189, 248, 0.25);
 }
 
 .owner-leader-photo img {
@@ -3098,187 +3126,264 @@
   height: 100%;
   object-fit: cover;
   display: block;
-  transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1), filter 0.5s ease;
 }
 
 .owner-leader-card:hover .owner-leader-photo img {
-  transform: scale(1.08);
+  transform: scale(1.1);
+  filter: contrast(1.05) saturate(1.08);
 }
 
 .owner-leader-photo i {
-  font-size: 1.75rem !important;
+  font-size: 1.85rem !important;
   color: #38bdf8 !important;
-  opacity: 0.92 !important;
-  filter: drop-shadow(0 0 12px rgba(56, 189, 248, 0.55));
+  opacity: 0.95 !important;
+  filter: drop-shadow(0 0 14px rgba(56, 189, 248, 0.65));
   transition: transform 0.35s ease, color 0.35s ease;
 }
 
 .owner-leader-card:hover .owner-leader-photo i {
   color: #2dd4bf !important;
-  transform: scale(1.12);
+  transform: scale(1.14);
 }
 
 .owner-leader-photo-edit {
   position: absolute;
   bottom: -2px !important;
   left: -2px !important;
-  width: 26px !important;
-  height: 26px !important;
+  width: 28px !important;
+  height: 28px !important;
   border-radius: 50%;
   background: linear-gradient(135deg, #2dd4bf, #0ea5e9) !important;
   color: #020617 !important;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.7rem !important;
+  font-size: 0.72rem !important;
   border: 2.5px solid #030510 !important;
-  box-shadow: 0 0 12px rgba(45, 212, 191, 0.5);
+  box-shadow: 0 0 14px rgba(45, 212, 191, 0.6);
   cursor: pointer;
   z-index: 6;
   transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease;
 }
 
 .owner-leader-photo-edit:hover {
-  transform: scale(1.2) !important;
-  box-shadow: 0 0 18px rgba(56, 189, 248, 0.9);
+  transform: scale(1.22) !important;
+  box-shadow: 0 0 20px rgba(56, 189, 248, 0.95);
 }
 
-/* Cosmic Typography, Astral Role Badge & Warp CTA Pill */
+/* Executive Typography, Astral Role Badge, Live Stats Chips & Magnetic CTA */
 .owner-leader-content {
   position: relative;
   z-index: 2;
-  padding: 1.85rem 1.5rem 1.35rem !important;
+  padding: 2rem 1.6rem 1.45rem !important;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 6px !important;
+  gap: 8px !important;
   text-align: center;
 }
 
 .owner-leader-content h4 {
   font-family: 'Cairo', sans-serif !important;
-  font-size: 1.36rem !important;
+  font-size: 1.44rem !important;
   font-weight: 900 !important;
-  color: #f0f9ff !important;
-  line-height: 1.3;
+  color: #f8fafc !important;
+  line-height: 1.32;
   letter-spacing: 0.3px;
-  text-shadow: 0 0 20px rgba(56, 189, 248, 0.35), 0 2px 10px rgba(0, 0, 0, 0.8);
+  text-shadow: 0 0 22px rgba(56, 189, 248, 0.42), 0 3px 12px rgba(0, 0, 0, 0.85);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 7px !important;
+  gap: 8px !important;
+  margin: 0 !important;
   transition: text-shadow 0.35s ease, transform 0.35s ease;
 }
 
 .owner-leader-card:hover .owner-leader-content h4 {
-  text-shadow: 0 0 26px rgba(45, 212, 191, 0.65), 0 0 45px rgba(56, 189, 248, 0.4);
+  text-shadow: 0 0 28px rgba(45, 212, 191, 0.75), 0 0 48px rgba(56, 189, 248, 0.48);
+  transform: translateY(-1px);
 }
 
 .owner-leader-verified {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px !important;
-  height: 20px !important;
+  width: 22px !important;
+  height: 22px !important;
   flex-shrink: 0;
-  filter: drop-shadow(0 0 10px rgba(56, 189, 248, 0.8)) !important;
+  filter: drop-shadow(0 0 12px rgba(56, 189, 248, 0.9)) !important;
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.owner-leader-card:hover .owner-leader-verified {
+  transform: scale(1.16) rotate(8deg);
 }
 
 .owner-leader-tag {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 2px 15px;
+  gap: 6px;
+  padding: 3px 16px;
   border-radius: 999px;
-  background: linear-gradient(90deg, rgba(45, 212, 191, 0.14), rgba(56, 189, 248, 0.2), rgba(167, 139, 250, 0.14));
-  border: 1px solid rgba(56, 189, 248, 0.38);
+  background: linear-gradient(90deg, rgba(45, 212, 191, 0.16), rgba(56, 189, 248, 0.22), rgba(167, 139, 250, 0.16));
+  border: 1px solid rgba(56, 189, 248, 0.44);
   font-family: 'Cairo', sans-serif;
-  font-size: 0.66rem !important;
+  font-size: 0.68rem !important;
   font-weight: 900 !important;
-  letter-spacing: 2.4px !important;
-  color: #38bdf8 !important;
+  letter-spacing: 2.2px !important;
+  color: #7dd3fc !important;
   text-transform: uppercase;
-  text-shadow: 0 0 12px rgba(56, 189, 248, 0.55);
-  box-shadow: 0 0 16px rgba(56, 189, 248, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  text-shadow: 0 0 12px rgba(56, 189, 248, 0.6);
+  box-shadow: 0 0 18px rgba(56, 189, 248, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.16);
   transition: all 0.35s ease;
 }
 
-.owner-leader-card:hover .owner-leader-tag {
-  border-color: rgba(45, 212, 191, 0.65);
-  color: #2dd4bf !important;
-  text-shadow: 0 0 14px rgba(45, 212, 191, 0.75);
-  box-shadow: 0 0 20px rgba(45, 212, 191, 0.25);
+.owner-leader-tag::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #2dd4bf;
+  box-shadow: 0 0 8px #2dd4bf;
+  display: inline-block;
 }
 
+.owner-leader-card:hover .owner-leader-tag {
+  border-color: rgba(45, 212, 191, 0.78);
+  color: #5eead4 !important;
+  text-shadow: 0 0 15px rgba(45, 212, 191, 0.85);
+  box-shadow: 0 0 24px rgba(45, 212, 191, 0.28);
+}
+
+/* Live Owner Metadata / Stats Chips Row */
+.owner-leader-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.owner-leader-stat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 11px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid rgba(125, 211, 252, 0.2);
+  color: #cbd5e1;
+  font-size: 0.73rem;
+  font-weight: 800;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  transition: all 0.3s ease;
+}
+
+.owner-leader-stat-chip i {
+  color: #38bdf8;
+  font-size: 0.72rem;
+}
+
+.owner-leader-stat-chip.gold i {
+  color: #fbbf24;
+}
+
+.owner-leader-card:hover .owner-leader-stat-chip {
+  border-color: rgba(45, 212, 191, 0.42);
+  background: rgba(15, 23, 42, 0.9);
+  color: #f0f9ff;
+}
+
+/* Center-Jewel Astral Divider */
 .owner-leader-divider {
   position: relative;
-  width: 58% !important;
-  max-width: 280px;
-  height: 1px;
-  margin: 7px 0 !important;
-  background: linear-gradient(90deg, transparent, rgba(45, 212, 191, 0.45), rgba(56, 189, 248, 0.9), rgba(167, 139, 250, 0.45), transparent) !important;
-  box-shadow: 0 0 10px rgba(56, 189, 248, 0.45);
+  width: 62% !important;
+  max-width: 310px;
+  height: 1.5px;
+  margin: 9px 0 !important;
+  background: linear-gradient(90deg, transparent, rgba(45, 212, 191, 0.5), rgba(56, 189, 248, 0.95), rgba(167, 139, 250, 0.5), transparent) !important;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.55);
 }
 
+.owner-leader-divider::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 7px;
+  height: 7px;
+  background: #38bdf8;
+  border: 1.5px solid #e0f2fe;
+  border-radius: 2px;
+  transform: translate(-50%, -50%) rotate(45deg);
+  animation: ownerJewelPulse 2.6s ease-in-out infinite;
+}
+
+/* Magnetic Holographic Action Pill */
 .owner-leader-pill {
+  position: relative;
+  overflow: hidden;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px !important;
-  background: linear-gradient(135deg, rgba(45, 212, 191, 0.11) 0%, rgba(56, 189, 248, 0.14) 50%, rgba(167, 139, 250, 0.11) 100%) !important;
-  border: 1px solid rgba(56, 189, 248, 0.36) !important;
+  gap: 9px !important;
+  background: linear-gradient(135deg, rgba(45, 212, 191, 0.14) 0%, rgba(56, 189, 248, 0.18) 50%, rgba(139, 92, 246, 0.14) 100%) !important;
+  border: 1.5px solid rgba(56, 189, 248, 0.42) !important;
   border-radius: 999px !important;
-  padding: 7px 22px !important;
-  font-size: 0.79rem !important;
-  font-weight: 800 !important;
-  color: #bae6fd !important;
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45), 0 0 18px rgba(56, 189, 248, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
-  transition: all 0.34s cubic-bezier(0.22, 1, 0.36, 1) !important;
+  padding: 8px 26px !important;
+  font-size: 0.82rem !important;
+  font-weight: 900 !important;
+  color: #e0f2fe !important;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5), 0 0 20px rgba(56, 189, 248, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.18) !important;
+  transition: all 0.36s cubic-bezier(0.22, 1, 0.36, 1) !important;
 }
 
 .owner-leader-pill i {
   color: #2dd4bf !important;
-  font-size: 0.78rem !important;
-  filter: drop-shadow(0 0 6px rgba(45, 212, 191, 0.6));
-  transition: color 0.34s ease, transform 0.34s ease;
+  font-size: 0.82rem !important;
+  filter: drop-shadow(0 0 8px rgba(45, 212, 191, 0.7));
+  transition: color 0.36s ease, transform 0.36s ease;
 }
 
 .owner-leader-card:hover .owner-leader-pill {
-  background: linear-gradient(135deg, #2dd4bf 0%, #0ea5e9 55%, #8b5cf6 100%) !important;
-  border-color: rgba(125, 211, 252, 0.85) !important;
+  background: linear-gradient(135deg, #0d9488 0%, #0284c7 52%, #7c3aed 100%) !important;
+  border-color: rgba(186, 230, 253, 0.92) !important;
   color: #ffffff !important;
-  box-shadow: 0 6px 24px rgba(45, 212, 191, 0.42), 0 0 35px rgba(56, 189, 248, 0.3) !important;
-  transform: translateY(-2px) scale(1.03);
+  box-shadow: 0 10px 28px rgba(45, 212, 191, 0.45), 0 0 40px rgba(56, 189, 248, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.35) !important;
+  transform: translateY(-2px) scale(1.04);
 }
 
 .owner-leader-card:hover .owner-leader-pill i {
   color: #ffffff !important;
-  transform: scale(1.14) rotate(-6deg);
+  transform: scale(1.16) rotate(-6deg);
 }
 
 /* Cosmic Admin Delete Button */
 .owner-leader-delete {
   position: absolute;
-  top: 12px !important;
-  left: 14px !important;
+  top: 14px !important;
+  left: 16px !important;
   z-index: 3;
 }
 
 .owner-leader-delete .btn {
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   padding: 0 !important;
-  border-radius: 11px !important;
-  background: rgba(248, 113, 113, 0.12) !important;
-  border: 1px solid rgba(248, 113, 113, 0.28) !important;
+  border-radius: 12px !important;
+  background: rgba(248, 113, 113, 0.14) !important;
+  border: 1px solid rgba(248, 113, 113, 0.32) !important;
   color: #fca5a5 !important;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.8rem !important;
-  backdrop-filter: blur(10px);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  font-size: 0.82rem !important;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
   transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
 }
 
@@ -3286,8 +3391,478 @@
   background: linear-gradient(135deg, #ef4444, #be123c) !important;
   border-color: #fecdd3 !important;
   color: #ffffff !important;
-  transform: scale(1.12);
-  box-shadow: 0 0 22px rgba(248, 113, 113, 0.55);
+  transform: scale(1.14);
+  box-shadow: 0 0 24px rgba(248, 113, 113, 0.65);
+}
+
+/* ─── WIDE EXECUTIVE HORIZON OWNER CARDS v4 (Full-Width Pro Banner Design) ─── */
+.owner-wide-stack {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 1.15rem !important;
+  margin-top: 0.45rem !important;
+  margin-bottom: 1.75rem !important;
+  padding-top: 0 !important;
+  width: 100% !important;
+}
+
+.owner-leader-card.owner-wide-card {
+  width: 100% !important;
+  margin: 0 !important;
+  cursor: pointer;
+  animation: fadeUp 0.36s cubic-bezier(0.22, 1, 0.36, 1) both;
+  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1) !important;
+}
+
+.owner-leader-card.owner-wide-card:hover {
+  transform: translateY(-4px) scale(1.004) !important;
+}
+
+.owner-wide-shell {
+  position: relative;
+  width: 100%;
+  border-radius: 22px;
+  padding: 20px 26px;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: minmax(260px, 1.45fr) auto auto;
+  align-items: center;
+  gap: 22px;
+  background:
+    radial-gradient(460px circle at var(--mx, 80%) var(--my, 50%), rgba(56, 189, 248, 0.14), rgba(45, 212, 191, 0.05) 42%, transparent 72%),
+    radial-gradient(rgba(148, 163, 184, 0.14) 1px, transparent 1px),
+    radial-gradient(ellipse 52% 110% at 96% 50%, rgba(45, 212, 191, 0.13), transparent 72%),
+    radial-gradient(ellipse 46% 100% at 6% 50%, rgba(139, 92, 246, 0.12), transparent 72%),
+    linear-gradient(115deg, rgba(11, 17, 42, 0.96) 0%, rgba(7, 11, 28, 0.98) 52%, rgba(4, 7, 18, 0.99) 100%);
+  background-size: 100% 100%, 22px 22px, 100% 100%, 100% 100%, 100% 100%;
+  border: 1px solid rgba(125, 211, 252, 0.22);
+  box-shadow:
+    0 14px 34px -10px rgba(0, 0, 0, 0.72),
+    inset 0 1px 0 rgba(255, 255, 255, 0.11),
+    inset 0 -1px 0 rgba(167, 139, 250, 0.12);
+  backdrop-filter: blur(20px) saturate(165%);
+  -webkit-backdrop-filter: blur(20px) saturate(165%);
+  transition: border-color 0.35s ease, box-shadow 0.35s ease;
+}
+
+/* Right vertical luminous signature bar */
+.owner-wide-shell::before {
+  content: '';
+  position: absolute;
+  top: 14%;
+  bottom: 14%;
+  right: 0;
+  width: 4px;
+  border-radius: 4px 0 0 4px;
+  background: linear-gradient(180deg, #2dd4bf 0%, #38bdf8 52%, #a78bfa 100%);
+  box-shadow: 0 0 16px rgba(45, 212, 191, 0.65);
+  transition: top 0.35s ease, bottom 0.35s ease, box-shadow 0.35s ease;
+}
+
+/* Diagonal sweeping glass sheen on hover */
+.owner-wide-shell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 28%, rgba(255, 255, 255, 0.055) 48%, rgba(56, 189, 248, 0.08) 52%, transparent 72%);
+  background-size: 230% 100%;
+  background-position: 175% 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.38s ease, background-position 0.75s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.owner-leader-card.owner-wide-card:hover .owner-wide-shell {
+  border-color: rgba(45, 212, 191, 0.62);
+  box-shadow:
+    0 22px 48px -10px rgba(0, 0, 0, 0.86),
+    0 0 36px rgba(56, 189, 248, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.owner-leader-card.owner-wide-card:hover .owner-wide-shell::before {
+  top: 6%;
+  bottom: 6%;
+  box-shadow: 0 0 24px rgba(56, 189, 248, 0.9);
+}
+
+.owner-leader-card.owner-wide-card:hover .owner-wide-shell::after {
+  opacity: 1;
+  background-position: -65% 0;
+}
+
+/* Zone 1: Portrait + Identity */
+.owner-wide-profile {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-width: 0;
+  position: relative;
+  z-index: 2;
+}
+
+.owner-wide-avatar-wrap {
+  position: relative;
+  width: 78px;
+  height: 78px;
+  border-radius: 50%;
+  padding: 3px;
+  background: conic-gradient(from 0deg, #2dd4bf, #38bdf8, #a78bfa, #fbbf24, #38bdf8, #2dd4bf);
+  box-shadow: 0 0 24px rgba(56, 189, 248, 0.36), 0 0 0 3px rgba(6, 10, 26, 0.92);
+  flex-shrink: 0;
+  transition: transform 0.38s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.38s ease;
+}
+
+.owner-wide-avatar-wrap::before {
+  content: '';
+  position: absolute;
+  inset: -7px;
+  border-radius: 50%;
+  border: 1.5px dashed rgba(56, 189, 248, 0.42);
+  border-top-color: #2dd4bf;
+  border-bottom-color: #a78bfa;
+  animation: cosmicPlanetOrbit 10s linear infinite;
+  pointer-events: none;
+}
+
+.owner-leader-card.owner-wide-card:hover .owner-wide-avatar-wrap {
+  transform: scale(1.06);
+  box-shadow: 0 0 34px rgba(45, 212, 191, 0.58), 0 0 0 3px rgba(6, 10, 26, 0.95);
+}
+
+.owner-leader-card.owner-wide-card:hover .owner-wide-avatar-wrap::before {
+  animation-duration: 4.5s;
+  border-color: rgba(45, 212, 191, 0.8);
+}
+
+.owner-wide-avatar-inner {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  overflow: hidden;
+  background: radial-gradient(circle at 35% 25%, #172554, #040714);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2.5px solid #050816;
+}
+
+.owner-wide-avatar-inner img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.owner-wide-avatar-inner i {
+  font-size: 1.75rem;
+  color: #38bdf8;
+  filter: drop-shadow(0 0 12px rgba(56, 189, 248, 0.6));
+}
+
+.owner-wide-crown-chip {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #fde68a, #f59e0b);
+  color: #1c1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  border: 2px solid #050816;
+  box-shadow: 0 3px 10px rgba(245, 158, 11, 0.45);
+  z-index: 4;
+}
+
+.owner-wide-avatar-wrap .owner-leader-photo-edit {
+  position: absolute !important;
+  bottom: -2px !important;
+  left: -2px !important;
+  width: 26px !important;
+  height: 26px !important;
+  border-radius: 50% !important;
+  border: 2px solid #050816 !important;
+  z-index: 5;
+}
+
+.owner-wide-info {
+  flex: 1;
+  min-width: 0;
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.owner-wide-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.owner-wide-name {
+  margin: 0;
+  font-family: 'Cairo', sans-serif;
+  font-size: 1.32rem;
+  font-weight: 900;
+  color: #f8fafc;
+  line-height: 1.25;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
+  transition: color 0.3s ease;
+}
+
+.owner-leader-card.owner-wide-card:hover .owner-wide-name {
+  color: #ffffff;
+  text-shadow: 0 0 22px rgba(56, 189, 248, 0.45);
+}
+
+.owner-wide-role-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 11px;
+  border-radius: 999px;
+  background: rgba(56, 189, 248, 0.13);
+  border: 1px solid rgba(56, 189, 248, 0.34);
+  color: #7dd3fc;
+  font-size: 0.71rem;
+  font-weight: 900;
+  letter-spacing: 0.4px;
+}
+
+.owner-wide-role-pill .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #2dd4bf;
+  box-shadow: 0 0 8px #2dd4bf;
+}
+
+.owner-wide-folders {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.owner-wide-folder-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  color: #e2e8f0;
+  font-size: 0.74rem;
+  font-weight: 700;
+  line-height: 1.45;
+  max-width: 100%;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.owner-wide-folder-chip i {
+  color: #2dd4bf;
+  font-size: 0.68rem;
+}
+
+/* Zone 2: Horizontal Telemetry Capsule */
+.owner-wide-telemetry {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 16px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.032);
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  backdrop-filter: blur(12px);
+  transition: border-color 0.3s ease, background 0.3s ease;
+}
+
+.owner-leader-card.owner-wide-card:hover .owner-wide-telemetry {
+  background: rgba(56, 189, 248, 0.055);
+  border-color: rgba(56, 189, 248, 0.28);
+}
+
+.owner-wide-stat {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  white-space: nowrap;
+}
+
+.owner-wide-stat-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.86rem;
+  flex-shrink: 0;
+}
+
+.owner-wide-stat-icon.teal  { background: rgba(45, 212, 191, 0.15); color: #2dd4bf; border: 1px solid rgba(45, 212, 191, 0.3); }
+.owner-wide-stat-icon.blue  { background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); }
+.owner-wide-stat-icon.amber { background: rgba(251, 191, 36, 0.15); color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.3); }
+
+.owner-wide-stat-val {
+  font-size: 0.9rem;
+  font-weight: 900;
+  color: #f8fafc;
+  line-height: 1.2;
+}
+
+.owner-wide-stat-lbl {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--text-dim);
+}
+
+.owner-wide-stat-sep {
+  width: 1px;
+  height: 28px;
+  background: linear-gradient(180deg, transparent, rgba(148, 163, 184, 0.32), transparent);
+}
+
+/* Zone 3: CTA + Admin Actions */
+.owner-wide-actions {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.owner-wide-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 11px 20px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(45, 212, 191, 0.16), rgba(56, 189, 248, 0.2));
+  border: 1px solid rgba(56, 189, 248, 0.42);
+  color: #e0f2fe;
+  font-size: 0.84rem;
+  font-weight: 900;
+  white-space: nowrap;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.38);
+  transition: all 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.owner-wide-cta i.cta-lead {
+  color: #2dd4bf;
+  transition: color 0.3s ease;
+}
+
+.owner-wide-cta i.cta-arrow {
+  font-size: 0.8rem;
+  color: #7dd3fc;
+  transition: transform 0.32s cubic-bezier(0.34, 1.56, 0.64, 1), color 0.3s ease;
+}
+
+.owner-leader-card.owner-wide-card:hover .owner-wide-cta {
+  background: linear-gradient(135deg, #0d9488 0%, #0284c7 55%, #6366f1 100%);
+  border-color: rgba(186, 230, 253, 0.9);
+  color: #ffffff;
+  box-shadow: 0 10px 26px rgba(14, 165, 233, 0.36);
+}
+
+.owner-leader-card.owner-wide-card:hover .owner-wide-cta i.cta-lead,
+.owner-leader-card.owner-wide-card:hover .owner-wide-cta i.cta-arrow {
+  color: #ffffff;
+}
+
+.owner-leader-card.owner-wide-card:hover .owner-wide-cta i.cta-arrow {
+  transform: translateX(-4px);
+}
+
+.owner-wide-actions .owner-leader-delete {
+  position: static !important;
+}
+
+.owner-wide-actions .owner-leader-delete .btn {
+  width: 40px !important;
+  height: 40px !important;
+  border-radius: 13px !important;
+}
+
+/* Light Mode Support */
+[data-theme="light"] .owner-wide-shell {
+  background:
+    radial-gradient(460px circle at var(--mx, 80%) var(--my, 50%), rgba(14, 165, 233, 0.1), transparent 72%),
+    linear-gradient(115deg, rgba(255, 255, 255, 0.98) 0%, rgba(241, 245, 249, 0.98) 100%);
+  border-color: rgba(14, 165, 233, 0.25);
+  box-shadow: 0 12px 30px -10px rgba(15, 23, 42, 0.12), inset 0 1px 0 #ffffff;
+}
+[data-theme="light"] .owner-wide-name,
+[data-theme="light"] .owner-wide-stat-val {
+  color: #0f172a;
+}
+[data-theme="light"] .owner-wide-role-pill {
+  background: rgba(14, 165, 233, 0.1);
+  color: #0369a1;
+}
+[data-theme="light"] .owner-wide-folder-chip {
+  background: #f1f5f9;
+  color: #334155;
+  border-color: rgba(15, 23, 42, 0.1);
+}
+[data-theme="light"] .owner-wide-telemetry {
+  background: rgba(248, 250, 252, 0.9);
+  border-color: rgba(15, 23, 42, 0.08);
+}
+[data-theme="light"] .owner-wide-cta {
+  color: #0f172a;
+  background: linear-gradient(135deg, rgba(20, 184, 166, 0.12), rgba(14, 165, 233, 0.14));
+}
+
+@media (max-width: 960px) {
+  .owner-wide-shell {
+    grid-template-columns: 1fr;
+    gap: 14px;
+    padding: 18px;
+  }
+  .owner-wide-telemetry {
+    justify-content: space-around;
+  }
+  .owner-wide-actions {
+    width: 100%;
+  }
+  .owner-wide-cta {
+    flex: 1;
+  }
+}
+
+@media (max-width: 540px) {
+  .owner-wide-shell {
+    padding: 15px;
+    border-radius: 18px;
+  }
+  .owner-wide-avatar-wrap {
+    width: 62px;
+    height: 62px;
+  }
+  .owner-wide-name {
+    font-size: 1.1rem;
+  }
+  .owner-wide-telemetry {
+    padding: 9px 10px;
+    gap: 10px;
+  }
+  .owner-wide-stat-val {
+    font-size: 0.82rem;
+  }
 }
 
 /* ─── COSMIC STUDENT TRAFFIC PICKER DROPDOWN ─── */
@@ -4920,7 +5495,7 @@ ESSAY
     // ====================== Owners (SUMMARY OWNERS) — STATE ======================
     let summaryOwnersMasterPassword = null; // باسورد إضافة صاحب ملخص جديد — من جدول app_passwords
     // شكل الكيرف اللي بيتقوّس حوالين صورة صاحب الملخص أعلى الكارت
-    const OWNER_HEADER_CURVE_SVG = `<svg viewBox="0 0 2000 66" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="ownerHdrFill" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#0ea5e9" stop-opacity="0.05"/><stop offset="32%" stop-color="#2dd4bf" stop-opacity="0.18"/><stop offset="50%" stop-color="#a78bfa" stop-opacity="0.28"/><stop offset="68%" stop-color="#38bdf8" stop-opacity="0.18"/><stop offset="100%" stop-color="#0ea5e9" stop-opacity="0.05"/></linearGradient><linearGradient id="ownerHdrStroke" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#38bdf8" stop-opacity="0.08"/><stop offset="36%" stop-color="#2dd4bf" stop-opacity="0.65"/><stop offset="50%" stop-color="#38bdf8" stop-opacity="1"/><stop offset="64%" stop-color="#a78bfa" stop-opacity="0.65"/><stop offset="100%" stop-color="#38bdf8" stop-opacity="0.08"/></linearGradient><radialGradient id="ownerPortalGlow" cx="50%" cy="0%" r="50%"><stop offset="0%" stop-color="#38bdf8" stop-opacity="0.35"/><stop offset="55%" stop-color="#a78bfa" stop-opacity="0.14"/><stop offset="100%" stop-color="#020208" stop-opacity="0"/></radialGradient></defs><ellipse cx="1000" cy="24" rx="220" ry="56" fill="url(#ownerPortalGlow)"/><path class="owner-hdr-fill-path" d="M0,0 H2000 V28 H1068 C1042,28 1038,60 1000,60 C962,60 958,28 932,28 H0 Z" fill="url(#ownerHdrFill)"/><path class="owner-hdr-stroke-path" d="M0,28 H932 C958,28 962,60 1000,60 C1038,60 1042,28 1068,28 H2000" fill="none" stroke="url(#ownerHdrStroke)" stroke-width="1.8"/><g class="owner-cosmic-stars"><circle class="c-star s1" cx="780" cy="14" r="1.6" fill="#38bdf8"/><circle class="c-star s2" cx="845" cy="20" r="1.2" fill="#2dd4bf"/><circle class="c-star s3" cx="905" cy="11" r="2" fill="#e0f2fe"/><circle class="c-star s4" cx="1095" cy="12" r="1.8" fill="#a78bfa"/><circle class="c-star s5" cx="1155" cy="19" r="1.3" fill="#2dd4bf"/><circle class="c-star s6" cx="1225" cy="13" r="1.7" fill="#38bdf8"/><circle class="c-star s1" cx="690" cy="16" r="1.4" fill="#a78bfa"/><circle class="c-star s3" cx="1310" cy="15" r="1.5" fill="#e0f2fe"/><polyline points="780,14 845,20 905,11" fill="none" stroke="rgba(56,189,248,0.22)" stroke-width="0.8" stroke-dasharray="2 2"/><polyline points="1095,12 1155,19 1225,13" fill="none" stroke="rgba(167,139,250,0.22)" stroke-width="0.8" stroke-dasharray="2 2"/></g></svg>`;
+    const OWNER_HEADER_CURVE_SVG = `<svg viewBox="0 0 2000 74" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="ownerHdrFill" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#0ea5e9" stop-opacity="0.04"/><stop offset="28%" stop-color="#2dd4bf" stop-opacity="0.22"/><stop offset="50%" stop-color="#8b5cf6" stop-opacity="0.34"/><stop offset="72%" stop-color="#38bdf8" stop-opacity="0.22"/><stop offset="100%" stop-color="#0ea5e9" stop-opacity="0.04"/></linearGradient><linearGradient id="ownerHdrStroke" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#38bdf8" stop-opacity="0.05"/><stop offset="30%" stop-color="#2dd4bf" stop-opacity="0.75"/><stop offset="50%" stop-color="#f0f9ff" stop-opacity="1"/><stop offset="70%" stop-color="#a78bfa" stop-opacity="0.75"/><stop offset="100%" stop-color="#38bdf8" stop-opacity="0.05"/></linearGradient><linearGradient id="ownerHdrSubStroke" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#2dd4bf" stop-opacity="0"/><stop offset="38%" stop-color="#38bdf8" stop-opacity="0.35"/><stop offset="50%" stop-color="#fbbf24" stop-opacity="0.55"/><stop offset="62%" stop-color="#a78bfa" stop-opacity="0.35"/><stop offset="100%" stop-color="#2dd4bf" stop-opacity="0"/></linearGradient><radialGradient id="ownerPortalGlow" cx="50%" cy="0%" r="50%"><stop offset="0%" stop-color="#38bdf8" stop-opacity="0.44"/><stop offset="48%" stop-color="#8b5cf6" stop-opacity="0.18"/><stop offset="100%" stop-color="#020208" stop-opacity="0"/></radialGradient></defs><ellipse cx="1000" cy="24" rx="255" ry="64" fill="url(#ownerPortalGlow)"/><path class="owner-hdr-fill-path" d="M0,0 H2000 V30 H1076 C1046,30 1042,66 1000,66 C958,66 954,30 924,30 H0 Z" fill="url(#ownerHdrFill)"/><path d="M680,35 H918 C952,35 956,71 1000,71 C1044,71 1048,35 1082,35 H1320" fill="none" stroke="url(#ownerHdrSubStroke)" stroke-width="1.1" stroke-dasharray="4 4"/><path class="owner-hdr-stroke-path" d="M0,30 H924 C954,30 958,66 1000,66 C1042,66 1046,30 1076,30 H2000" fill="none" stroke="url(#ownerHdrStroke)" stroke-width="2.1"/><g class="owner-cosmic-stars"><circle class="c-star s1" cx="760" cy="14" r="1.8" fill="#38bdf8"/><circle class="c-star s2" cx="830" cy="21" r="1.4" fill="#2dd4bf"/><circle class="c-star s3" cx="895" cy="11" r="2.2" fill="#f0f9ff"/><circle class="c-star s4" cx="1105" cy="11" r="2.1" fill="#e0f2fe"/><circle class="c-star s5" cx="1170" cy="21" r="1.4" fill="#2dd4bf"/><circle class="c-star s6" cx="1240" cy="14" r="1.8" fill="#a78bfa"/><circle class="c-star s2" cx="670" cy="17" r="1.5" fill="#fbbf24"/><circle class="c-star s4" cx="1330" cy="17" r="1.5" fill="#fbbf24"/><polyline points="670,17 760,14 830,21 895,11" fill="none" stroke="rgba(56,189,248,0.28)" stroke-width="0.9" stroke-dasharray="2.5 2.5"/><polyline points="1105,11 1170,21 1240,14 1330,17" fill="none" stroke="rgba(167,139,250,0.28)" stroke-width="0.9" stroke-dasharray="2.5 2.5"/></g></svg>`;
     // علامة التوثيق الزرقاء (نجمة 12 ضلع + علامة صح)
     const OWNER_VERIFIED_BADGE_SVG = `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><path d="M50,2 L59.84,13.29 L74,8.43 L76.87,23.13 L91.57,26 L86.71,40.16 L98,50 L86.71,59.84 L91.57,74 L76.87,76.87 L74,91.57 L59.84,86.71 L50,98 L40.16,86.71 L26,91.57 L23.13,76.87 L8.43,74 L13.29,59.84 L2,50 L13.29,40.16 L8.43,26 L23.13,23.13 L26,8.43 L40.16,13.29 Z" fill="#3b9df0"/><path d="M30,53 L43,66 L72,36" stroke="#fff" stroke-width="9" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
     // بيحدد اتجاه اسم صاحب الملخص (عربي = يمين لشمال، إنجليزي = شمال ليمين) عشان مكان علامة التوثيق
@@ -18585,6 +19160,238 @@ ESSAY
         </div>`;
     }).join('');
   };
+
+  // ─── 24. HYPER-ASTRAL OWNER CARDS INTERACTIVE SPOTLIGHT & LIVE METADATA ENRICHER ───
+  document.addEventListener('pointermove', function (e) {
+    const card = e.target && e.target.closest ? e.target.closest('.owner-leader-card') : null;
+    if (!card) return;
+    const rect = card.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const mx = Math.round(((e.clientX - rect.left) / rect.width) * 100);
+    const my = Math.round(((e.clientY - rect.top) / rect.height) * 100);
+    card.style.setProperty('--mx', `${mx}%`);
+    card.style.setProperty('--my', `${my}%`);
+  }, { passive: true });
+
+  window.enrichOwnerCardsUI = function () {
+    const cards = document.querySelectorAll('.owner-leader-card:not([data-astral-enriched="1"])');
+    cards.forEach(card => {
+      card.setAttribute('data-astral-enriched', '1');
+      const onclickAttr = card.getAttribute('onclick') || '';
+      const idMatch = onclickAttr.match(/open(?:Public|Admin)(Lecture)?Owner\(\s*(\d+)/);
+      if (!idMatch) return;
+
+      const isLectureOwner = Boolean(idMatch[1]);
+      const ownerId = Number(idMatch[2]);
+      const isAdminCard = onclickAttr.includes('openAdmin');
+
+      const isAlreadyWide = card.classList.contains('owner-wide-card');
+
+      // Ensure parent wrapper stacks full-width cards cleanly
+      if (card.parentElement) {
+        card.parentElement.classList.remove('owner-pro-grid');
+        card.parentElement.classList.add('owner-wide-stack');
+      }
+
+      // Extract original owner identity, photo, verified icon, delete & photo-edit controls cleanly (first pass only)
+      const h4 = !isAlreadyWide ? card.querySelector('.owner-leader-content h4') : null;
+      const verifiedEl = h4 ? h4.querySelector('.owner-leader-verified') : null;
+      let ownerName = '';
+      if (h4) {
+        ownerName = Array.from(h4.childNodes)
+          .filter(n => n.nodeType === 3)
+          .map(n => n.textContent)
+          .join('')
+          .trim();
+        if (!ownerName) ownerName = h4.textContent.trim();
+      }
+      const ownerDir = (h4 && h4.getAttribute('dir')) || 'rtl';
+
+      const photoWrap = !isAlreadyWide ? card.querySelector('.owner-leader-photo-wrap') : null;
+      const photoInner = !isAlreadyWide ? card.querySelector('.owner-leader-photo') : null;
+      const photoContent = photoInner ? photoInner.querySelector('img, i') : null;
+      const photoEditBtn = photoWrap ? photoWrap.querySelector('.owner-leader-photo-edit') : null;
+      const deleteWrap = !isAlreadyWide ? card.querySelector('.owner-leader-delete') : null;
+
+      // Live metrics and folders belonging to this Owner (from live platform & admin caches + optional cloud fallback)
+      let count = 0;
+      let subjects = [];
+      try {
+        const resCache = [];
+        if (isLectureOwner) {
+          if (typeof _lecturesCache !== 'undefined' && Array.isArray(_lecturesCache)) resCache.push(..._lecturesCache);
+          if (Array.isArray(window._ownerCardsLecturesLive)) resCache.push(...window._ownerCardsLecturesLive);
+        } else {
+          if (typeof _summariesCache !== 'undefined' && Array.isArray(_summariesCache)) resCache.push(..._summariesCache);
+          if (typeof _adminSummariesCache !== 'undefined' && Array.isArray(_adminSummariesCache)) resCache.push(..._adminSummariesCache);
+          if (Array.isArray(window._ownerCardsSummariesLive)) resCache.push(...window._ownerCardsSummariesLive);
+        }
+        const uniqueMap = new Map();
+        resCache.forEach(r => { if (r && r.id != null) uniqueMap.set(r.id, r); });
+        const ownerAll = Array.from(uniqueMap.values()).filter(r => Number(r.owner_id) === ownerId);
+        count = ownerAll.filter(r => r.title !== '__folder__').length;
+        subjects = [...new Set(ownerAll.map(r => r.subject).filter(Boolean))];
+
+        // If cache is empty, fetch once in background for the active term & update chips smoothly
+        const liveKey = `${isLectureOwner ? 'lectures' : 'summaries'}_${typeof currentGrade !== 'undefined' ? currentGrade : 'BIS'}_${typeof currentTerm !== 'undefined' ? currentTerm : 1}`;
+        if (resCache.length === 0 && window._ownerCardsFetchingKey !== liveKey && typeof api === 'function') {
+          window._ownerCardsFetchingKey = liveKey;
+          const g = typeof currentGrade !== 'undefined' && currentGrade ? currentGrade : 'BIS';
+          const t = typeof currentTerm !== 'undefined' && currentTerm ? currentTerm : 1;
+          api(`resources?select=id,type,subject,title,owner_id&type=eq.${isLectureOwner ? 'lectures' : 'summaries'}&grade=eq.${encodeURIComponent(g)}&term=eq.${t}&owner_id=not.is.null`)
+            .then(rows => {
+              if (Array.isArray(rows)) {
+                if (isLectureOwner) window._ownerCardsLecturesLive = rows;
+                else window._ownerCardsSummariesLive = rows;
+                document.querySelectorAll('.owner-wide-card[data-astral-enriched="1"]').forEach(c => {
+                  const clickStr = c.getAttribute('onclick') || '';
+                  if ((isLectureOwner && clickStr.includes('LectureOwner')) || (!isLectureOwner && !clickStr.includes('LectureOwner'))) {
+                    c.removeAttribute('data-astral-enriched');
+                  }
+                });
+                if (typeof window.enrichOwnerCardsUI === 'function') window.enrichOwnerCardsUI();
+              }
+            }).catch(() => {});
+        }
+      } catch (e) {}
+
+      const escTxt = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      const roleSubtitle = isLectureOwner
+        ? (isAdminCard ? 'إدارة المحاضرات' : 'محاضر معتمد')
+        : (isAdminCard ? 'إدارة الملخصات' : 'صاحب ملخصات معتمد');
+
+      const m1Val = count > 0
+        ? `${count} ${isLectureOwner ? 'محاضرة' : 'ملخص'}`
+        : (isAdminCard ? 'قسم جاهز' : 'محتوى متاح');
+      const m1Lbl = isLectureOwner ? 'إجمالي المحاضرات' : 'إجمالي الملخصات';
+
+      const m2Val = subjects.length > 0
+        ? `${subjects.length} ${subjects.length === 1 ? 'مجلد' : 'مجلدات'}`
+        : (isAdminCard ? 'محمي بباسورد' : 'مرتب بالمواد');
+      const m2Lbl = isAdminCard ? 'الأمان والتنظيم' : 'أقسام المواد';
+
+      const foldersHtml = `<div class="owner-wide-folders">
+            <span class="owner-wide-folder-chip"><i class="fas ${isAdminCard ? 'fa-shield-alt' : 'fa-layer-group'}"></i> ${isAdminCard ? 'وصول محمي بكلمة سر مستقلة' : 'محتوى منظم ومحدّث أولاً بأول'}</span>
+          </div>`;
+
+      const telemetryInnerHtml = `
+        <div class="owner-wide-stat">
+          <div class="owner-wide-stat-icon ${isLectureOwner ? 'blue' : 'teal'}"><i class="fas ${isLectureOwner ? 'fa-video' : 'fa-file-alt'}"></i></div>
+          <div>
+            <div class="owner-wide-stat-val">${escTxt(m1Val)}</div>
+            <div class="owner-wide-stat-lbl">${escTxt(m1Lbl)}</div>
+          </div>
+        </div>
+        <div class="owner-wide-stat-sep"></div>
+        <div class="owner-wide-stat">
+          <div class="owner-wide-stat-icon amber"><i class="fas ${isAdminCard && subjects.length === 0 ? 'fa-shield-alt' : 'fa-folder-open'}"></i></div>
+          <div>
+            <div class="owner-wide-stat-val">${escTxt(m2Val)}</div>
+            <div class="owner-wide-stat-lbl">${escTxt(m2Lbl)}</div>
+          </div>
+        </div>`;
+
+      if (isAlreadyWide) {
+        const existingFolders = card.querySelector('.owner-wide-folders');
+        if (existingFolders) existingFolders.outerHTML = foldersHtml;
+        const existingTelemetry = card.querySelector('.owner-wide-telemetry');
+        if (existingTelemetry) existingTelemetry.innerHTML = telemetryInnerHtml;
+        return;
+      }
+
+      const ctaText = isAdminCard
+        ? 'فتح لوحة الإدارة'
+        : (isLectureOwner ? 'عرض المحاضرات' : 'عرض الملخصات');
+      const ctaIcon = isAdminCard ? 'fa-lock' : (isLectureOwner ? 'fa-video' : 'fa-book-open');
+
+      card.classList.remove('owner-pro-card');
+      card.classList.add('owner-wide-card');
+      card.innerHTML = '';
+
+      const shell = document.createElement('div');
+      shell.className = 'owner-wide-shell';
+
+      // Zone 1: Portrait + Identity
+      const profileZone = document.createElement('div');
+      profileZone.className = 'owner-wide-profile';
+
+      const avatarBox = document.createElement('div');
+      avatarBox.className = 'owner-wide-avatar-wrap';
+      const avatarInner = document.createElement('div');
+      avatarInner.className = 'owner-wide-avatar-inner';
+      if (photoContent) avatarInner.appendChild(photoContent);
+      else avatarInner.innerHTML = '<i class="fas fa-user"></i>';
+      avatarBox.appendChild(avatarInner);
+
+      const crownChip = document.createElement('div');
+      crownChip.className = 'owner-wide-crown-chip';
+      crownChip.title = 'Owner معتمد';
+      crownChip.innerHTML = '<i class="fas fa-crown"></i>';
+      avatarBox.appendChild(crownChip);
+
+      if (photoEditBtn) avatarBox.appendChild(photoEditBtn);
+
+      const infoCol = document.createElement('div');
+      infoCol.className = 'owner-wide-info';
+
+      const titleRow = document.createElement('div');
+      titleRow.className = 'owner-wide-title-row';
+
+      const nameHeading = document.createElement('h4');
+      nameHeading.className = 'owner-wide-name';
+      nameHeading.setAttribute('dir', ownerDir);
+      nameHeading.textContent = ownerName;
+      titleRow.appendChild(nameHeading);
+      if (verifiedEl) titleRow.appendChild(verifiedEl);
+
+      const rolePill = document.createElement('span');
+      rolePill.className = 'owner-wide-role-pill';
+      rolePill.innerHTML = `<span class="dot"></span>OWNER • ${escTxt(roleSubtitle)}`;
+      titleRow.appendChild(rolePill);
+
+      infoCol.appendChild(titleRow);
+
+      const foldersWrap = document.createElement('div');
+      foldersWrap.innerHTML = foldersHtml;
+      if (foldersWrap.firstElementChild) infoCol.appendChild(foldersWrap.firstElementChild);
+
+      profileZone.appendChild(avatarBox);
+      profileZone.appendChild(infoCol);
+
+      // Zone 2: Horizontal Telemetry Capsule
+      const telemetryZone = document.createElement('div');
+      telemetryZone.className = 'owner-wide-telemetry';
+      telemetryZone.innerHTML = telemetryInnerHtml;
+
+      // Zone 3: Action CTA + Admin Delete
+      const actionsZone = document.createElement('div');
+      actionsZone.className = 'owner-wide-actions';
+      const ctaBtn = document.createElement('div');
+      ctaBtn.className = 'owner-wide-cta';
+      ctaBtn.innerHTML = `<i class="fas ${ctaIcon} cta-lead"></i><span>${escTxt(ctaText)}</span><i class="fas fa-arrow-left cta-arrow"></i>`;
+      actionsZone.appendChild(ctaBtn);
+      if (deleteWrap) actionsZone.appendChild(deleteWrap);
+
+      shell.appendChild(profileZone);
+      shell.appendChild(telemetryZone);
+      shell.appendChild(actionsZone);
+      card.appendChild(shell);
+    });
+  };
+
+  try {
+    const _ownerCardsObs = new MutationObserver(() => {
+      if (typeof window.enrichOwnerCardsUI === 'function') window.enrichOwnerCardsUI();
+    });
+    if (document.body) {
+      _ownerCardsObs.observe(document.body, { childList: true, subtree: true });
+    } else {
+      document.addEventListener('DOMContentLoaded', () => {
+        if (document.body) _ownerCardsObs.observe(document.body, { childList: true, subtree: true });
+        window.enrichOwnerCardsUI();
+      });
+    }
+  } catch (e) {}
 
 })();
 
