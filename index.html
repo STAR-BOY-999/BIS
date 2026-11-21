@@ -3402,8 +3402,11 @@
   gap: 1.15rem !important;
   margin-top: 0.45rem !important;
   margin-bottom: 1.75rem !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
   padding-top: 0 !important;
   width: 100% !important;
+  max-width: 900px !important;
 }
 
 .owner-leader-card.owner-wide-card {
@@ -4070,8 +4073,15 @@ html, body {
   overflow-x: hidden;
 }
 
-nav, #main, footer {
+nav, footer {
   max-width: 100%;
+  box-sizing: border-box;
+}
+
+#main {
+  max-width: 920px;
+  width: 100%;
+  margin: 0 auto;
   box-sizing: border-box;
 }
 
@@ -17581,8 +17591,20 @@ ESSAY
     }
   };
 
-  // ربط كل عمليات التعديل والحفظ والنشر والحذف في السوبر أدمن بالبث الفوري لصفحة الطلاب
+  // ربط كل عمليات التعديل والحفظ والنشر والحذف في السوبر أدمن والأونرز بالبث الفوري وتحديث عدادات المحاضرات والملخصات لحظياً
   [
+    'createResource',
+    'deleteResource',
+    'saveLecture',
+    'saveResource',
+    'saveOwnerFolder',
+    'deleteOwnerFolder',
+    'deleteOwnerLecture',
+    'deleteOwnerSummary',
+    'promptAddSummaryOwnerFolder',
+    'deleteSummaryOwnerFolder',
+    'deleteLectureAdmin',
+    'deleteSubjectAdmin',
     'saveQuestion',
     'deleteQuestion',
     'togglePublish',
@@ -17596,6 +17618,9 @@ ESSAY
     if (typeof orig === 'function') {
       window[fnName] = async function (...args) {
         const res = await orig.apply(this, args);
+        if (typeof window.refreshOwnerCardsLiveCounts === 'function') {
+          window.refreshOwnerCardsLiveCounts();
+        }
         if (typeof window.broadcastRealtimeUserSync === 'function') {
           window.broadcastRealtimeUserSync('content_updated', fnName, String(Date.now()));
         }
@@ -17633,6 +17658,9 @@ ESSAY
       if (analyticsPanel && !analyticsPanel.classList.contains('hidden') && typeof window.loadSuperAdminAnalytics === 'function') {
         window.loadSuperAdminAnalytics(true);
       }
+      if (typeof window.refreshOwnerCardsLiveCounts === 'function') {
+        window.refreshOwnerCardsLiveCounts();
+      }
       return;
     }
     if (window.authSession?.user) {
@@ -17640,6 +17668,9 @@ ESSAY
     }
     window.fetchSystemUserOverrides();
     window.syncStudentLiveContentRealTime();
+    if (typeof window.refreshOwnerCardsLiveCounts === 'function') {
+      window.refreshOwnerCardsLiveCounts();
+    }
   }
 
   try {
@@ -19523,8 +19554,48 @@ ESSAY
     card.style.setProperty('--my', `${my}%`);
   }, { passive: true });
 
-  window.enrichOwnerCardsUI = function () {
-    const cards = document.querySelectorAll('.owner-leader-card:not([data-astral-enriched="1"])');
+  window._ownerCardsResourcesLive = null;
+  window._ownerCardsLiveFetchInFlight = false;
+
+  window.refreshOwnerCardsLiveCounts = async function () {
+    if (window._ownerCardsLiveFetchInFlight) return;
+    window._ownerCardsLiveFetchInFlight = true;
+    try {
+      const headers = {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Cache-Control': 'no-cache'
+      };
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/resources?select=id,type,grade,term,subject,title,url,owner_id&owner_id=not.is.null&order=id.asc`, {
+        headers,
+        cache: 'no-store'
+      });
+      if (res.ok) {
+        const rows = await res.json();
+        if (Array.isArray(rows)) {
+          window._ownerCardsResourcesLive = rows;
+          if (typeof window.enrichOwnerCardsUI === 'function') {
+            window.enrichOwnerCardsUI(true);
+          }
+        }
+      }
+    } catch (e) {
+    } finally {
+      window._ownerCardsLiveFetchInFlight = false;
+    }
+  };
+
+  window.enrichOwnerCardsUI = function (forceRefresh = false) {
+    const selector = forceRefresh
+      ? '.owner-leader-card'
+      : '.owner-leader-card:not([data-astral-enriched="1"])';
+    const cards = document.querySelectorAll(selector);
+    if (!cards.length) return;
+
+    if (!Array.isArray(window._ownerCardsResourcesLive) && !window._ownerCardsLiveFetchInFlight) {
+      window.refreshOwnerCardsLiveCounts();
+    }
+
     cards.forEach(card => {
       card.setAttribute('data-astral-enriched', '1');
       const onclickAttr = card.getAttribute('onclick') || '';
@@ -19534,7 +19605,6 @@ ESSAY
       const isLectureOwner = Boolean(idMatch[1]);
       const ownerId = Number(idMatch[2]);
       const isAdminCard = onclickAttr.includes('openAdmin');
-
       const isAlreadyWide = card.classList.contains('owner-wide-card');
 
       // Ensure parent wrapper stacks full-width cards cleanly
@@ -19544,16 +19614,17 @@ ESSAY
       }
 
       // Extract original owner identity, photo, verified icon, delete & photo-edit controls cleanly (first pass only)
-      const h4 = !isAlreadyWide ? card.querySelector('.owner-leader-content h4') : null;
-      const verifiedEl = h4 ? h4.querySelector('.owner-leader-verified') : null;
-      let ownerName = '';
-      if (h4) {
+      const h4 = !isAlreadyWide ? card.querySelector('.owner-leader-content h4') : card.querySelector('.owner-wide-name');
+      const verifiedEl = !isAlreadyWide && h4 ? h4.querySelector('.owner-leader-verified') : null;
+      let ownerName = card.getAttribute('data-owner-name') || '';
+      if (!ownerName && h4) {
         ownerName = Array.from(h4.childNodes)
           .filter(n => n.nodeType === 3)
           .map(n => n.textContent)
           .join('')
           .trim();
         if (!ownerName) ownerName = h4.textContent.trim();
+        if (ownerName) card.setAttribute('data-owner-name', ownerName);
       }
       const ownerDir = (h4 && h4.getAttribute('dir')) || 'rtl';
 
@@ -19563,56 +19634,46 @@ ESSAY
       const photoEditBtn = photoWrap ? photoWrap.querySelector('.owner-leader-photo-edit') : null;
       const deleteWrap = !isAlreadyWide ? card.querySelector('.owner-leader-delete') : null;
 
-      // Live metrics and folders belonging to this Owner (from live platform & admin caches + optional cloud fallback)
+      // Exact live metrics and folders belonging to this Owner from authoritative live source
       let count = 0;
       let subjects = [];
       try {
-        const resCache = [];
-        if (isLectureOwner) {
-          if (typeof _lecturesCache !== 'undefined' && Array.isArray(_lecturesCache)) resCache.push(..._lecturesCache);
-          if (Array.isArray(window._ownerCardsLecturesLive)) resCache.push(...window._ownerCardsLecturesLive);
-        } else {
-          if (typeof _summariesCache !== 'undefined' && Array.isArray(_summariesCache)) resCache.push(..._summariesCache);
-          if (typeof _adminSummariesCache !== 'undefined' && Array.isArray(_adminSummariesCache)) resCache.push(..._adminSummariesCache);
-          if (Array.isArray(window._ownerCardsSummariesLive)) resCache.push(...window._ownerCardsSummariesLive);
-        }
-        const uniqueMap = new Map();
-        resCache.forEach(r => { if (r && r.id != null) uniqueMap.set(r.id, r); });
-        const ownerAll = Array.from(uniqueMap.values()).filter(r => Number(r.owner_id) === ownerId);
-        count = ownerAll.filter(r => r.title !== '__folder__').length;
-        subjects = [...new Set(ownerAll.map(r => r.subject).filter(Boolean))];
+        const activeGrade = String((typeof currentGrade !== 'undefined' && currentGrade) ? currentGrade : 'bis').toLowerCase();
+        const activeTerm = Number((typeof currentTerm !== 'undefined' && currentTerm) ? currentTerm : 1);
+        const targetType = isLectureOwner ? 'lectures' : 'summaries';
 
-        // If cache is empty, fetch once in background for the active term & update chips smoothly
-        const liveKey = `${isLectureOwner ? 'lectures' : 'summaries'}_${typeof currentGrade !== 'undefined' ? currentGrade : 'BIS'}_${typeof currentTerm !== 'undefined' ? currentTerm : 1}`;
-        if (resCache.length === 0 && window._ownerCardsFetchingKey !== liveKey && typeof api === 'function') {
-          window._ownerCardsFetchingKey = liveKey;
-          const g = typeof currentGrade !== 'undefined' && currentGrade ? currentGrade : 'BIS';
-          const t = typeof currentTerm !== 'undefined' && currentTerm ? currentTerm : 1;
-          api(`resources?select=id,type,subject,title,owner_id&type=eq.${isLectureOwner ? 'lectures' : 'summaries'}&grade=eq.${encodeURIComponent(g)}&term=eq.${t}&owner_id=not.is.null`)
-            .then(rows => {
-              if (Array.isArray(rows)) {
-                if (isLectureOwner) window._ownerCardsLecturesLive = rows;
-                else window._ownerCardsSummariesLive = rows;
-                document.querySelectorAll('.owner-wide-card[data-astral-enriched="1"]').forEach(c => {
-                  const clickStr = c.getAttribute('onclick') || '';
-                  if ((isLectureOwner && clickStr.includes('LectureOwner')) || (!isLectureOwner && !clickStr.includes('LectureOwner'))) {
-                    c.removeAttribute('data-astral-enriched');
-                  }
-                });
-                if (typeof window.enrichOwnerCardsUI === 'function') window.enrichOwnerCardsUI();
-              }
-            }).catch(() => {});
+        let sourceRows = [];
+        if (Array.isArray(window._ownerCardsResourcesLive)) {
+          sourceRows = window._ownerCardsResourcesLive;
+        } else if (isLectureOwner && typeof _lecturesCache !== 'undefined' && Array.isArray(_lecturesCache)) {
+          sourceRows = _lecturesCache;
+        } else if (!isLectureOwner) {
+          if (typeof _adminSummariesCache !== 'undefined' && Array.isArray(_adminSummariesCache) && _adminSummariesCache.length) {
+            sourceRows = _adminSummariesCache;
+          } else if (typeof _summariesCache !== 'undefined' && Array.isArray(_summariesCache)) {
+            sourceRows = _summariesCache;
+          }
         }
+
+        const ownerAll = sourceRows.filter(r =>
+          r &&
+          Number(r.owner_id) === ownerId &&
+          String(r.type || targetType) === targetType &&
+          String(r.grade || activeGrade).toLowerCase() === activeGrade &&
+          Number(r.term || activeTerm) === activeTerm
+        );
+
+        count = ownerAll.filter(r => r.title !== '__folder__' && r.url !== 'folder://marker').length;
+        subjects = [...new Set(
+          ownerAll
+            .map(r => String(r.subject || '').trim())
+            .filter(s => s && s !== ownerName)
+        )];
       } catch (e) {}
 
       const escTxt = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-      const roleSubtitle = isLectureOwner
-        ? (isAdminCard ? 'إدارة المحاضرات' : 'محاضر معتمد')
-        : (isAdminCard ? 'إدارة الملخصات' : 'صاحب ملخصات معتمد');
 
-      const m1Val = count > 0
-        ? `${count} ${isLectureOwner ? 'محاضرة' : 'ملخص'}`
-        : (isAdminCard ? 'قسم جاهز' : 'محتوى متاح');
+      const m1Val = `${count} ${isLectureOwner ? 'محاضرة' : 'ملخص'}`;
       const m1Lbl = isLectureOwner ? 'إجمالي المحاضرات' : 'إجمالي الملخصات';
 
       const m2Val = subjects.length > 0
@@ -19643,9 +19704,9 @@ ESSAY
 
       if (isAlreadyWide) {
         const existingFolders = card.querySelector('.owner-wide-folders');
-        if (existingFolders) existingFolders.outerHTML = foldersHtml;
+        if (existingFolders && existingFolders.outerHTML !== foldersHtml) existingFolders.outerHTML = foldersHtml;
         const existingTelemetry = card.querySelector('.owner-wide-telemetry');
-        if (existingTelemetry) existingTelemetry.innerHTML = telemetryInnerHtml;
+        if (existingTelemetry && existingTelemetry.innerHTML !== telemetryInnerHtml) existingTelemetry.innerHTML = telemetryInnerHtml;
         return;
       }
 
@@ -19728,6 +19789,34 @@ ESSAY
       card.appendChild(shell);
     });
   };
+
+  [
+    'backToLectureOwnersView',
+    'backToOwnersView',
+    'backToLecturesMain',
+    'backToSummariesMain',
+    'switchAdminTerm',
+    'switchAdminSection',
+    'openSection'
+  ].forEach(fnName => {
+    const orig = window[fnName];
+    if (typeof orig === 'function') {
+      window[fnName] = function (...args) {
+        const res = orig.apply(this, args);
+        if (typeof window.refreshOwnerCardsLiveCounts === 'function') {
+          window.refreshOwnerCardsLiveCounts();
+        }
+        return res;
+      };
+    }
+  });
+
+  setInterval(() => {
+    if (document.hidden) return;
+    if (document.querySelector('.owner-wide-card') && typeof window.refreshOwnerCardsLiveCounts === 'function') {
+      window.refreshOwnerCardsLiveCounts();
+    }
+  }, 5000);
 
   try {
     const _ownerCardsObs = new MutationObserver(() => {
