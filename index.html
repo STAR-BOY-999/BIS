@@ -19621,7 +19621,7 @@ ESSAY
       const m2Lbl = isAdminCard ? 'الأمان والتنظيم' : 'أقسام المواد';
 
       const foldersHtml = `<div class="owner-wide-folders">
-            <span class="owner-wide-folder-chip"><i class="fas ${isAdminCard ? 'fa-shield-alt' : 'fa-layer-group'}"></i> ${isAdminCard ? 'وصول محمي بكلمة سر مستقلة' : 'محتوى منظم ومحدّث أولاً بأول'}</span>
+            <span class="owner-wide-folder-chip"><i class="fas ${isAdminCard ? 'fa-shield-alt' : 'fa-layer-group'}"></i> ${isAdminCard ? 'وصول محمي بكلمة سر مستقلة' : 'محتوى منظم ومحدّث'}</span>
           </div>`;
 
       const telemetryInnerHtml = `
@@ -19696,7 +19696,7 @@ ESSAY
 
       const rolePill = document.createElement('span');
       rolePill.className = 'owner-wide-role-pill';
-      rolePill.innerHTML = `<span class="dot"></span>OWNER • ${escTxt(roleSubtitle)}`;
+      rolePill.textContent = '• OWNER •';
       titleRow.appendChild(rolePill);
 
       infoCol.appendChild(titleRow);
