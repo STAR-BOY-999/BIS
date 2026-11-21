@@ -3974,7 +3974,7 @@
           </div>
           <div id="admin-lectures-inside-list"></div>
         </div>
-        <!-- View 3: محاضرات صاحب معين (بعد إدخال باسورد القسم) -->
+        <!-- View 3: محاضرات صاحب معين (بعد إدخال باسورد قسمه) -->
         <div id="admin-lecture-owner-inside-view" style="display:none">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
             <button class="btn btn-ghost" id="admin-lecture-owner-back-btn" onclick="backFromOwnerFolderOrOwner()">
@@ -4060,7 +4060,7 @@
           </div>
           <div id="admin-summaries-list"></div>
         </div>
-        <!-- View 3: ملخصات صاحب معين (بعد إدخال باسورد القسم) -->
+        <!-- View 3: ملخصات صاحب معين (بعد إدخال باسورد قسمه) -->
         <div id="admin-owner-inside-view" style="display:none">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
             <button class="btn btn-ghost" onclick="backToOwnersView()">
@@ -4363,7 +4363,7 @@ ESSAY
     </div>
   </div>
 
-  <!-- MODAL: إضافة صاحب ملخص/محاضرة جديد (اسم + باسورد القسم) -->
+  <!-- MODAL: إضافة صاحب ملخص/محاضرة جديد (اسم + باسورد قسمه) -->
   <div id="owner-modal" class="modal-overlay hidden">
     <div class="modal">
       <h3><i class="fas fa-user-plus" style="color:var(--green);margin-left:8px"></i> <span id="owner-modal-title">إضافة Owner</span></h3>
@@ -6208,7 +6208,8 @@ ESSAY
     let reviewFilter = 'all';
 
     function showReviewModal() {
-      setReviewFilter('all');
+      reviewFilter = 'all';
+      renderReviewList();
       document.getElementById('review-modal').classList.remove('hidden');
     }
 
@@ -6242,633 +6243,19 @@ ESSAY
       return ans === q.correct ? 'correct' : 'wrong';
     }
 
-    function escapePdfHtml(str) {
-      return String(str ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;')
-        .replace(/\n/g, '<br>');
-    }
-
-    function getReviewSectionMeta(sectionKey) {
-      const map = {
-        all: {
-          title: 'جميع أسئلة الاختبار',
-          shortLabel: 'الكل',
-          btnLabel: 'تحميل جميع الأسئلة بالإجابات والتبريرات (PDF)',
-          fileSuffix: 'كل_الأسئلة',
-          icon: 'fa-file-pdf',
-          badgeEmoji: '📋',
-          accent: '#0d9488',
-          accentSoft: 'rgba(13,148,136,0.12)',
-          accentBorder: 'rgba(45,212,191,0.38)',
-          grad: 'linear-gradient(135deg, #0f766e 0%, #1d4ed8 100%)'
-        },
-        correct: {
-          title: 'الأسئلة الصحيحة فقط',
-          shortLabel: 'الصحيحة',
-          btnLabel: 'تحميل الإجابات الصحيحة فقط بالتبريرات (PDF)',
-          fileSuffix: 'الإجابات_الصحيحة',
-          icon: 'fa-file-pdf',
-          badgeEmoji: '✅',
-          accent: '#15803d',
-          accentSoft: 'rgba(34,197,94,0.12)',
-          accentBorder: 'rgba(34,197,94,0.42)',
-          grad: 'linear-gradient(135deg, #15803d 0%, #0d9488 100%)'
-        },
-        wrong: {
-          title: 'الأسئلة الخاطئة فقط',
-          shortLabel: 'الخاطئة',
-          btnLabel: 'تحميل الإجابات الخاطئة فقط بالتبريرات (PDF)',
-          fileSuffix: 'الإجابات_الخاطئة',
-          icon: 'fa-file-pdf',
-          badgeEmoji: '❌',
-          accent: '#b91c1c',
-          accentSoft: 'rgba(239,68,68,0.12)',
-          accentBorder: 'rgba(248,113,113,0.42)',
-          grad: 'linear-gradient(135deg, #b91c1c 0%, #c2410c 100%)'
-        },
-        skipped: {
-          title: 'الأسئلة المتخطاة فقط',
-          shortLabel: 'المتخطاة',
-          btnLabel: 'تحميل الأسئلة المتخطاة فقط بالإجابات والتبريرات (PDF)',
-          fileSuffix: 'الأسئلة_المتخطاة',
-          icon: 'fa-file-pdf',
-          badgeEmoji: '⏭',
-          accent: '#b45309',
-          accentSoft: 'rgba(245,158,11,0.12)',
-          accentBorder: 'rgba(251,191,36,0.45)',
-          grad: 'linear-gradient(135deg, #b45309 0%, #d97706 100%)'
-        }
-      };
-      return map[sectionKey] || map.all;
-    }
-
-    function drawPdfRoundRect(ctx, x, y, w, h, r, fill, stroke, strokeW = 1.5) {
-      const rad = Math.max(0, Math.min(r, w / 2, h / 2));
-      ctx.beginPath();
-      ctx.moveTo(x + rad, y);
-      ctx.arcTo(x + w, y, x + w, y + h, rad);
-      ctx.arcTo(x + w, y + h, x, y + h, rad);
-      ctx.arcTo(x, y + h, x, y, rad);
-      ctx.arcTo(x, y, x + w, y, rad);
-      ctx.closePath();
-      if (fill) {
-        ctx.fillStyle = fill;
-        ctx.fill();
-      }
-      if (stroke) {
-        ctx.lineWidth = strokeW;
-        ctx.strokeStyle = stroke;
-        ctx.stroke();
-      }
-    }
-
-    function wrapCanvasRtlLines(ctx, text, maxWidth, font) {
-      ctx.font = font;
-      const raw = String(text ?? '').replace(/\r\n/g, '\n').trim();
-      if (!raw) return [];
-      const paragraphs = raw.split('\n');
-      const lines = [];
-      for (const para of paragraphs) {
-        const words = para.trim().split(/\s+/).filter(Boolean);
-        if (words.length === 0) continue;
-        let currentLine = words[0];
-        for (let i = 1; i < words.length; i++) {
-          const word = words[i];
-          const testLine = currentLine + ' ' + word;
-          if (ctx.measureText(testLine).width <= maxWidth) {
-            currentLine = testLine;
-          } else {
-            lines.push(currentLine);
-            currentLine = word;
-          }
-        }
-        lines.push(currentLine);
-      }
-      return lines;
-    }
-
-    function canvasesToPdfBlob(canvases) {
-      const jpegs = canvases.map(c => {
-        const dataUrl = c.toDataURL('image/jpeg', 0.92);
-        const b64 = dataUrl.split(',')[1];
-        const bin = atob(b64);
-        const bytes = new Uint8Array(bin.length);
-        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-        return { bytes, width: c.width, height: c.height };
-      });
-
-      const chunks = [];
-      let offset = 0;
-      const offsets = [];
-      const enc = new TextEncoder();
-
-      function pushAscii(str) {
-        const arr = enc.encode(str);
-        chunks.push(arr);
-        offset += arr.length;
-      }
-      function pushBytes(arr) {
-        chunks.push(arr);
-        offset += arr.length;
-      }
-      function startObj(id) {
-        offsets[id] = offset;
-        pushAscii(`${id} 0 obj\n`);
-      }
-      function endObj() {
-        pushAscii(`\nendobj\n`);
-      }
-
-      pushAscii('%PDF-1.4\n');
-      pushBytes(new Uint8Array([0x25, 0xE2, 0xE3, 0xCF, 0xD3, 0x0A]));
-
-      const n = jpegs.length;
-      const pageIds = [];
-      for (let i = 0; i < n; i++) pageIds.push(3 + i * 3);
-
-      startObj(1);
-      pushAscii('<< /Type /Catalog /Pages 2 0 R >>');
-      endObj();
-
-      startObj(2);
-      pushAscii(`<< /Type /Pages /Kids [${pageIds.map(id => `${id} 0 R`).join(' ')}] /Count ${n} >>`);
-      endObj();
-
-      const pageW = '595.28';
-      const pageH = '841.89';
-
-      for (let i = 0; i < n; i++) {
-        const pageId = 3 + i * 3;
-        const contentId = 4 + i * 3;
-        const imgId = 5 + i * 3;
-        const img = jpegs[i];
-        const contentStr = `q ${pageW} 0 0 ${pageH} 0 0 cm /Im${i} Do Q`;
-
-        startObj(pageId);
-        pushAscii(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW} ${pageH}] /Resources << /XObject << /Im${i} ${imgId} 0 R >> >> /Contents ${contentId} 0 R >>`);
-        endObj();
-
-        startObj(contentId);
-        pushAscii(`<< /Length ${contentStr.length} >>\nstream\n${contentStr}\nendstream`);
-        endObj();
-
-        startObj(imgId);
-        pushAscii(`<< /Type /XObject /Subtype /Image /Width ${img.width} /Height ${img.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${img.bytes.length} >>\nstream\n`);
-        pushBytes(img.bytes);
-        pushAscii(`\nendstream`);
-        endObj();
-      }
-
-      const totalObjs = 2 + n * 3;
-      const xrefOffset = offset;
-      pushAscii(`xref\n0 ${totalObjs + 1}\n`);
-      pushAscii('0000000000 65535 f \n');
-      for (let id = 1; id <= totalObjs; id++) {
-        pushAscii(`${String(offsets[id]).padStart(10, '0')} 00000 n \n`);
-      }
-      pushAscii(`trailer\n<< /Size ${totalObjs + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`);
-      return new Blob(chunks, { type: 'application/pdf' });
-    }
-
-    function renderReviewPagesToCanvases(sectionKey, items, stats) {
-      const W = 1240;
-      const H = 1754;
-      const PAD = 48;
-      const CW = W - PAD * 2;
-      const FOOTER_H = 64;
-      const MAX_Y = H - FOOTER_H - 18;
-      const FONT_FAMILY = "'Cairo', 'Segoe UI', Tahoma, Arial, sans-serif";
-
-      const meta = getReviewSectionMeta(sectionKey);
-      const quizTitle = String(currentQuiz?.title || 'اختبار المنصة');
-      const quizSubject = String(currentQuiz?.subject || 'كلية نظم ومعلومات أعمال (BIS)');
-      const studentName = String(
-        (window.currentUserProfile && (window.currentUserProfile.full_name || window.currentUserProfile.email)) ||
-        localStorage.getItem('bis_student_name') || ''
-      ).trim();
-      const nowStr = new Date().toLocaleString('ar-EG', {
-        year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
-      });
-      const arabicLetters = ['أ', 'ب', 'ج', 'د', 'هـ', 'و'];
-
-      const pages = [];
-      let curCanvas = null;
-      let ctx = null;
-      let curY = PAD;
-
-      function createNewPage(isFirstPage) {
-        const c = document.createElement('canvas');
-        c.width = W;
-        c.height = H;
-        const cCtx = c.getContext('2d');
-        cCtx.direction = 'rtl';
-        cCtx.textBaseline = 'top';
-        cCtx.fillStyle = '#ffffff';
-        cCtx.fillRect(0, 0, W, H);
-        pages.push(c);
-        curCanvas = c;
-        ctx = cCtx;
-        curY = PAD;
-
-        if (isFirstPage) {
-          // 1. Header Banner
-          const bannerH = 148;
-          const grad = ctx.createLinearGradient(W - PAD, curY, PAD, curY + bannerH);
-          if (sectionKey === 'correct') { grad.addColorStop(0, '#15803d'); grad.addColorStop(1, '#0d9488'); }
-          else if (sectionKey === 'wrong') { grad.addColorStop(0, '#b91c1c'); grad.addColorStop(1, '#c2410c'); }
-          else if (sectionKey === 'skipped') { grad.addColorStop(0, '#b45309'); grad.addColorStop(1, '#d97706'); }
-          else { grad.addColorStop(0, '#0f766e'); grad.addColorStop(1, '#1d4ed8'); }
-
-          drawPdfRoundRect(ctx, PAD, curY, CW, bannerH, 22, grad, null);
-
-          ctx.direction = 'rtl';
-          ctx.textAlign = 'right';
-          ctx.font = `700 17px ${FONT_FAMILY}`;
-          ctx.fillStyle = 'rgba(255,255,255,0.9)';
-          ctx.fillText('منصة كلية نظم ومعلومات أعمال (BIS) — تقرير مراجعة الاختبار', W - PAD - 26, curY + 20);
-
-          ctx.font = `900 28px ${FONT_FAMILY}`;
-          ctx.fillStyle = '#ffffff';
-          const titleLines = wrapCanvasRtlLines(ctx, quizTitle, CW - 310, ctx.font);
-          ctx.fillText(titleLines[0] || quizTitle, W - PAD - 26, curY + 50);
-
-          ctx.font = `600 18px ${FONT_FAMILY}`;
-          ctx.fillStyle = 'rgba(255,255,255,0.95)';
-          const subLine = `المادة: ${quizSubject}${studentName ? `   |   الطالب: ${studentName}` : ''}`;
-          ctx.fillText(subLine, W - PAD - 26, curY + 98);
-
-          // Exported section pill on the left of banner
-          const pillW = 240;
-          const pillH = 86;
-          const pillX = PAD + 24;
-          const pillY = curY + (bannerH - pillH) / 2;
-          drawPdfRoundRect(ctx, pillX, pillY, pillW, pillH, 16, 'rgba(255,255,255,0.18)', 'rgba(255,255,255,0.4)', 1.5);
-          ctx.textAlign = 'center';
-          ctx.font = `700 15px ${FONT_FAMILY}`;
-          ctx.fillStyle = 'rgba(255,255,255,0.92)';
-          ctx.fillText('القسم المصدّر', pillX + pillW / 2, pillY + 14);
-          ctx.font = `900 20px ${FONT_FAMILY}`;
-          ctx.fillStyle = '#ffffff';
-          ctx.fillText(meta.title, pillX + pillW / 2, pillY + 42);
-
-          curY += bannerH + 18;
-
-          // 2. KPI Summary Boxes (4 boxes RTL from right to left)
-          const kpiData = [
-            { val: String(items.length), label: 'أسئلة هذا الملف', bg: '#f8fafc', border: '#cbd5e1', col: meta.accent },
-            { val: String(stats.correct), label: 'إجابات صحيحة', bg: '#f0fdf4', border: '#86efac', col: '#15803d' },
-            { val: String(stats.wrong), label: 'إجابات خاطئة', bg: '#fef2f2', border: '#fca5a5', col: '#b91c1c' },
-            { val: String(stats.skipped), label: 'أسئلة متخطاة', bg: '#fffbeb', border: '#fcd34d', col: '#b45309' }
-          ];
-          const gap = 16;
-          const boxW = (CW - gap * 3) / 4;
-          const boxH = 86;
-          kpiData.forEach((k, idx) => {
-            const bx = W - PAD - boxW - idx * (boxW + gap);
-            drawPdfRoundRect(ctx, bx, curY, boxW, boxH, 14, k.bg, k.border, 1.5);
-            ctx.textAlign = 'center';
-            ctx.font = `900 27px ${FONT_FAMILY}`;
-            ctx.fillStyle = k.col;
-            ctx.fillText(k.val, bx + boxW / 2, curY + 12);
-            ctx.font = `700 15px ${FONT_FAMILY}`;
-            ctx.fillStyle = '#334155';
-            ctx.fillText(k.label, bx + boxW / 2, curY + 50);
-          });
-
-          curY += boxH + 22;
-        }
-      }
-
-      createNewPage(true);
-
-      const qFont = `800 21px ${FONT_FAMILY}`;
-      const qLineH = 33;
-      const optFont = `700 18px ${FONT_FAMILY}`;
-      const optLineH = 28;
-      const expTitleFont = `800 17px ${FONT_FAMILY}`;
-      const expFont = `600 17px ${FONT_FAMILY}`;
-      const expLineH = 27;
-      const innerPadX = 24;
-      const textMaxW = CW - innerPadX * 2 - 14;
-
-      items.forEach(({ q, i, result }, idx) => {
-        const ans = userAnswers[i];
-        const statusCfg = result === 'correct'
-          ? { label: '✓ إجابة صحيحة', bg: '#dcfce7', color: '#166534', border: '#86efac', stripe: '#16a34a' }
-          : result === 'wrong'
-            ? { label: '✗ إجابة خاطئة', bg: '#fee2e2', color: '#991b1b', border: '#fca5a5', stripe: '#dc2626' }
-            : { label: '⏭ سؤال متخطى', bg: '#fef3c7', color: '#92400e', border: '#fcd34d', stripe: '#d97706' };
-
-        const qLines = wrapCanvasRtlLines(ctx, q.question || '', textMaxW, qFont);
-        const hasSkippedBanner = result === 'skipped' && (q.type === 'mcq' || q.type === 'tf');
-
-        // Build option entries
-        const optionRows = [];
-        if (q.type === 'mcq' && Array.isArray(q.options)) {
-          q.options.forEach((optText, optIdx) => {
-            const isCorrectOpt = optIdx === q.correct;
-            const isUserWrongOpt = result === 'wrong' && ans === optIdx && !isCorrectOpt;
-            const isUserRightOpt = result === 'correct' && ans === optIdx && isCorrectOpt;
-            let bg = '#f8fafc', border = '#e2e8f0', textCol = '#1e293b', tagText = '', tagBg = '';
-            if (isCorrectOpt) {
-              bg = '#ecfdf5'; border = '#34d399'; textCol = '#065f46';
-              tagText = isUserRightOpt ? '✓ إجابتك الصحيحة' : '✓ الإجابة الصحيحة';
-              tagBg = '#059669';
-            } else if (isUserWrongOpt) {
-              bg = '#fef2f2'; border = '#f87171'; textCol = '#991b1b';
-              tagText = '✗ إجابتك';
-              tagBg = '#dc2626';
-            }
-            const letter = arabicLetters[optIdx] || String(optIdx + 1);
-            const availW = tagText ? (textMaxW - 210) : (textMaxW - 55);
-            const lines = wrapCanvasRtlLines(ctx, `${letter}) ${optText}`, availW, optFont);
-            optionRows.push({ lines, bg, border, textCol, tagText, tagBg });
-          });
-        } else if (q.type === 'tf') {
-          const labels = ['صح', 'خطأ'];
-          [0, 1].forEach(optIdx => {
-            const isCorrectOpt = optIdx === q.correct;
-            const isUserWrongOpt = result === 'wrong' && ans === optIdx && !isCorrectOpt;
-            let bg = '#f8fafc', border = '#e2e8f0', textCol = '#1e293b', tagText = '', tagBg = '';
-            if (isCorrectOpt) {
-              bg = '#ecfdf5'; border = '#34d399'; textCol = '#065f46';
-              tagText = '✓ الإجابة الصحيحة'; tagBg = '#059669';
-            } else if (isUserWrongOpt) {
-              bg = '#fef2f2'; border = '#f87171'; textCol = '#991b1b';
-              tagText = '✗ إجابتك'; tagBg = '#dc2626';
-            }
-            optionRows.push({ lines: [labels[optIdx]], bg, border, textCol, tagText, tagBg });
-          });
-        } else if (q.type === 'essay') {
-          const userAnsStr = ans ? `إجابتك: ${ans}` : 'إجابتك: لم يتم كتابة إجابة (متخطى)';
-          optionRows.push({
-            lines: wrapCanvasRtlLines(ctx, userAnsStr, textMaxW - 30, optFont),
-            bg: '#f8fafc', border: '#cbd5e1', textCol: '#1e293b', tagText: '', tagBg: ''
-          });
-          if (q.keywords?.length) {
-            optionRows.push({
-              lines: wrapCanvasRtlLines(ctx, `الكلمات المفتاحية النموذجية: ${q.keywords.join('، ')}`, textMaxW - 30, optFont),
-              bg: '#ecfdf5', border: '#34d399', textCol: '#065f46', tagText: '', tagBg: ''
-            });
-          }
-        }
-
-        const expLines = q.explanation ? wrapCanvasRtlLines(ctx, q.explanation, textMaxW - 32, expFont) : [];
-
-        // Calculate exact card height
-        let cardH = 18 + 38 + 10; // top pad + header badges + gap
-        cardH += Math.max(1, qLines.length) * qLineH + 12;
-        if (hasSkippedBanner) cardH += 44 + 10;
-        optionRows.forEach(row => {
-          const rowH = Math.max(1, row.lines.length) * optLineH + 16;
-          row.rowH = rowH;
-          cardH += rowH + 8;
-        });
-        if (expLines.length > 0) {
-          cardH += 6 + (34 + expLines.length * expLineH + 16);
-        }
-        cardH += 14; // bottom pad
-
-        // Page break if card doesn't fit on current page
-        if (curY + cardH > MAX_Y && curY > PAD + 20) {
-          createNewPage(false);
-        }
-
-        // Draw Card Outer Box
-        drawPdfRoundRect(ctx, PAD, curY, CW, cardH, 16, '#ffffff', '#cbd5e1', 1.5);
-        // Right colored accent stripe
-        drawPdfRoundRect(ctx, W - PAD - 9, curY + 2, 9, cardH - 4, 4, statusCfg.stripe, null);
-
-        let y = curY + 16;
-        const rightEdge = W - PAD - innerPadX;
-        const leftEdge = PAD + innerPadX;
-
-        // Header Row: Question # badge (right) & Status badge (left)
-        const qNumText = `سؤال ${i + 1}  (${idx + 1} من ${items.length})`;
-        ctx.font = `800 16px ${FONT_FAMILY}`;
-        const qNumW = ctx.measureText(qNumText).width + 28;
-        drawPdfRoundRect(ctx, rightEdge - qNumW, y, qNumW, 34, 10, '#f1f5f9', '#cbd5e1', 1);
-        ctx.textAlign = 'center';
-        ctx.fillStyle = '#334155';
-        ctx.fillText(qNumText, rightEdge - qNumW / 2, y + 6);
-
-        const stW = ctx.measureText(statusCfg.label).width + 30;
-        drawPdfRoundRect(ctx, leftEdge, y, stW, 34, 17, statusCfg.bg, statusCfg.border, 1.5);
-        ctx.fillStyle = statusCfg.color;
-        ctx.fillText(statusCfg.label, leftEdge + stW / 2, y + 6);
-
-        y += 34 + 12;
-
-        // Question Text
-        ctx.textAlign = 'right';
-        ctx.font = qFont;
-        ctx.fillStyle = '#0f172a';
-        qLines.forEach(line => {
-          ctx.fillText(line, rightEdge, y);
-          y += qLineH;
-        });
-        y += 10;
-
-        // Skipped banner if skipped
-        if (hasSkippedBanner) {
-          drawPdfRoundRect(ctx, leftEdge, y, CW - innerPadX * 2, 42, 10, '#fffbeb', '#f59e0b', 1.5);
-          ctx.textAlign = 'right';
-          ctx.font = `700 16px ${FONT_FAMILY}`;
-          ctx.fillStyle = '#92400e';
-          ctx.fillText('⏭ لم تقم باختيار إجابة لهذا السؤال — الإجابة الصحيحة موضحة باللون الأخضر أدناه:', rightEdge - 14, y + 9);
-          y += 42 + 10;
-        }
-
-        // Option Rows
-        optionRows.forEach(row => {
-          const boxX = leftEdge;
-          const boxW = CW - innerPadX * 2;
-          drawPdfRoundRect(ctx, boxX, y, boxW, row.rowH, 12, row.bg, row.border, 1.5);
-
-          ctx.textAlign = 'right';
-          ctx.font = optFont;
-          ctx.fillStyle = row.textCol;
-          let oy = y + 8;
-          row.lines.forEach(line => {
-            ctx.fillText(line, rightEdge - 14, oy);
-            oy += optLineH;
-          });
-
-          if (row.tagText) {
-            ctx.font = `800 14px ${FONT_FAMILY}`;
-            const tagW = ctx.measureText(row.tagText).width + 24;
-            const tagH = 28;
-            const tagX = boxX + 12;
-            const tagY = y + (row.rowH - tagH) / 2;
-            drawPdfRoundRect(ctx, tagX, tagY, tagW, tagH, 14, row.tagBg, null);
-            ctx.textAlign = 'center';
-            ctx.fillStyle = '#ffffff';
-            ctx.fillText(row.tagText, tagX + tagW / 2, tagY + 4);
-          }
-
-          y += row.rowH + 8;
-        });
-
-        // Explanation Box
-        if (expLines.length > 0) {
-          y += 4;
-          const expBoxH = 34 + expLines.length * expLineH + 14;
-          const expX = leftEdge;
-          const expW = CW - innerPadX * 2;
-          drawPdfRoundRect(ctx, expX, y, expW, expBoxH, 12, '#eff6ff', '#93c5fd', 1.5);
-          drawPdfRoundRect(ctx, expX + expW - 7, y + 2, 7, expBoxH - 4, 3, '#2563eb', null);
-
-          ctx.textAlign = 'right';
-          ctx.font = expTitleFont;
-          ctx.fillStyle = '#1d4ed8';
-          ctx.fillText('💡 التبرير والشرح:', rightEdge - 16, y + 8);
-
-          ctx.font = expFont;
-          ctx.fillStyle = '#1e3a8a';
-          let ey = y + 36;
-          expLines.forEach(line => {
-            ctx.fillText(line, rightEdge - 16, ey);
-            ey += expLineH;
-          });
-        }
-
-        curY += cardH + 16;
-      });
-
-      // Draw Footer on all pages
-      const totalPages = pages.length;
-      pages.forEach((pCanvas, pIdx) => {
-        const pCtx = pCanvas.getContext('2d');
-        pCtx.direction = 'rtl';
-        pCtx.textBaseline = 'top';
-        const fy = H - FOOTER_H;
-        pCtx.strokeStyle = '#cbd5e1';
-        pCtx.lineWidth = 1.5;
-        pCtx.beginPath();
-        pCtx.moveTo(PAD, fy);
-        pCtx.lineTo(W - PAD, fy);
-        pCtx.stroke();
-
-        pCtx.font = `700 15px ${FONT_FAMILY}`;
-        pCtx.fillStyle = '#64748b';
-        pCtx.textAlign = 'right';
-        pCtx.fillText(`منصة كلية نظم ومعلومات أعمال (BIS) — ${meta.title}`, W - PAD, fy + 16);
-
-        pCtx.textAlign = 'center';
-        pCtx.fillStyle = '#0f172a';
-        pCtx.fillText(`صفحة ${pIdx + 1} من ${totalPages}`, W / 2, fy + 16);
-
-        pCtx.textAlign = 'left';
-        pCtx.fillStyle = '#64748b';
-        pCtx.fillText(`تاريخ الإنشاء: ${nowStr}`, PAD, fy + 16);
-      });
-
-      return pages;
-    }
-
-    async function exportReviewSectionPDF(sectionKey) {
-      if (!currentQuiz || !Array.isArray(currentQuiz.questions)) return;
-      const allMapped = currentQuiz.questions.map((q, i) => ({ q, i, result: getQuestionResult(q, i) }));
-      const items = allMapped.filter(({ result }) => sectionKey === 'all' || result === sectionKey);
-      if (items.length === 0) {
-        if (typeof toast === 'function') toast('لا توجد أسئلة في هذا القسم لتحميلها', 'info');
-        return;
-      }
-
-      const stats = {
-        total: allMapped.length,
-        correct: allMapped.filter(x => x.result === 'correct').length,
-        wrong: allMapped.filter(x => x.result === 'wrong').length,
-        skipped: allMapped.filter(x => x.result === 'skipped').length
-      };
-      const meta = getReviewSectionMeta(sectionKey);
-      const btn = document.getElementById('review-section-pdf-btn');
-      const prevBtnHtml = btn ? btn.innerHTML : '';
-      if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> جاري تجهيز ملف PDF منظم...';
-      }
-
-      const safeTitle = String(currentQuiz.title || 'اختبار').replace(/[\\/:*?"<>|]+/g, '_').trim().slice(0, 50);
-      const fileName = `BIS_${safeTitle}_${meta.fileSuffix}.pdf`;
-
-      try {
-        if (document.fonts && document.fonts.ready) {
-          try { await document.fonts.ready; } catch (e) {}
-        }
-        await new Promise(r => setTimeout(r, 30));
-
-        const canvases = renderReviewPagesToCanvases(sectionKey, items, stats);
-        const pdfBlob = canvasesToPdfBlob(canvases);
-        const blobUrl = URL.createObjectURL(pdfBlob);
-        const link = document.createElement('a');
-        link.href = blobUrl;
-        link.download = fileName;
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        setTimeout(() => URL.revokeObjectURL(blobUrl), 15000);
-
-        if (typeof toast === 'function') toast(`✅ تم تحميل ملف PDF (${meta.title} — ${canvases.length} صفحة) بنجاح!`, 'success');
-      } catch (err) {
-        console.error('PDF generation error:', err);
-        if (typeof toast === 'function') toast('حدث خطأ أثناء إنشاء ملف PDF', 'error');
-      } finally {
-        if (btn) {
-          btn.disabled = false;
-          btn.innerHTML = prevBtnHtml;
-        }
-      }
-    }
-
     function renderReviewList() {
       const container = document.getElementById('review-list');
       const questions = currentQuiz.questions;
 
-      const allMapped = questions.map((q, i) => ({ q, i, result: getQuestionResult(q, i) }));
-      const counts = {
-        all: allMapped.length,
-        wrong: allMapped.filter(x => x.result === 'wrong').length,
-        correct: allMapped.filter(x => x.result === 'correct').length,
-        skipped: allMapped.filter(x => x.result === 'skipped').length
-      };
-
-      const tabLabels = {
-        all: `الكل (${counts.all})`,
-        wrong: `❌ الخاطئة (${counts.wrong})`,
-        correct: `✅ الصحيحة (${counts.correct})`,
-        skipped: `⏭ المتخطاة (${counts.skipped})`
-      };
-      Object.keys(tabLabels).forEach(k => {
-        const el = document.getElementById(`filter-${k}`);
-        if (el) el.textContent = tabLabels[k];
-      });
-
-      const items = allMapped.filter(({ result }) => reviewFilter === 'all' || result === reviewFilter);
+      const items = questions.map((q, i) => ({ q, i, result: getQuestionResult(q, i) }))
+        .filter(({ result }) => reviewFilter === 'all' || result === reviewFilter);
 
       if (items.length === 0) {
         container.innerHTML = `<div class="empty"><i class="fas fa-check-double"></i><p>لا توجد أسئلة في هذه الفئة</p></div>`;
         return;
       }
 
-      const meta = getReviewSectionMeta(reviewFilter);
-      const sectionDownloadBar = `
-        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;padding:12px 15px;margin-bottom:14px;border-radius:14px;background:${meta.accentSoft};border:1.5px solid ${meta.accentBorder}">
-          <div style="display:flex;align-items:center;gap:8px;font-size:0.86rem;font-weight:800;color:var(--text)">
-            <span>${meta.badgeEmoji}</span>
-            <span>${meta.title} <span style="opacity:0.75">(${items.length} سؤال)</span></span>
-          </div>
-          <button type="button" id="review-section-pdf-btn" class="btn" onclick="exportReviewSectionPDF('${reviewFilter}')" style="background:${meta.grad};color:#ffffff;border:none;padding:8px 15px;font-size:0.82rem;font-weight:800;border-radius:10px;display:inline-flex;align-items:center;gap:7px;box-shadow:0 4px 14px rgba(0,0,0,0.22);cursor:pointer">
-            <i class="fas ${meta.icon}"></i>
-            <span>${meta.btnLabel}</span>
-          </button>
-        </div>`;
-
-      container.innerHTML = sectionDownloadBar + items.map(({ q, i, result }, idx) => {
+      container.innerHTML = items.map(({ q, i, result }, idx) => {
         const ans = userAnswers[i];
         const badgeClass = result === 'correct' ? 'badge-correct' : result === 'wrong' ? 'badge-wrong' : 'badge-skipped';
         const badgeText = result === 'correct' ? '✅ صح' : result === 'wrong' ? '❌ غلط' : '⏭ متخطي';
@@ -7818,7 +7205,7 @@ ESSAY
               <h4 dir="${ownerNameDir(o.name)}">${o.name}<span class="owner-leader-verified" title="Owner موثّق">${OWNER_VERIFIED_BADGE_SVG}</span></h4>
               <div class="owner-leader-tag">Owner</div>
               <div class="owner-leader-divider"></div>
-              <div class="owner-leader-pill"><i class="fas fa-lock"></i> ادخل باسورد القسم للإدارة</div>
+              <div class="owner-leader-pill"><i class="fas fa-lock"></i> ادخل باسورد قسمه للإدارة</div>
             </div>
           </div>
           <div class="owner-leader-photo-wrap">
@@ -8023,7 +7410,7 @@ ESSAY
               <h4 dir="${ownerNameDir(o.name)}">${o.name}<span class="owner-leader-verified" title="Owner موثّق">${OWNER_VERIFIED_BADGE_SVG}</span></h4>
               <div class="owner-leader-tag">Owner</div>
               <div class="owner-leader-divider"></div>
-              <div class="owner-leader-pill"><i class="fas fa-lock"></i> ادخل باسورد القسم للإدارة</div>
+              <div class="owner-leader-pill"><i class="fas fa-lock"></i> ادخل باسورد قسمه للإدارة</div>
             </div>
           </div>
           <div class="owner-leader-photo-wrap">
@@ -10145,7 +9532,7 @@ ESSAY
       try {
         await api('notifications?grade=eq.sys_admin', { method: 'DELETE' });
         if (_knownSuperAdminAlertIds) _knownSuperAdminAlertIds.clear();
-        toast('🗑️ تم مسح جميع إشعارات من صفحة المطور');
+        toast('🗑️ تم مسح جميع إشعارات السوبر أدمن');
       } catch (e) {
         await Promise.all(idsToDelete.map(id => api(`notifications?id=eq.${id}`, { method: 'DELETE' }).catch(() => {})));
       }
@@ -11402,7 +10789,7 @@ ESSAY
           errEl.style.color = 'var(--amber)';
           errEl.innerHTML = `⏳ تم تسجيل بيانات حسابك كـ <b>طالب</b> في المنصة، ولكن تم تجاوز الحد المؤقت لإرسال رسائل التأكيد. يمكن للسوبر أدمن الضغط على «تأكيد الحساب» لك فوراً أو يمكنك إعادة المحاولة بعد قليل.`;
         }
-        toast('⏳ تم تسجيل حسابك كطالب — بانتظار تأكيد الإيميل أو التفعيل من المطور');
+        toast('⏳ تم تسجيل حسابك كطالب — بانتظار تأكيد الإيميل أو تفعيل السوبر أدمن');
         return;
       }
 
@@ -11444,7 +10831,7 @@ ESSAY
       if (res.ok) {
         toast('📩 تمت إعادة إرسال رابط تأكيد الحساب إلى بريدك الإلكتروني (تفقد البريد الوارد و Spam)');
       } else {
-        toast('⚠️ تم إرسال الرسالة بالفعل مؤخراً — انتظر دقيقة أو تواصل مع المطور لتأكيد الحساب فوراً', 'error');
+        toast('⚠️ تم إرسال الرسالة بالفعل مؤخراً — انتظر دقيقة أو تواصل مع السوبر أدمن لتأكيد الحساب فوراً', 'error');
       }
     } catch (e) {
       toast('تعذر إعادة إرسال الرابط حالياً', 'error');
@@ -11486,7 +10873,7 @@ ESSAY
         if (errCode === 'over_email_send_rate_limit' || msg.includes('email rate limit exceeded')) {
           if (errEl) {
             errEl.style.color = 'var(--amber)';
-            errEl.innerHTML = `⚠️ <b>وصل سيرفر الإيميلات المجاني في Supabase للحد الأقصى المؤقت (3 إيميلات في الساعة).</b><br>حلول فورية:<br>1️⃣ انتظر حتى تتجدد حصة الساعة أو اربط Gmail SMTP مجاني في Supabase.<br>2️⃣ أو من <b>لوحة المطور</b> اضغط زر <b>"🔑 تغيير الباسورد"</b> بجانب الإيميل لتعيين الباسورد الجديد فوراً.`;
+            errEl.innerHTML = `⚠️ <b>وصل سيرفر الإيميلات المجاني في Supabase للحد الأقصى المؤقت (3 إيميلات في الساعة).</b><br>حلول فورية:<br>1️⃣ انتظر حتى تتجدد حصة الساعة أو اربط Gmail SMTP مجاني في Supabase.<br>2️⃣ أو من <b>لوحة السوبر أدمن</b> اضغط زر <b>"🔑 تغيير الباسورد"</b> بجانب الإيميل لتعيين الباسورد الجديد فوراً.`;
           }
           toast('⚠️ تم استنفاذ حد الإيميلات المجاني في السيرفر لهذه الساعة (3 رسائل/ساعة)', 'error');
           return;
@@ -11725,7 +11112,7 @@ ESSAY
     }
   };
 
-  // قناة المزامنة اللحظية (Real-Time Sync) بين لوحة المطور ومنصة الطلاب بدون ريفريش
+  // قناة المزامنة اللحظية (Real-Time Sync) بين لوحة السوبر أدمن ومنصة الطلاب بدون ريفريش
   let _bisRealtimeChannel = null;
   try {
     if (typeof BroadcastChannel !== 'undefined') {
@@ -12590,7 +11977,7 @@ ESSAY
     if (!document.getElementById('admin-page')?.classList.contains('hidden')) {
       if (typeof showGradeSelection === 'function') showGradeSelection();
     }
-    toast('⛔ ليس لديك صلاحيات إدارية لفتح لوحة التحكم — يجب أن يمنحك المطور الصلاحيات أولاً', 'error');
+    toast('⛔ ليس لديك صلاحيات إدارية لفتح لوحة التحكم — يجب أن يمنحك السوبر أدمن الصلاحيات أولاً', 'error');
   };
 
   // Upgrade submitPwd to use secure RPC verify_admin_key first, then fallback to gradePasswords (Super Admin page only)
@@ -12937,7 +12324,7 @@ ESSAY
                 <button type="button" class="btn btn-blue" style="padding:5px 11px;font-size:0.76rem" onclick="startEditStudentNotification('${n.id}')" title="تعديل هذا الإشعار">
                   <i class="fas fa-edit"></i> تعديل
                 </button>
-                <button type="button" class="btn btn-danger" style="padding:5px 11px;font-size:0.76rem" onclick="deleteStudentNotificationPermanently('${n.id}')" title="حذف الإشعار نهائياً من الطلاب والمطور">
+                <button type="button" class="btn btn-danger" style="padding:5px 11px;font-size:0.76rem" onclick="deleteStudentNotificationPermanently('${n.id}')" title="حذف الإشعار نهائياً من الطلاب والسوبر أدمن">
                   <i class="fas fa-trash-alt"></i> حذف نهائياً
                 </button>
               </div>
@@ -13161,7 +12548,7 @@ ESSAY
     const titleStr = item ? item.title : `#${notifId}`;
     const ok = await showConfirm({
       title: 'حذف الإشعار نهائياً',
-      msg: `سيتم حذف الإشعار "${titleStr}" نهائياً من صفحة الطلاب ومن صقحة المطور فوراً. هل أنت متأكد؟`,
+      msg: `سيتم حذف الإشعار "${titleStr}" نهائياً من صفحة الطلاب ومن السوبر أدمن فوراً. هل أنت متأكد؟`,
       type: 'danger',
       icon: 'fa-trash-alt',
       okText: 'نعم، احذف نهائياً'
@@ -13179,7 +12566,7 @@ ESSAY
         window.broadcastRealtimeUserSync('student_notif_deleted', titleStr, String(notifId));
       }
       await loadAdminDashboardOverview(true);
-      toast('🗑️ تم حذف الإشعار نهائياً من صفحة الطلاب وصفحة الادمن!');
+      toast('🗑️ تم حذف الإشعار نهائياً من صفحة الطلاب والسوبر أدمن!');
     } catch (e) {
       toast('تعذر حذف الإشعار', 'error');
     }
@@ -13190,7 +12577,7 @@ ESSAY
     if (!count) return;
     const ok = await showConfirm({
       title: 'حذف جميع إشعارات الطلاب نهائياً',
-      msg: `سيتم حذف جميع الإشعارات المرسلة للطلاب (${count} إشعار) نهائياً من صفحة الطلاب ومن صفحة المطور. هل أنت متأكد؟`,
+      msg: `سيتم حذف جميع الإشعارات المرسلة للطلاب (${count} إشعار) نهائياً من صفحة الطلاب ومن السوبر أدمن. هل أنت متأكد؟`,
       type: 'danger',
       icon: 'fa-trash-alt',
       okText: 'نعم، احذف الكل نهائياً'
@@ -13206,7 +12593,7 @@ ESSAY
         window.broadcastRealtimeUserSync('student_notif_deleted', 'all', 'all');
       }
       await loadAdminDashboardOverview(true);
-      toast('🗑️ تم حذف جميع إشعارات الطلاب نهائياً من المنصة وصحفة المطور');
+      toast('🗑️ تم حذف جميع إشعارات الطلاب نهائياً من المنصة والسوبر أدمن!');
     } catch (e) {
       toast('تعذر حذف جميع الإشعارات', 'error');
     }
@@ -15952,7 +15339,7 @@ ESSAY
       return true;
     });
 
-    const downloads = studentTraffic.filter(ev => ev.action === 'download_file');
+    const downloads = studentTraffic.filter(ev => ev.action === 'download_file' || ev.action === 'download_review_pdf');
     const solvedCount = studentAttempts.length;
     const avgScore = solvedCount ? Math.round(studentAttempts.reduce((s, a) => s + Number(a.score_pct || 0), 0) / solvedCount) : 0;
     const totalCorrect = studentAttempts.reduce((s, a) => s + Number(a.correct_count || 0), 0);
@@ -15960,6 +15347,7 @@ ESSAY
 
     const actionLabels = {
       download_file: '📥 تحميل / فتح ملف',
+      download_review_pdf: '📄 تحميل PDF مراجعة الأسئلة',
       open_section: '📂 دخول قسم',
       open_subject: '📚 فتح مادة',
       open_owner: '👑 فتح مجلد Owner',
@@ -16034,9 +15422,12 @@ ESSAY
                 ? `<p style="font-size:0.8rem;color:var(--text-dim);margin:0">لم يقم بتحميل أو فتح أي ملفات مسجلة بعد.</p>`
                 : downloads.map(d => `
                   <div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:0.8rem">
-                    <div style="font-weight:800;color:var(--text)">${d.title || 'ملف'}</div>
+                    <div style="font-weight:800;color:var(--text);display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                      <span>${d.title || 'ملف'}</span>
+                      ${d.action === 'download_review_pdf' ? `<span style="padding:2px 8px;border-radius:10px;background:rgba(56,189,248,0.16);color:#38bdf8;font-size:0.68rem;font-weight:900">📄 PDF مراجعة الأسئلة</span>` : ''}
+                    </div>
                     <div style="font-size:0.72rem;color:var(--teal);margin-top:2px">
-                      القسم: <b>${d.section || 'عام'}</b> ${d.subject ? `• المادة: <b>${d.subject}</b>` : ''} ${d.owner_name ? `• Owner: <b>${d.owner_name}</b>` : ''}
+                      القسم: <b>${d.section || 'عام'}</b> ${d.subject ? `• المادة: <b>${d.subject}</b>` : ''} ${d.owner_name ? `• Owner: <b>${d.owner_name}</b>` : ''} ${d.extra ? `• <span style="color:var(--accent)">${d.extra}</span>` : ''}
                     </div>
                     <div style="font-size:0.7rem;color:var(--text-dim);margin-top:2px">${new Date(d.created_at).toLocaleString('ar-EG')}</div>
                   </div>`).join('')}
@@ -18144,7 +17535,7 @@ ESSAY
   const _origShowAddOwnerModal = window.showAddOwnerModal;
   window.showAddOwnerModal = function (...args) {
     if (!window.IS_STANDALONE_SUPER_ADMIN) {
-      toast('⛔ إضافة Owner متاحة فقط من لوحة المطور الرئيسية', 'error');
+      toast('⛔ إضافة Owner متاحة فقط من لوحة السوبر أدمن الرئيسية', 'error');
       return;
     }
     if (!window.checkAdminPermission('owners', 'summaries')) {
@@ -18157,7 +17548,7 @@ ESSAY
   const _origShowAddLectureOwnerModal = window.showAddLectureOwnerModal;
   window.showAddLectureOwnerModal = function (...args) {
     if (!window.IS_STANDALONE_SUPER_ADMIN) {
-      toast('⛔ إضافة Owner متاحة فقط من لوحة المطور الرئيسية', 'error');
+      toast('⛔ إضافة Owner متاحة فقط من لوحة السوبر أدمن الرئيسية', 'error');
       return;
     }
     if (!window.checkAdminPermission('owners', 'lectures')) {
@@ -18494,6 +17885,706 @@ ESSAY
       }
     });
   } catch (e) {}
+
+  // ─── 23. QUIZ REVIEW SECTION-BY-SECTION PDF EXPORT ENGINE + REAL-TIME TRAFFIC SYNC ───
+  window._activeReviewFilter = 'all';
+
+  window.getReviewSectionMeta = function (sectionKey) {
+    const map = {
+      all: {
+        title: 'جميع أسئلة الاختبار',
+        shortLabel: 'الكل',
+        btnLabel: 'تحميل جميع الأسئلة بالإجابات والتبريرات (PDF)',
+        fileSuffix: 'كل_الأسئلة',
+        icon: 'fa-file-pdf',
+        badgeEmoji: '📋',
+        accent: '#0d9488',
+        accentSoft: 'rgba(13,148,136,0.12)',
+        accentBorder: 'rgba(45,212,191,0.38)',
+        grad: 'linear-gradient(135deg, #0f766e 0%, #1d4ed8 100%)'
+      },
+      correct: {
+        title: 'الأسئلة الصحيحة فقط',
+        shortLabel: 'الصحيحة',
+        btnLabel: 'تحميل الإجابات الصحيحة فقط بالتبريرات (PDF)',
+        fileSuffix: 'الإجابات_الصحيحة',
+        icon: 'fa-file-pdf',
+        badgeEmoji: '✅',
+        accent: '#15803d',
+        accentSoft: 'rgba(34,197,94,0.12)',
+        accentBorder: 'rgba(34,197,94,0.42)',
+        grad: 'linear-gradient(135deg, #15803d 0%, #0d9488 100%)'
+      },
+      wrong: {
+        title: 'الأسئلة الخاطئة فقط',
+        shortLabel: 'الخاطئة',
+        btnLabel: 'تحميل الإجابات الخاطئة فقط بالتبريرات (PDF)',
+        fileSuffix: 'الإجابات_الخاطئة',
+        icon: 'fa-file-pdf',
+        badgeEmoji: '❌',
+        accent: '#b91c1c',
+        accentSoft: 'rgba(239,68,68,0.12)',
+        accentBorder: 'rgba(248,113,113,0.42)',
+        grad: 'linear-gradient(135deg, #b91c1c 0%, #c2410c 100%)'
+      },
+      skipped: {
+        title: 'الأسئلة المتخطاة فقط',
+        shortLabel: 'المتخطاة',
+        btnLabel: 'تحميل الأسئلة المتخطاة فقط بالإجابات والتبريرات (PDF)',
+        fileSuffix: 'الأسئلة_المتخطاة',
+        icon: 'fa-file-pdf',
+        badgeEmoji: '⏭',
+        accent: '#b45309',
+        accentSoft: 'rgba(245,158,11,0.12)',
+        accentBorder: 'rgba(251,191,36,0.45)',
+        grad: 'linear-gradient(135deg, #b45309 0%, #d97706 100%)'
+      }
+    };
+    return map[sectionKey] || map.all;
+  };
+
+  function drawPdfRoundRect(ctx, x, y, w, h, r, fill, stroke, strokeW = 1.5) {
+    const rad = Math.max(0, Math.min(r, w / 2, h / 2));
+    ctx.beginPath();
+    ctx.moveTo(x + rad, y);
+    ctx.arcTo(x + w, y, x + w, y + h, rad);
+    ctx.arcTo(x + w, y + h, x, y + h, rad);
+    ctx.arcTo(x, y + h, x, y, rad);
+    ctx.arcTo(x, y, x + w, y, rad);
+    ctx.closePath();
+    if (fill) {
+      ctx.fillStyle = fill;
+      ctx.fill();
+    }
+    if (stroke) {
+      ctx.lineWidth = strokeW;
+      ctx.strokeStyle = stroke;
+      ctx.stroke();
+    }
+  }
+
+  function wrapCanvasRtlLines(ctx, text, maxWidth, font) {
+    ctx.font = font;
+    const raw = String(text ?? '').replace(/\r\n/g, '\n').trim();
+    if (!raw) return [];
+    const paragraphs = raw.split('\n');
+    const lines = [];
+    for (const para of paragraphs) {
+      const words = para.trim().split(/\s+/).filter(Boolean);
+      if (words.length === 0) continue;
+      let currentLine = words[0];
+      for (let i = 1; i < words.length; i++) {
+        const word = words[i];
+        const testLine = currentLine + ' ' + word;
+        if (ctx.measureText(testLine).width <= maxWidth) {
+          currentLine = testLine;
+        } else {
+          lines.push(currentLine);
+          currentLine = word;
+        }
+      }
+      lines.push(currentLine);
+    }
+    return lines;
+  }
+
+  window.canvasesToPdfBlob = function (canvases) {
+    const jpegs = canvases.map(c => {
+      const dataUrl = c.toDataURL('image/jpeg', 0.92);
+      const b64 = dataUrl.split(',')[1];
+      const bin = atob(b64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return { bytes, width: c.width, height: c.height };
+    });
+
+    const chunks = [];
+    let offset = 0;
+    const offsets = [];
+    const enc = new TextEncoder();
+
+    function pushAscii(str) {
+      const arr = enc.encode(str);
+      chunks.push(arr);
+      offset += arr.length;
+    }
+    function pushBytes(arr) {
+      chunks.push(arr);
+      offset += arr.length;
+    }
+    function startObj(id) {
+      offsets[id] = offset;
+      pushAscii(`${id} 0 obj\n`);
+    }
+    function endObj() {
+      pushAscii(`\nendobj\n`);
+    }
+
+    pushAscii('%PDF-1.4\n');
+    pushBytes(new Uint8Array([0x25, 0xE2, 0xE3, 0xCF, 0xD3, 0x0A]));
+
+    const n = jpegs.length;
+    const pageIds = [];
+    for (let i = 0; i < n; i++) pageIds.push(3 + i * 3);
+
+    startObj(1);
+    pushAscii('<< /Type /Catalog /Pages 2 0 R >>');
+    endObj();
+
+    startObj(2);
+    pushAscii(`<< /Type /Pages /Kids [${pageIds.map(id => `${id} 0 R`).join(' ')}] /Count ${n} >>`);
+    endObj();
+
+    const pageW = '595.28';
+    const pageH = '841.89';
+
+    for (let i = 0; i < n; i++) {
+      const pageId = 3 + i * 3;
+      const contentId = 4 + i * 3;
+      const imgId = 5 + i * 3;
+      const img = jpegs[i];
+      const contentStr = `q ${pageW} 0 0 ${pageH} 0 0 cm /Im${i} Do Q`;
+
+      startObj(pageId);
+      pushAscii(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW} ${pageH}] /Resources << /XObject << /Im${i} ${imgId} 0 R >> >> /Contents ${contentId} 0 R >>`);
+      endObj();
+
+      startObj(contentId);
+      pushAscii(`<< /Length ${contentStr.length} >>\nstream\n${contentStr}\nendstream`);
+      endObj();
+
+      startObj(imgId);
+      pushAscii(`<< /Type /XObject /Subtype /Image /Width ${img.width} /Height ${img.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${img.bytes.length} >>\nstream\n`);
+      pushBytes(img.bytes);
+      pushAscii(`\nendstream`);
+      endObj();
+    }
+
+    const totalObjs = 2 + n * 3;
+    const xrefOffset = offset;
+    pushAscii(`xref\n0 ${totalObjs + 1}\n`);
+    pushAscii('0000000000 65535 f \n');
+    for (let id = 1; id <= totalObjs; id++) {
+      pushAscii(`${String(offsets[id]).padStart(10, '0')} 00000 n \n`);
+    }
+    pushAscii(`trailer\n<< /Size ${totalObjs + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`);
+    return new Blob(chunks, { type: 'application/pdf' });
+  };
+
+  window.renderReviewPagesToCanvases = function (sectionKey, items, stats) {
+    const W = 1240;
+    const H = 1754;
+    const PAD = 48;
+    const CW = W - PAD * 2;
+    const FOOTER_H = 64;
+    const MAX_Y = H - FOOTER_H - 18;
+    const FONT_FAMILY = "'Cairo', 'Segoe UI', Tahoma, Arial, sans-serif";
+
+    const meta = window.getReviewSectionMeta(sectionKey);
+    const quizTitle = String((typeof currentQuiz !== 'undefined' && currentQuiz?.title) || 'اختبار المنصة');
+    const quizSubject = String((typeof currentQuiz !== 'undefined' && currentQuiz?.subject) || 'كلية نظم ومعلومات أعمال (BIS)');
+    const studentName = String(
+      (window.authSession?.profile?.full_name || window.authSession?.user?.email) ||
+      (window.currentUserProfile && (window.currentUserProfile.full_name || window.currentUserProfile.email)) ||
+      localStorage.getItem('bis_student_name') || ''
+    ).trim();
+    const nowStr = new Date().toLocaleString('ar-EG', {
+      year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
+    });
+    const arabicLetters = ['أ', 'ب', 'ج', 'د', 'هـ', 'و'];
+
+    const pages = [];
+    let ctx = null;
+    let curY = PAD;
+
+    function createNewPage(isFirstPage) {
+      const c = document.createElement('canvas');
+      c.width = W;
+      c.height = H;
+      const cCtx = c.getContext('2d');
+      cCtx.direction = 'rtl';
+      cCtx.textBaseline = 'top';
+      cCtx.fillStyle = '#ffffff';
+      cCtx.fillRect(0, 0, W, H);
+      pages.push(c);
+      ctx = cCtx;
+      curY = PAD;
+
+      if (isFirstPage) {
+        const bannerH = 148;
+        const grad = ctx.createLinearGradient(W - PAD, curY, PAD, curY + bannerH);
+        if (sectionKey === 'correct') { grad.addColorStop(0, '#15803d'); grad.addColorStop(1, '#0d9488'); }
+        else if (sectionKey === 'wrong') { grad.addColorStop(0, '#b91c1c'); grad.addColorStop(1, '#c2410c'); }
+        else if (sectionKey === 'skipped') { grad.addColorStop(0, '#b45309'); grad.addColorStop(1, '#d97706'); }
+        else { grad.addColorStop(0, '#0f766e'); grad.addColorStop(1, '#1d4ed8'); }
+
+        drawPdfRoundRect(ctx, PAD, curY, CW, bannerH, 22, grad, null);
+
+        ctx.direction = 'rtl';
+        ctx.textAlign = 'right';
+        ctx.font = `700 17px ${FONT_FAMILY}`;
+        ctx.fillStyle = 'rgba(255,255,255,0.9)';
+        ctx.fillText('منصة كلية نظم ومعلومات أعمال (BIS) — تقرير مراجعة الاختبار', W - PAD - 26, curY + 20);
+
+        ctx.font = `900 28px ${FONT_FAMILY}`;
+        ctx.fillStyle = '#ffffff';
+        const titleLines = wrapCanvasRtlLines(ctx, quizTitle, CW - 310, ctx.font);
+        ctx.fillText(titleLines[0] || quizTitle, W - PAD - 26, curY + 50);
+
+        ctx.font = `600 18px ${FONT_FAMILY}`;
+        ctx.fillStyle = 'rgba(255,255,255,0.95)';
+        const subLine = `المادة: ${quizSubject}${studentName ? `   |   الطالب: ${studentName}` : ''}`;
+        ctx.fillText(subLine, W - PAD - 26, curY + 98);
+
+        const pillW = 240;
+        const pillH = 86;
+        const pillX = PAD + 24;
+        const pillY = curY + (bannerH - pillH) / 2;
+        drawPdfRoundRect(ctx, pillX, pillY, pillW, pillH, 16, 'rgba(255,255,255,0.18)', 'rgba(255,255,255,0.4)', 1.5);
+        ctx.textAlign = 'center';
+        ctx.font = `700 15px ${FONT_FAMILY}`;
+        ctx.fillStyle = 'rgba(255,255,255,0.92)';
+        ctx.fillText('القسم المصدّر', pillX + pillW / 2, pillY + 14);
+        ctx.font = `900 20px ${FONT_FAMILY}`;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(meta.title, pillX + pillW / 2, pillY + 42);
+
+        curY += bannerH + 18;
+
+        const kpiData = [
+          { val: String(items.length), label: 'أسئلة هذا الملف', bg: '#f8fafc', border: '#cbd5e1', col: meta.accent },
+          { val: String(stats.correct), label: 'إجابات صحيحة', bg: '#f0fdf4', border: '#86efac', col: '#15803d' },
+          { val: String(stats.wrong), label: 'إجابات خاطئة', bg: '#fef2f2', border: '#fca5a5', col: '#b91c1c' },
+          { val: String(stats.skipped), label: 'أسئلة متخطاة', bg: '#fffbeb', border: '#fcd34d', col: '#b45309' }
+        ];
+        const gap = 16;
+        const boxW = (CW - gap * 3) / 4;
+        const boxH = 86;
+        kpiData.forEach((k, idx) => {
+          const bx = W - PAD - boxW - idx * (boxW + gap);
+          drawPdfRoundRect(ctx, bx, curY, boxW, boxH, 14, k.bg, k.border, 1.5);
+          ctx.textAlign = 'center';
+          ctx.font = `900 27px ${FONT_FAMILY}`;
+          ctx.fillStyle = k.col;
+          ctx.fillText(k.val, bx + boxW / 2, curY + 12);
+          ctx.font = `700 15px ${FONT_FAMILY}`;
+          ctx.fillStyle = '#334155';
+          ctx.fillText(k.label, bx + boxW / 2, curY + 50);
+        });
+
+        curY += boxH + 22;
+      }
+    }
+
+    createNewPage(true);
+
+    const qFont = `800 21px ${FONT_FAMILY}`;
+    const qLineH = 33;
+    const optFont = `700 18px ${FONT_FAMILY}`;
+    const optLineH = 28;
+    const expTitleFont = `800 17px ${FONT_FAMILY}`;
+    const expFont = `600 17px ${FONT_FAMILY}`;
+    const expLineH = 27;
+    const innerPadX = 24;
+    const textMaxW = CW - innerPadX * 2 - 14;
+
+    items.forEach(({ q, i, result }, idx) => {
+      const ans = (typeof userAnswers !== 'undefined' && userAnswers) ? userAnswers[i] : null;
+      const statusCfg = result === 'correct'
+        ? { label: '✓ إجابة صحيحة', bg: '#dcfce7', color: '#166534', border: '#86efac', stripe: '#16a34a' }
+        : result === 'wrong'
+          ? { label: '✗ إجابة خاطئة', bg: '#fee2e2', color: '#991b1b', border: '#fca5a5', stripe: '#dc2626' }
+          : { label: '⏭ سؤال متخطى', bg: '#fef3c7', color: '#92400e', border: '#fcd34d', stripe: '#d97706' };
+
+      const qLines = wrapCanvasRtlLines(ctx, q.question || '', textMaxW, qFont);
+      const hasSkippedBanner = result === 'skipped' && (q.type === 'mcq' || q.type === 'tf');
+
+      const optionRows = [];
+      if (q.type === 'mcq' && Array.isArray(q.options)) {
+        q.options.forEach((optText, optIdx) => {
+          const isCorrectOpt = optIdx === q.correct;
+          const isUserWrongOpt = result === 'wrong' && ans === optIdx && !isCorrectOpt;
+          const isUserRightOpt = result === 'correct' && ans === optIdx && isCorrectOpt;
+          let bg = '#f8fafc', border = '#e2e8f0', textCol = '#1e293b', tagText = '', tagBg = '';
+          if (isCorrectOpt) {
+            bg = '#ecfdf5'; border = '#34d399'; textCol = '#065f46';
+            tagText = isUserRightOpt ? '✓ إجابتك الصحيحة' : '✓ الإجابة الصحيحة';
+            tagBg = '#059669';
+          } else if (isUserWrongOpt) {
+            bg = '#fef2f2'; border = '#f87171'; textCol = '#991b1b';
+            tagText = '✗ إجابتك';
+            tagBg = '#dc2626';
+          }
+          const letter = arabicLetters[optIdx] || String(optIdx + 1);
+          const availW = tagText ? (textMaxW - 210) : (textMaxW - 55);
+          const lines = wrapCanvasRtlLines(ctx, `${letter}) ${optText}`, availW, optFont);
+          optionRows.push({ lines, bg, border, textCol, tagText, tagBg });
+        });
+      } else if (q.type === 'tf') {
+        const labels = ['صح', 'خطأ'];
+        [0, 1].forEach(optIdx => {
+          const isCorrectOpt = optIdx === q.correct;
+          const isUserWrongOpt = result === 'wrong' && ans === optIdx && !isCorrectOpt;
+          let bg = '#f8fafc', border = '#e2e8f0', textCol = '#1e293b', tagText = '', tagBg = '';
+          if (isCorrectOpt) {
+            bg = '#ecfdf5'; border = '#34d399'; textCol = '#065f46';
+            tagText = '✓ الإجابة الصحيحة'; tagBg = '#059669';
+          } else if (isUserWrongOpt) {
+            bg = '#fef2f2'; border = '#f87171'; textCol = '#991b1b';
+            tagText = '✗ إجابتك'; tagBg = '#dc2626';
+          }
+          optionRows.push({ lines: [labels[optIdx]], bg, border, textCol, tagText, tagBg });
+        });
+      } else if (q.type === 'essay') {
+        const userAnsStr = ans ? `إجابتك: ${ans}` : 'إجابتك: لم يتم كتابة إجابة (متخطى)';
+        optionRows.push({
+          lines: wrapCanvasRtlLines(ctx, userAnsStr, textMaxW - 30, optFont),
+          bg: '#f8fafc', border: '#cbd5e1', textCol: '#1e293b', tagText: '', tagBg: ''
+        });
+        if (q.keywords?.length) {
+          optionRows.push({
+            lines: wrapCanvasRtlLines(ctx, `الكلمات المفتاحية النموذجية: ${q.keywords.join('، ')}`, textMaxW - 30, optFont),
+            bg: '#ecfdf5', border: '#34d399', textCol: '#065f46', tagText: '', tagBg: ''
+          });
+        }
+      }
+
+      const expLines = q.explanation ? wrapCanvasRtlLines(ctx, q.explanation, textMaxW - 32, expFont) : [];
+
+      let cardH = 18 + 38 + 10;
+      cardH += Math.max(1, qLines.length) * qLineH + 12;
+      if (hasSkippedBanner) cardH += 44 + 10;
+      optionRows.forEach(row => {
+        const rowH = Math.max(1, row.lines.length) * optLineH + 16;
+        row.rowH = rowH;
+        cardH += rowH + 8;
+      });
+      if (expLines.length > 0) {
+        cardH += 6 + (34 + expLines.length * expLineH + 16);
+      }
+      cardH += 14;
+
+      if (curY + cardH > MAX_Y && curY > PAD + 20) {
+        createNewPage(false);
+      }
+
+      drawPdfRoundRect(ctx, PAD, curY, CW, cardH, 16, '#ffffff', '#cbd5e1', 1.5);
+      drawPdfRoundRect(ctx, W - PAD - 9, curY + 2, 9, cardH - 4, 4, statusCfg.stripe, null);
+
+      let y = curY + 16;
+      const rightEdge = W - PAD - innerPadX;
+      const leftEdge = PAD + innerPadX;
+
+      const qNumText = `سؤال ${i + 1}  (${idx + 1} من ${items.length})`;
+      ctx.font = `800 16px ${FONT_FAMILY}`;
+      const qNumW = ctx.measureText(qNumText).width + 28;
+      drawPdfRoundRect(ctx, rightEdge - qNumW, y, qNumW, 34, 10, '#f1f5f9', '#cbd5e1', 1);
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#334155';
+      ctx.fillText(qNumText, rightEdge - qNumW / 2, y + 6);
+
+      const stW = ctx.measureText(statusCfg.label).width + 30;
+      drawPdfRoundRect(ctx, leftEdge, y, stW, 34, 17, statusCfg.bg, statusCfg.border, 1.5);
+      ctx.fillStyle = statusCfg.color;
+      ctx.fillText(statusCfg.label, leftEdge + stW / 2, y + 6);
+
+      y += 34 + 12;
+
+      ctx.textAlign = 'right';
+      ctx.font = qFont;
+      ctx.fillStyle = '#0f172a';
+      qLines.forEach(line => {
+        ctx.fillText(line, rightEdge, y);
+        y += qLineH;
+      });
+      y += 10;
+
+      if (hasSkippedBanner) {
+        drawPdfRoundRect(ctx, leftEdge, y, CW - innerPadX * 2, 42, 10, '#fffbeb', '#f59e0b', 1.5);
+        ctx.textAlign = 'right';
+        ctx.font = `700 16px ${FONT_FAMILY}`;
+        ctx.fillStyle = '#92400e';
+        ctx.fillText('⏭ لم تقم باختيار إجابة لهذا السؤال — الإجابة الصحيحة موضحة باللون الأخضر أدناه:', rightEdge - 14, y + 9);
+        y += 42 + 10;
+      }
+
+      optionRows.forEach(row => {
+        const boxX = leftEdge;
+        const boxW = CW - innerPadX * 2;
+        drawPdfRoundRect(ctx, boxX, y, boxW, row.rowH, 12, row.bg, row.border, 1.5);
+
+        ctx.textAlign = 'right';
+        ctx.font = optFont;
+        ctx.fillStyle = row.textCol;
+        let oy = y + 8;
+        row.lines.forEach(line => {
+          ctx.fillText(line, rightEdge - 14, oy);
+          oy += optLineH;
+        });
+
+        if (row.tagText) {
+          ctx.font = `800 14px ${FONT_FAMILY}`;
+          const tagW = ctx.measureText(row.tagText).width + 24;
+          const tagH = 28;
+          const tagX = boxX + 12;
+          const tagY = y + (row.rowH - tagH) / 2;
+          drawPdfRoundRect(ctx, tagX, tagY, tagW, tagH, 14, row.tagBg, null);
+          ctx.textAlign = 'center';
+          ctx.fillStyle = '#ffffff';
+          ctx.fillText(row.tagText, tagX + tagW / 2, tagY + 4);
+        }
+
+        y += row.rowH + 8;
+      });
+
+      if (expLines.length > 0) {
+        y += 4;
+        const expBoxH = 34 + expLines.length * expLineH + 14;
+        const expX = leftEdge;
+        const expW = CW - innerPadX * 2;
+        drawPdfRoundRect(ctx, expX, y, expW, expBoxH, 12, '#eff6ff', '#93c5fd', 1.5);
+        drawPdfRoundRect(ctx, expX + expW - 7, y + 2, 7, expBoxH - 4, 3, '#2563eb', null);
+
+        ctx.textAlign = 'right';
+        ctx.font = expTitleFont;
+        ctx.fillStyle = '#1d4ed8';
+        ctx.fillText('💡 التبرير والشرح:', rightEdge - 16, y + 8);
+
+        ctx.font = expFont;
+        ctx.fillStyle = '#1e3a8a';
+        let ey = y + 36;
+        expLines.forEach(line => {
+          ctx.fillText(line, rightEdge - 16, ey);
+          ey += expLineH;
+        });
+      }
+
+      curY += cardH + 16;
+    });
+
+    const totalPages = pages.length;
+    pages.forEach((pCanvas, pIdx) => {
+      const pCtx = pCanvas.getContext('2d');
+      pCtx.direction = 'rtl';
+      pCtx.textBaseline = 'top';
+      const fy = H - FOOTER_H;
+      pCtx.strokeStyle = '#cbd5e1';
+      pCtx.lineWidth = 1.5;
+      pCtx.beginPath();
+      pCtx.moveTo(PAD, fy);
+      pCtx.lineTo(W - PAD, fy);
+      pCtx.stroke();
+
+      pCtx.font = `700 15px ${FONT_FAMILY}`;
+      pCtx.fillStyle = '#64748b';
+      pCtx.textAlign = 'right';
+      pCtx.fillText(`منصة كلية نظم ومعلومات أعمال (BIS) — ${meta.title}`, W - PAD, fy + 16);
+
+      pCtx.textAlign = 'center';
+      pCtx.fillStyle = '#0f172a';
+      pCtx.fillText(`صفحة ${pIdx + 1} من ${totalPages}`, W / 2, fy + 16);
+
+      pCtx.textAlign = 'left';
+      pCtx.fillStyle = '#64748b';
+      pCtx.fillText(`تاريخ الإنشاء: ${nowStr}`, PAD, fy + 16);
+    });
+
+    return pages;
+  };
+
+  window.exportReviewSectionPDF = async function (sectionKey) {
+    if (typeof currentQuiz === 'undefined' || !currentQuiz || !Array.isArray(currentQuiz.questions)) return;
+    const allMapped = currentQuiz.questions.map((q, i) => ({
+      q,
+      i,
+      result: typeof getQuestionResult === 'function' ? getQuestionResult(q, i) : 'skipped'
+    }));
+    const items = allMapped.filter(({ result }) => sectionKey === 'all' || result === sectionKey);
+    if (items.length === 0) {
+      if (typeof toast === 'function') toast('لا توجد أسئلة في هذا القسم لتحميلها', 'info');
+      return;
+    }
+
+    const stats = {
+      total: allMapped.length,
+      correct: allMapped.filter(x => x.result === 'correct').length,
+      wrong: allMapped.filter(x => x.result === 'wrong').length,
+      skipped: allMapped.filter(x => x.result === 'skipped').length
+    };
+    const meta = window.getReviewSectionMeta(sectionKey);
+    const btn = document.getElementById('review-section-pdf-btn');
+    const prevBtnHtml = btn ? btn.innerHTML : '';
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> جاري تجهيز ملف PDF منظم...';
+    }
+
+    const safeTitle = String(currentQuiz.title || 'اختبار').replace(/[\\/:*?"<>|]+/g, '_').trim().slice(0, 50);
+    const fileName = `BIS_${safeTitle}_${meta.fileSuffix}.pdf`;
+
+    try {
+      if (document.fonts && document.fonts.ready) {
+        try { await document.fonts.ready; } catch (e) {}
+      }
+      await new Promise(r => setTimeout(r, 30));
+
+      const canvases = window.renderReviewPagesToCanvases(sectionKey, items, stats);
+      const pdfBlob = window.canvasesToPdfBlob(canvases);
+      const blobUrl = URL.createObjectURL(pdfBlob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 15000);
+
+      // تسجيل التحميل لحظياً في ترافيك السوبر أدمن (Student Traffic Real-Time) + Google Analytics
+      if (typeof window.trackStudentTrafficEvent === 'function') {
+        window.trackStudentTrafficEvent('download_review_pdf', {
+          section: `PDF مراجعة (${meta.shortLabel})`,
+          title: `${currentQuiz.title || 'اختبار'} — ${meta.title}`,
+          subject: currentQuiz.subject || window._activeTrafficSubject || '',
+          term: Number(currentQuiz.term || (typeof currentTerm !== 'undefined' ? currentTerm : 1) || 1),
+          extra: `${items.length} سؤال (${canvases.length} صفحة)`
+        });
+      }
+      if (typeof window.trackGA4Event === 'function') {
+        window.trackGA4Event('download_review_pdf', {
+          quiz_title: currentQuiz.title || 'اختبار',
+          review_section: sectionKey,
+          questions_count: items.length
+        });
+      }
+
+      if (typeof toast === 'function') toast(`✅ تم تحميل ملف PDF (${meta.title} — ${canvases.length} صفحة) بنجاح!`, 'success');
+    } catch (err) {
+      console.error('PDF generation error:', err);
+      if (typeof toast === 'function') toast('حدث خطأ أثناء إنشاء ملف PDF', 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = prevBtnHtml;
+      }
+    }
+  };
+
+  window.showReviewModal = function () {
+    window.setReviewFilter('all');
+    document.getElementById('review-modal')?.classList.remove('hidden');
+  };
+
+  window.setReviewFilter = function (f) {
+    window._activeReviewFilter = f;
+    try { if (typeof reviewFilter !== 'undefined') reviewFilter = f; } catch (e) {}
+    ['all', 'wrong', 'correct', 'skipped'].forEach(tab => {
+      const btn = document.getElementById(`filter-${tab}`);
+      if (!btn) return;
+      if (tab === f) {
+        btn.style.background = 'var(--green)';
+        btn.style.color = '#050509';
+        btn.style.borderColor = 'transparent';
+        btn.classList.remove('btn-ghost');
+      } else {
+        btn.style.background = '';
+        btn.style.color = '';
+        btn.style.borderColor = '';
+        btn.classList.add('btn-ghost');
+      }
+    });
+    window.renderReviewList();
+  };
+
+  window.renderReviewList = function () {
+    const container = document.getElementById('review-list');
+    if (!container || typeof currentQuiz === 'undefined' || !currentQuiz?.questions) return;
+    const questions = currentQuiz.questions;
+    const activeFilter = window._activeReviewFilter || (typeof reviewFilter !== 'undefined' ? reviewFilter : 'all') || 'all';
+
+    const allMapped = questions.map((q, i) => ({
+      q,
+      i,
+      result: typeof getQuestionResult === 'function' ? getQuestionResult(q, i) : 'skipped'
+    }));
+    const counts = {
+      all: allMapped.length,
+      wrong: allMapped.filter(x => x.result === 'wrong').length,
+      correct: allMapped.filter(x => x.result === 'correct').length,
+      skipped: allMapped.filter(x => x.result === 'skipped').length
+    };
+
+    const tabLabels = {
+      all: `الكل (${counts.all})`,
+      wrong: `❌ الخاطئة (${counts.wrong})`,
+      correct: `✅ الصحيحة (${counts.correct})`,
+      skipped: `⏭ المتخطاة (${counts.skipped})`
+    };
+    Object.keys(tabLabels).forEach(k => {
+      const el = document.getElementById(`filter-${k}`);
+      if (el) el.textContent = tabLabels[k];
+    });
+
+    const items = allMapped.filter(({ result }) => activeFilter === 'all' || result === activeFilter);
+
+    if (items.length === 0) {
+      container.innerHTML = `<div class="empty"><i class="fas fa-check-double"></i><p>لا توجد أسئلة في هذه الفئة</p></div>`;
+      return;
+    }
+
+    const meta = window.getReviewSectionMeta(activeFilter);
+    const sectionDownloadBar = `
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;padding:12px 15px;margin-bottom:14px;border-radius:14px;background:${meta.accentSoft};border:1.5px solid ${meta.accentBorder}">
+        <div style="display:flex;align-items:center;gap:8px;font-size:0.86rem;font-weight:800;color:var(--text)">
+          <span>${meta.badgeEmoji}</span>
+          <span>${meta.title} <span style="opacity:0.75">(${items.length} سؤال)</span></span>
+        </div>
+        <button type="button" id="review-section-pdf-btn" class="btn" onclick="exportReviewSectionPDF('${activeFilter}')" style="background:${meta.grad};color:#ffffff;border:none;padding:8px 15px;font-size:0.82rem;font-weight:800;border-radius:10px;display:inline-flex;align-items:center;gap:7px;box-shadow:0 4px 14px rgba(0,0,0,0.22);cursor:pointer">
+          <i class="fas ${meta.icon}"></i>
+          <span>${meta.btnLabel}</span>
+        </button>
+      </div>`;
+
+    container.innerHTML = sectionDownloadBar + items.map(({ q, i, result }, idx) => {
+      const ans = (typeof userAnswers !== 'undefined' && userAnswers) ? userAnswers[i] : null;
+      const badgeClass = result === 'correct' ? 'badge-correct' : result === 'wrong' ? 'badge-wrong' : 'badge-skipped';
+      const badgeText = result === 'correct' ? '✅ صح' : result === 'wrong' ? '❌ غلط' : '⏭ متخطي';
+      const cardClass = `review-${result}`;
+
+      let answersHtml = '';
+      if (q.type === 'mcq') {
+        if (result === 'wrong' && ans !== null && ans !== undefined) {
+          answersHtml += `<div class="review-answer-row user-wrong"><i class="fas fa-times-circle"></i> إجابتك: ${q.options[ans]}</div>`;
+        }
+        answersHtml += `<div class="review-answer-row correct-ans"><i class="fas fa-check-circle"></i> الصح: ${q.options[q.correct]}</div>`;
+      } else if (q.type === 'tf') {
+        const labels = ['صح', 'خطأ'];
+        if (result === 'wrong' && ans !== null && ans !== undefined) {
+          answersHtml += `<div class="review-answer-row user-wrong"><i class="fas fa-times-circle"></i> إجابتك: ${labels[ans]}</div>`;
+        }
+        answersHtml += `<div class="review-answer-row correct-ans"><i class="fas fa-check-circle"></i> الصح: ${labels[q.correct]}</div>`;
+      } else if (q.type === 'essay' && ans) {
+        answersHtml += `<div class="review-answer-row" style="background:var(--surface3)"><i class="fas fa-pen"></i> إجابتك: ${ans}</div>`;
+        if (result === 'wrong' && q.keywords?.length) {
+          answersHtml += `<div class="review-answer-row correct-ans"><i class="fas fa-key"></i> كلمات مفتاحية: ${q.keywords.join('، ')}</div>`;
+        }
+      }
+
+      const explanationHtml = q.explanation
+        ? `<div class="review-explanation"><strong>💡 الشرح:</strong> ${q.explanation}</div>`
+        : '';
+
+      return `
+        <div class="review-item ${cardClass}" style="animation-delay:${idx * 0.04}s">
+          <div class="review-item-header">
+            <span class="review-badge ${badgeClass}">${badgeText}</span>
+            <span style="font-size:0.8rem;color:var(--text-muted);font-weight:700">سؤال ${i + 1}</span>
+          </div>
+          <div class="review-q-text">${q.question}</div>
+          <div class="review-answers">${answersHtml}</div>
+          ${explanationHtml}
+        </div>`;
+    }).join('');
+  };
 
 })();
 
