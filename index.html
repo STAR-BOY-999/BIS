@@ -19607,8 +19607,8 @@ ESSAY
 
       const escTxt = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
       const roleSubtitle = isLectureOwner
-        ? (isAdminCard ? 'إدارة المحاضرات')
-        : (isAdminCard ? 'إدارة الملخصات');
+        ? (isAdminCard ? 'إدارة المحاضرات' : 'محاضر معتمد')
+        : (isAdminCard ? 'إدارة الملخصات' : 'صاحب ملخصات معتمد');
 
       const m1Val = count > 0
         ? `${count} ${isLectureOwner ? 'محاضرة' : 'ملخص'}`
@@ -19621,7 +19621,7 @@ ESSAY
       const m2Lbl = isAdminCard ? 'الأمان والتنظيم' : 'أقسام المواد';
 
       const foldersHtml = `<div class="owner-wide-folders">
-            <span class="owner-wide-folder-chip"><i class="fas ${isAdminCard ? 'fa-shield-alt' : 'fa-layer-group'}"></i> ${isAdminCard ? 'وصول محمي بكلمة سر مستقلة' : 'محتوى منظم ومحدّث'}</span>
+            <span class="owner-wide-folder-chip"><i class="fas ${isAdminCard ? 'fa-shield-alt' : 'fa-layer-group'}"></i> ${isAdminCard ? 'وصول محمي بكلمة سر مستقلة' : 'محتوى منظم ومحدّث أولاً بأول'}</span>
           </div>`;
 
       const telemetryInnerHtml = `
