@@ -7011,7 +7011,7 @@ ESSAY
         });
         html += `</div>`;
         if (!isCorrect && q.explanation) {
-          html += `<div class="explanation slide-up-ex" style="animation-delay:0.25s"><strong>التبرير:</strong> ${q.explanation}</div>`;
+          html += `<div class="explanation slide-up-ex" style="animation-delay:0.25s"><strong>💡الاجابة الصحيحة هي:</strong> ${q.explanation}</div>`;
         }
       } else if (q.type === 'tf') {
         html += `<div class="tf-grid">`;
@@ -7021,8 +7021,12 @@ ESSAY
           html += `<div class="tf-option ${cls} ${dir}" style="animation-delay:${i*0.08}s">${label}</div>`;
         });
         html += `</div>`;
-               if (!isCorrect && q.explanation) {
-          html += `<div class="explanation slide-up-ex" style="animation-delay:0.2s"><strong>التبرير :</strong> ${q.explanation}</div>`;
+        if (!isCorrect) {
+          const correctLabel = q.correct === 0 ? 'صح' : 'خطأ';
+          html += `<div class="explanation slide-up-ex" style="animation-delay:0.2s">
+            <strong>💡 الاجابة الصحيحة هي: ${correctLabel}</strong>
+            ${q.explanation ? `<br><br>${q.explanation}` : ''}
+          </div>`;
         }
       } else {
         const answer = userAnswers[currentQuestionIndex];
@@ -7036,7 +7040,7 @@ ESSAY
             ${essayCorrect ? '✅ إجابة صحيحة' : '❌ إجابة خاطئة'}
           </div>`;
         if (!essayCorrect && q.explanation) {
-          html += `<div class="explanation slide-up-ex" style="animation-delay:0.2s"><strong>التبرير:</strong> ${q.explanation}</div>`;
+          html += `<div class="explanation slide-up-ex" style="animation-delay:0.2s"><strong>💡توضيح الإجابة:</strong> ${q.explanation}</div>`;
         }
       }
 
@@ -19811,6 +19815,1075 @@ ESSAY
       });
     }
   } catch (e) {}
+
+  // ─── 25. SMART CONTENT NOTIFICATIONS & DIRECT DEEP-LINKING ENGINE (SUPER ADMIN + STUDENT) ───
+  window._recentlyNotifiedQuizIds = window._recentlyNotifiedQuizIds || new Set();
+
+  // Inject CSS for deep-linked highlighted target cards & enriched notification pills
+  (function injectDeepLinkNotificationStyles() {
+    if (document.getElementById('notif-deeplink-styles')) return;
+    const st = document.createElement('style');
+    st.id = 'notif-deeplink-styles';
+    st.textContent = `
+      @keyframes notifTargetPulseGlow {
+        0%, 100% {
+          box-shadow: 0 0 0 2px rgba(45, 212, 191, 0.85), 0 0 28px rgba(45, 212, 191, 0.35), 0 12px 30px rgba(0, 0, 0, 0.45);
+          transform: translateY(-2px);
+        }
+        50% {
+          box-shadow: 0 0 0 3px rgba(56, 189, 248, 1), 0 0 38px rgba(56, 189, 248, 0.5), 0 14px 34px rgba(0, 0, 0, 0.55);
+          transform: translateY(-3px);
+        }
+      }
+      .notif-deep-target-card {
+        position: relative !important;
+        border: 1.5px solid rgba(45, 212, 191, 0.9) !important;
+        background: linear-gradient(135deg, rgba(45, 212, 191, 0.14), rgba(56, 189, 248, 0.08), rgba(15, 23, 42, 0.92)) !important;
+        animation: notifTargetPulseGlow 2.2s ease-in-out infinite !important;
+        z-index: 5;
+      }
+      .notif-deep-target-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 3px 10px;
+        border-radius: 999px;
+        font-size: 0.72rem;
+        font-weight: 900;
+        background: linear-gradient(135deg, #2dd4bf, #38bdf8);
+        color: #04131d;
+        margin-top: 6px;
+        box-shadow: 0 4px 12px rgba(45, 212, 191, 0.3);
+      }
+      .notif-meta-pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        margin-top: 6px;
+      }
+      .notif-meta-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 0.69rem;
+        font-weight: 800;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: var(--text-dim);
+      }
+      .notif-direct-cta {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        margin-top: 7px;
+        font-size: 0.73rem;
+        font-weight: 900;
+        color: var(--teal);
+      }
+    `;
+    document.head.appendChild(st);
+  })();
+
+  function _normalizeNotifSection(rawType) {
+    const t = String(rawType || '').trim().toLowerCase();
+    if (t === 'owner-lecture' || t === 'lecture' || t === 'lectures') return 'lectures';
+    if (t === 'owner-summary' || t === 'summary' || t === 'summaries') return 'summaries';
+    if (t === 'lecture-quizzes' || t === 'lecture-quiz') return 'lecture-quizzes';
+    if (t === 'exams' || t === 'exam' || t === 'quiz') return 'exams';
+    return '';
+  }
+
+  function _extractCleanItemTitle(rawTitle, rawBody) {
+    let t = String(rawTitle || '').trim();
+    t = t.replace(/^(?:📚|🎥|📄|📝|❓|🔥|✨|📢|🔔|\s)+/u, '').trim();
+    t = t.replace(/^(?:محتوى جديد|محاضرة جديدة|ملخص جديد|امتحان جديد متاح الآن|امتحان جديد|أسئلة محاضرة جديدة|امتحان محاضرة جديد|اختبار محاضرة جديد|اختبار جديد)\s*[:：\-—]\s*/i, '').trim();
+    if (!t && rawBody) {
+      const mQuote = String(rawBody).match(/"([^"]+)"/);
+      const mParen = String(rawBody).match(/\(([^)]+)\)/);
+      if (mQuote && mQuote[1]) t = mQuote[1].trim();
+      else if (mParen && mParen[1]) t = mParen[1].trim();
+    }
+    return t;
+  }
+
+  window.encodeNotificationDeepMeta = function (meta) {
+    if (!meta || typeof meta !== 'object') return '';
+    const sec = _normalizeNotifSection(meta.sec || meta.kind || '') || 'exams';
+    const payload = {
+      sec,
+      kind: meta.kind || sec,
+      quizId: meta.quizId ? Number(meta.quizId) : null,
+      resId: meta.resId ? Number(meta.resId) : null,
+      ownerId: meta.ownerId ? Number(meta.ownerId) : null,
+      ownerName: meta.ownerName ? String(meta.ownerName).trim() : '',
+      folder: meta.folder ? String(meta.folder).trim() : '',
+      title: meta.title ? String(meta.title).trim() : '',
+      url: (meta.url && String(meta.url).length < 600) ? String(meta.url).trim() : '',
+      term: Number(meta.term || (typeof currentTerm !== 'undefined' && currentTerm ? currentTerm : 1))
+    };
+    const encoded = encodeURIComponent(JSON.stringify(payload)).replace(/'/g, '%27');
+    return `dl:${sec}:${encoded}`;
+  };
+
+  window.parseNotificationDeepMeta = function (notif, fallbackGrade, fallbackTerm, fallbackSection) {
+    const rawTarget = String(notif?.target_section || fallbackSection || '').trim();
+    const rawType = String(notif?.notification_type || '').trim();
+    const rawTitle = String(notif?.title || '').trim();
+    const rawBody = String(notif?.body || '').trim();
+    const rawSubject = String(notif?.subject || '').trim();
+
+    let parsed = null;
+    if (rawTarget.startsWith('dl:')) {
+      const parts = rawTarget.split(':');
+      const secFromPrefix = parts[1] || '';
+      const encodedJson = parts.slice(2).join(':');
+      try {
+        parsed = JSON.parse(decodeURIComponent(encodedJson));
+        if (!parsed.sec && secFromPrefix) parsed.sec = secFromPrefix;
+      } catch (e) {
+        parsed = { sec: _normalizeNotifSection(secFromPrefix) || 'lectures' };
+      }
+    } else if (rawTarget.startsWith('{') && rawTarget.endsWith('}')) {
+      try { parsed = JSON.parse(rawTarget); } catch (e) {}
+    }
+
+    let sec = _normalizeNotifSection(parsed?.sec || parsed?.kind || rawTarget || rawType);
+    if (!sec) {
+      const combined = `${rawTitle} ${rawBody}`;
+      if (/أسئلة\s*محاضر|امتحان\s*محاضر|اختبار\s*محاضر/i.test(combined)) sec = 'lecture-quizzes';
+      else if (/امتحان|اختبار/i.test(combined)) sec = 'exams';
+      else if (/ملخص/i.test(combined)) sec = 'summaries';
+      else if (/محاضر/i.test(combined)) sec = 'lectures';
+    }
+
+    let kind = parsed?.kind || rawType || rawTarget || sec;
+    if (kind && kind.startsWith('dl:')) kind = sec;
+
+    const cleanTitle = (parsed?.title || _extractCleanItemTitle(rawTitle, rawBody) || '').trim();
+    let folder = (parsed?.folder || rawSubject || '').trim();
+    let ownerName = (parsed?.ownerName || '').trim();
+    if (!ownerName && rawBody) {
+      const ownerMatch = rawBody.match(/قسم\s+([^•—(\n]+?)(?:\s*[•—(]|$)/);
+      if (ownerMatch && ownerMatch[1]) ownerName = ownerMatch[1].trim();
+    }
+
+    let term = Number(parsed?.term || notif?.term || fallbackTerm || 0);
+    if (!term) {
+      if (rawBody.includes('الترم الثاني')) term = 2;
+      else if (rawBody.includes('الترم الأول')) term = 1;
+      else term = Number((typeof currentTerm !== 'undefined' && currentTerm) ? currentTerm : 1);
+    }
+
+    return {
+      sec: sec || 'lectures',
+      kind: kind || sec || 'lectures',
+      quizId: parsed?.quizId ? Number(parsed.quizId) : null,
+      resId: parsed?.resId ? Number(parsed.resId) : null,
+      ownerId: parsed?.ownerId ? Number(parsed.ownerId) : null,
+      ownerName,
+      folder,
+      title: cleanTitle,
+      url: parsed?.url || '',
+      term,
+      grade: notif?.grade || fallbackGrade || 'bis'
+    };
+  };
+
+  const _smarpZEAWYtiB6bJ16NuLbGCc6CZ6jJdKfb63 = async function (title, body, notifType, subject = '', customTerm = undefined, deepMeta = null) {
+    try {
+      const targetTerm = (customTerm !== undefined && customTerm !== null && customTerm !== '')
+        ? Number(customTerm)
+        : Number((typeof currentTerm !== 'undefined' && currentTerm) ? currentTerm : 1);
+
+      const sec = _normalizeNotifSection(deepMeta?.sec || deepMeta?.kind || notifType) || 'lectures';
+      let inferredOwnerId = deepMeta?.ownerId || null;
+      let inferredOwnerName = deepMeta?.ownerName || '';
+      if (!inferredOwnerId && (notifType === 'owner-lecture' || deepMeta?.kind === 'owner-lecture') && typeof adminCurrentLectureOwner !== 'undefined' && adminCurrentLectureOwner) {
+        inferredOwnerId = adminCurrentLectureOwner.id;
+        inferredOwnerName = adminCurrentLectureOwner.name || '';
+      } else if (!inferredOwnerId && (notifType === 'owner-summary' || deepMeta?.kind === 'owner-summary') && typeof adminCurrentOwner !== 'undefined' && adminCurrentOwner) {
+        inferredOwnerId = adminCurrentOwner.id;
+        inferredOwnerName = adminCurrentOwner.name || '';
+      }
+
+      const metaObj = {
+        sec,
+        kind: deepMeta?.kind || notifType || sec,
+        quizId: deepMeta?.quizId || null,
+        resId: deepMeta?.resId || null,
+        ownerId: inferredOwnerId,
+        ownerName: inferredOwnerName,
+        folder: deepMeta?.folder || subject || '',
+        title: deepMeta?.title || _extractCleanItemTitle(title, body) || title,
+        url: deepMeta?.url || '',
+        term: targetTerm
+      };
+
+      const encodedTargetSection = window.encodeNotificationDeepMeta(metaObj);
+      const canonicalNotifType = (metaObj.kind === 'owner-lecture' || metaObj.kind === 'lecture' || metaObj.kind === 'lectures')
+        ? 'lecture'
+        : (metaObj.kind === 'owner-summary' || metaObj.kind === 'summary' || metaObj.kind === 'summaries')
+          ? 'summary'
+          : (metaObj.kind === 'lecture-quiz' || metaObj.kind === 'lecture-quizzes')
+            ? 'lecture-quiz'
+            : (metaObj.kind === 'exam' || metaObj.kind === 'exams' || metaObj.kind === 'quiz')
+              ? 'exam'
+              : (notifType || 'info');
+
+      let res = await api('notifications', {
+        method: 'POST',
+        body: JSON.stringify({
+          title,
+          body,
+          notification_type: canonicalNotifType,
+          grade: (typeof currentGrade !== 'undefined' && currentGrade) ? currentGrade : 'bis',
+          term: targetTerm,
+          subject: subject || metaObj.folder || '',
+          target_section: encodedTargetSection,
+          created_by: window.authSession?.user?.id || null
+        })
+      });
+
+      if (!res.ok) {
+        // Fallback if notification_type constraint expects legacy values
+        await api('notifications', {
+          method: 'POST',
+          body: JSON.stringify({
+            title,
+            body,
+            notification_type: canonicalNotifType === 'lecture-quiz' || canonicalNotifType === 'exam' ? 'quiz' : canonicalNotifType,
+            grade: (typeof currentGrade !== 'undefined' && currentGrade) ? currentGrade : 'bis',
+            term: targetTerm,
+            subject: subject || metaObj.folder || '',
+            target_section: encodedTargetSection,
+            created_by: window.authSession?.user?.id || null
+          })
+        });
+      }
+
+      if (typeof loadMyNotifications === 'function') {
+        loadMyNotifications();
+      }
+    } catch (e) {
+      console.warn('Smart notification creation warning:', e);
+    }
+  };
+
+  try { createContentNotification = _smarpZEAWYtiB6bJ16NuLbGCc6CZ6jJdKfb63; } catch (e) {}
+  window.createContentNotification = _smarpZEAWYtiB6bJ16NuLbGCc6CZ6jJdKfb63;
+
+  // Upgraded Notifications Dropdown Renderer with detailed badges & direct deep-link action
+  const _smarpZEAWYtiB6bJ16NuLbGCc6CZ6jJdKfb63 = function () {
+    const listEl = document.getElementById('notif-list-container');
+    const badgeEl = document.getElementById('notif-badge-count');
+    if (!listEl) return;
+
+    const allNotifs = (typeof notificationsList !== 'undefined' && Array.isArray(notificationsList))
+      ? notificationsList
+      : (window.notificationsList || []);
+    const readSet = (typeof readNotifIds !== 'undefined' && readNotifIds instanceof Set)
+      ? readNotifIds
+      : (window.readNotifIds || new Set());
+
+    const visibleNotifs = allNotifs.filter(n => {
+      if (n.notification_type === 'security_alert') {
+        return window.currentAdminRole === 'super_admin';
+      }
+      return true;
+    });
+
+    const unreadCount = visibleNotifs.filter(n => !readSet.has(n.id)).length;
+    if (badgeEl) {
+      if (unreadCount > 0) {
+        badgeEl.textContent = unreadCount > 99 ? '99+' : unreadCount;
+        badgeEl.classList.remove('hidden');
+      } else {
+        badgeEl.classList.add('hidden');
+      }
+    }
+
+    if (visibleNotifs.length === 0) {
+      listEl.innerHTML = `<div class="notif-empty"><i class="fas fa-bell-slash" style="font-size:1.8rem;display:block;margin-bottom:8px;opacity:0.4"></i>لا توجد إشعارات حالياً</div>`;
+      return;
+    }
+
+    const typeUiMap = {
+      'exams': { icon: '📝', label: 'امتحان', cta: 'اضغط لفتح الامتحان مباشرة', color: '#38bdf8', bg: 'rgba(56,189,248,0.14)' },
+      'lecture-quizzes': { icon: '❓', label: 'أسئلة محاضرة', cta: 'اضغط لفتح أسئلة المحاضرة مباشرة', color: '#c084fc', bg: 'rgba(192,132,252,0.14)' },
+      'lectures': { icon: '🎥', label: 'محاضرة', cta: 'اضغط لفتح المحاضرة مباشرة', color: '#fbbf24', bg: 'rgba(251,191,36,0.14)' },
+      'summaries': { icon: '📄', label: 'ملخص', cta: 'اضغط لفتح الملخص مباشرة', color: '#34d399', bg: 'rgba(52,211,153,0.14)' }
+    };
+
+    listEl.innerHTML = visibleNotifs.map(n => {
+      const isUnread = !readSet.has(n.id);
+      const dateStr = n.created_at
+        ? new Date(n.created_at).toLocaleDateString('ar-EG', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+        : '';
+
+      if (n.notification_type === 'security_alert') {
+        return `
+          <div class="notif-item ${isUnread ? 'unread' : ''}" onclick="openNotificationTarget('${n.id}', '${n.grade || 'bis'}', '${n.term || ''}')">
+            <div class="notif-icon">🛡️</div>
+            <div class="notif-content">
+              <div class="notif-item-title">${n.title || 'تنبيه أمني'}</div>
+              <div class="notif-item-body">${n.body || ''}</div>
+              <div class="notif-item-time">${dateStr}</div>
+            </div>
+          </div>
+        `;
+      }
+
+      const meta = window.parseNotificationDeepMeta(n);
+      const ui = typeUiMap[meta.sec] || { icon: '🔔', label: 'إشعار', cta: 'اضغط للانتقال للمحتوى', color: '#2dd4bf', bg: 'rgba(45,212,191,0.14)' };
+      const termLabel = meta.term === 2 ? 'الترم الثاني' : 'الترم الأول';
+
+      let pillsHtml = `<span class="notif-meta-pill" style="color:${ui.color};background:${ui.bg};border-color:${ui.color}33">${ui.icon} ${ui.label}</span>`;
+      pillsHtml += `<span class="notif-meta-pill"><i class="fas fa-calendar-alt"></i> ${termLabel}</span>`;
+      if (meta.ownerName) {
+        pillsHtml += `<span class="notif-meta-pill" style="color:#fbbf24"><i class="fas fa-crown"></i> ${meta.ownerName}</span>`;
+      }
+      if (meta.folder && meta.folder !== meta.ownerName) {
+        pillsHtml += `<span class="notif-meta-pill"><i class="fas fa-folder-open"></i> ${meta.folder}</span>`;
+      }
+
+      return `
+        <div class="notif-item ${isUnread ? 'unread' : ''}" onclick="openNotificationTarget('${n.id}', '${n.grade || 'bis'}', '${meta.term || n.term || ''}')">
+          <div class="notif-icon">${ui.icon}</div>
+          <div class="notif-content">
+            <div class="notif-item-title">${n.title}</div>
+            <div class="notif-item-body">${n.body}</div>
+            <div class="notif-meta-pills">${pillsHtml}</div>
+            <div class="notif-direct-cta"><i class="fas fa-bolt"></i> ${ui.cta} <i class="fas fa-arrow-left" style="font-size:0.65rem"></i></div>
+            <div class="notif-item-time" style="margin-top:4px">${dateStr}</div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  };
+
+  try { rpZEAWYtiB6bJ16NuLbGCc6CZ6jJdKfb63 = _smarpZEAWYtiB6bJ16NuLbGCc6CZ6jJdKfb63; } catch (e) {}
+  window.rpZEAWYtiB6bJ16NuLbGCc6CZ6jJdKfb63 = _smarpZEAWYtiB6bJ16NuLbGCc6CZ6jJdKfb63;
+
+  // Helper to highlight and scroll to a specific lecture/summary resource card
+  function _highlightAndFocusResourceCard(containerSelector, targetRes, cleanTitle, targetUrl) {
+    setTimeout(() => {
+      const container = document.querySelector(containerSelector);
+      if (!container) return;
+
+      document.querySelectorAll('.notif-deep-target-card').forEach(el => el.classList.remove('notif-deep-target-card'));
+      document.querySelectorAll('.notif-deep-target-badge').forEach(el => el.remove());
+
+      const cards = Array.from(container.querySelectorAll('.resource-card, .admin-quiz-card, .quiz-card, .subject-card'));
+      if (!cards.length) return;
+
+      const norm = s => String(s || '').trim().toLowerCase();
+      const wantedTitle = norm(targetRes?.title || cleanTitle);
+      const wantedUrl = String(targetRes?.url || targetUrl || '').trim();
+
+      let matchedCard = null;
+      if (wantedUrl) {
+        matchedCard = cards.find(c => {
+          const link = c.tagName === 'A' ? c : c.querySelector('a[href]');
+          return link && link.getAttribute('href') === wantedUrl;
+        });
+      }
+      if (!matchedCard && wantedTitle) {
+        matchedCard = cards.find(c => {
+          const h = c.querySelector('h4, h3');
+          return h && norm(h.textContent) === wantedTitle;
+        }) || cards.find(c => {
+          const h = c.querySelector('h4, h3');
+          return h && (norm(h.textContent).includes(wantedTitle) || wantedTitle.includes(norm(h.textContent)));
+        });
+      }
+      if (!matchedCard && cards.length === 1) {
+        matchedCard = cards[0];
+      }
+
+      if (matchedCard) {
+        matchedCard.classList.add('notif-deep-target-card');
+        const infoBox = matchedCard.querySelector('.resource-info') || matchedCard.querySelector('div[style*="flex:1"]') || matchedCard;
+        if (infoBox && !infoBox.querySelector('.notif-deep-target-badge')) {
+          const badge = document.createElement('div');
+          badge.className = 'notif-deep-target-badge';
+          badge.innerHTML = `<i class="fas fa-sparkles"></i> المحتوى المطلوب من الإشعار`;
+          infoBox.appendChild(badge);
+        }
+        matchedCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 120);
+  }
+
+  // Direct Deep-Linking Handler when clicking any Notification in Student Page or Super Admin
+  const _smartOpenNotificationTarget = async function (notifId, grade, term, section) {
+    try {
+      if (typeof markNotificationRead === 'function') {
+        markNotificationRead(notifId);
+      }
+    } catch (e) {}
+    document.getElementById('notif-dropdown')?.classList.add('hidden');
+
+    const allNotifs = (typeof notificationsList !== 'undefined' && Array.isArray(notificationsList))
+      ? notificationsList
+      : (window.notificationsList || []);
+    const notif = allNotifs.find(n => String(n.id) === String(notifId)) || null;
+
+    if (notif && notif.notification_type === 'security_alert') {
+      if (window.currentAdminRole === 'super_admin' && typeof showPage === 'function') {
+        showPage('admin-page');
+        if (typeof window.switchAdminSection === 'function') window.switchAdminSection('users');
+      }
+      return;
+    }
+
+    const meta = window.parseNotificationDeepMeta(notif, grade, term, section);
+    const targetGrade = meta.grade || 'bis';
+    const targetTerm = Number(meta.term || term || (typeof currentTerm !== 'undefined' && currentTerm ? currentTerm : 1));
+
+    try { currentGrade = targetGrade; } catch (e) {}
+    try { currentTerm = targetTerm; } catch (e) {}
+
+    // ── CASE A: Standalone Super Admin Dashboard (super-admin.html) ──
+    const hasStudentPages = Boolean(document.getElementById('lectures-page') && document.getElementById('home-page'));
+    if (window.IS_STANDALONE_SUPER_ADMIN || !hasStudentPages) {
+      if (typeof switchAdminTerm === 'function') switchAdminTerm(targetTerm);
+      if (typeof window.switchAdminSection === 'function') window.switchAdminSection(meta.sec);
+      toast(`🎯 تم الانتقال إلى قسم (${meta.title || meta.folder || meta.sec}) — ${targetTerm === 2 ? 'الترم الثاني' : 'الترم الأول'}`);
+      return;
+    }
+
+    // ── CASE B: Student Page Direct Content Deep-Linking ──
+    // 1. EXAMS & LECTURE QUIZZES -> Start the specific Quiz immediately!
+    if (meta.sec === 'exams' || meta.sec === 'lecture-quizzes') {
+      try {
+        // Fetch all quizzes for this grade & term so we find the target quiz even if legacy notification didn't distinguish exams vs lecture-quizzes
+        const res = await api(`quizzes?select=*&order=id&grade=eq.${targetGrade}&term=eq.${targetTerm}`);
+        const allTermQuizzes = res.ok ? await res.json() : [];
+
+        const norm = s => String(s || '').trim().toLowerCase();
+        const wantedTitle = norm(meta.title);
+
+        let targetQuiz = null;
+        if (meta.quizId) {
+          targetQuiz = allTermQuizzes.find(q => Number(q.id) === Number(meta.quizId));
+        }
+        if (!targetQuiz && wantedTitle) {
+          targetQuiz = allTermQuizzes.find(q => norm(q.title) === wantedTitle && (!meta.sec || (q.section || 'exams') === meta.sec))
+            || allTermQuizzes.find(q => norm(q.title) === wantedTitle)
+            || allTermQuizzes.find(q => norm(q.title).includes(wantedTitle) || wantedTitle.includes(norm(q.title)));
+        }
+
+        const resolvedSection = targetQuiz ? (targetQuiz.section || 'exams') : meta.sec;
+        try { currentSection = resolvedSection; } catch (e) {}
+        try {
+          quizzes = allTermQuizzes.filter(q => (q.section || 'exams') === resolvedSection);
+        } catch (e) {}
+
+        // Prepare the underlying section view so hitting "Back" from the quiz returns cleanly to the section/folder
+        if (resolvedSection === 'lecture-quizzes') {
+          const targetFolder = targetQuiz?.lq_folder || meta.folder || '';
+          if (targetFolder && typeof lqOpenFolders !== 'undefined') {
+            lqOpenFolders[targetFolder] = true;
+          }
+          if (typeof showPage === 'function') showPage('lecture-quizzes-page');
+          if (typeof updateBreadcrumb === 'function') updateBreadcrumb();
+          if (typeof renderLectureQuizzes === 'function') renderLectureQuizzes();
+        } else {
+          if (typeof showPage === 'function') showPage('home-page');
+          if (typeof updateBreadcrumb === 'function') updateBreadcrumb();
+          if (typeof renderHome === 'function') renderHome();
+        }
+
+        if (targetQuiz) {
+          const visibleQs = (targetQuiz.questions || []).filter(q => !q.hidden);
+          if (visibleQs.length > 0 && typeof startQuiz === 'function') {
+            startQuiz(targetQuiz.id);
+            toast(`🚀 تم فتح ${resolvedSection === 'lecture-quizzes' ? 'امتحان المحاضرة' : 'الامتحان'}: ${targetQuiz.title}`);
+            return;
+          } else {
+            _highlightAndFocusResourceCard(
+              resolvedSection === 'lecture-quizzes' ? '#lq-subjects-list' : '#quizzes-list',
+              null,
+              targetQuiz.title,
+              ''
+            );
+            toast(`🎯 تم فتح قسم الاختبار: ${targetQuiz.title}`);
+            return;
+          }
+        } else {
+          toast(`🎯 تم فتح ${resolvedSection === 'lecture-quizzes' ? 'أسئلة المحاضرات' : 'الامتحانات'} (${targetTerm === 2 ? 'الترم الثاني' : 'الترم الأول'})`);
+          return;
+        }
+      } catch (e) {
+        console.warn('Quiz deep-link error:', e);
+        if (typeof openSection === 'function') openSection(meta.sec);
+        return;
+      }
+    }
+
+    // 2. LECTURES (Owner Lecture or Subject Lecture) -> Open exact Owner & Subject Folder and highlight the Lecture!
+    if (meta.sec === 'lectures') {
+      try {
+        currentSection = 'lectures';
+        currentPublicLectureOwner = null;
+        _publicOwnerFolder = null;
+        lecturesSearchQuery = '';
+        const sInput = document.getElementById('lectures-search');
+        if (sInput) sInput.value = '';
+
+        if (typeof showPage === 'function') showPage('lectures-page');
+        if (typeof updateBreadcrumb === 'function') updateBreadcrumb();
+        document.getElementById('lectures-loading')?.classList.remove('hidden');
+        document.getElementById('lectures-subjects-list')?.classList.add('hidden');
+
+        const [ownersList, lecturesList] = await Promise.all([
+          typeof loadLectureOwnersPublic === 'function' ? loadLectureOwnersPublic() : Promise.resolve([]),
+          typeof loadResources === 'function' ? loadResources('lectures') : Promise.resolve([])
+        ]);
+        lectureOwnersPublicCache = ownersList || [];
+        _lecturesCache = lecturesList || [];
+
+        const realLectures = (lecturesList || []).filter(r => r.title !== '__folder__');
+        const norm = s => String(s || '').trim().toLowerCase();
+        const wantedTitle = norm(meta.title);
+        const wantedFolder = norm(meta.folder);
+
+        let targetRes = null;
+        if (meta.resId) {
+          targetRes = realLectures.find(r => Number(r.id) === Number(meta.resId));
+        }
+        if (!targetRes && meta.url) {
+          targetRes = realLectures.find(r => String(r.url || '').trim() === String(meta.url).trim());
+        }
+        if (!targetRes && wantedTitle) {
+          targetRes = realLectures.find(r => norm(r.title) === wantedTitle && (!wantedFolder || norm(r.subject) === wantedFolder))
+            || realLectures.find(r => norm(r.title) === wantedTitle)
+            || realLectures.find(r => norm(r.title).includes(wantedTitle) || wantedTitle.includes(norm(r.title)));
+        }
+
+        const resolvedOwnerId = meta.ownerId || targetRes?.owner_id || null;
+        let ownerObj = null;
+        if (resolvedOwnerId) {
+          ownerObj = lectureOwnersPublicCache.find(o => Number(o.id) === Number(resolvedOwnerId));
+        }
+        if (!ownerObj && meta.ownerName) {
+          ownerObj = lectureOwnersPublicCache.find(o => norm(o.name) === norm(meta.ownerName));
+        }
+
+        // If still not found in term-filtered resources, check across all lecture owners by folder/title
+        if (!targetRes && !ownerObj && lectureOwnersPublicCache.length > 0 && (wantedTitle || wantedFolder)) {
+          for (const candidateOwner of lectureOwnersPublicCache) {
+            const oItems = realLectures.filter(r => Number(r.owner_id) === Number(candidateOwner.id));
+            const matchInOwner = oItems.find(r =>
+              (wantedTitle && (norm(r.title) === wantedTitle || norm(r.title).includes(wantedTitle))) ||
+              (wantedFolder && norm(r.subject) === wantedFolder && !wantedTitle)
+            );
+            if (matchInOwner) {
+              targetRes = matchInOwner;
+              ownerObj = candidateOwner;
+              break;
+            }
+          }
+        }
+
+        if (ownerObj || resolvedOwnerId) {
+          const finalOwnerId = ownerObj ? ownerObj.id : resolvedOwnerId;
+          const finalOwnerName = ownerObj ? ownerObj.name : (meta.ownerName || 'Owner');
+          currentPublicLectureOwner = { id: finalOwnerId, name: finalOwnerName };
+
+          const res = await api(`resources?select=*&order=id&owner_id=eq.${finalOwnerId}`);
+          const ownerItems = res.ok ? await res.json() : (lecturesList || []).filter(r => Number(r.owner_id) === Number(finalOwnerId));
+          _publicOwnerItems = ownerItems;
+
+          if (!targetRes && wantedTitle) {
+            targetRes = ownerItems.filter(r => r.title !== '__folder__').find(r =>
+              norm(r.title) === wantedTitle || norm(r.title).includes(wantedTitle)
+            );
+          }
+
+          const targetFolder = targetRes?.subject || meta.folder || '';
+          const hasThisFolder = targetFolder && targetFolder !== finalOwnerName && ownerItems.some(r => (r.subject || 'عام') === targetFolder);
+          _publicOwnerFolder = hasThisFolder ? targetFolder : null;
+
+          if (typeof renderPublicLectureOwnerLectures === 'function') {
+            renderPublicLectureOwnerLectures(_publicOwnerItems, finalOwnerName);
+          }
+          _highlightAndFocusResourceCard('#lectures-subjects-list', targetRes, meta.title, meta.url);
+          toast(`🎥 تم فتح محاضرة "${targetRes?.title || meta.title || targetFolder}"${_publicOwnerFolder ? ` — ${_publicOwnerFolder}` : ''}`);
+          return;
+        }
+
+        // General Subject Lecture (not under an Owner)
+        const targetFolder = targetRes?.subject || meta.folder || '';
+        if (typeof renderLectures === 'function') {
+          renderLectures(lecturesList);
+        }
+        if (targetFolder && typeof lecturesOpenFolders !== 'undefined') {
+          Object.keys(lecturesOpenFolders).forEach(k => { lecturesOpenFolders[k] = false; });
+          lecturesOpenFolders[targetFolder] = true;
+          if (typeof _renderLecturesUI === 'function') _renderLecturesUI();
+        }
+        _highlightAndFocusResourceCard('#lectures-subjects-list', targetRes, meta.title, meta.url);
+        toast(`🎥 تم فتح محاضرة "${targetRes?.title || meta.title || targetFolder}"`);
+        return;
+      } catch (e) {
+        console.warn('Lecture deep-link error:', e);
+        if (typeof openSection === 'function') openSection('lectures');
+        return;
+      }
+    }
+
+    // 3. SUMMARIES (Owner Summary or Subject Summary) -> Open exact Owner & Subject Folder and highlight the Summary!
+    if (meta.sec === 'summaries') {
+      try {
+        currentSection = 'summaries';
+        currentPublicOwner = null;
+        summariesSearchQuery = '';
+        const sInput = document.getElementById('summaries-search');
+        if (sInput) sInput.value = '';
+
+        if (typeof showPage === 'function') showPage('summaries-page');
+        if (typeof updateBreadcrumb === 'function') updateBreadcrumb();
+        document.getElementById('summaries-loading')?.classList.remove('hidden');
+        document.getElementById('summaries-list')?.classList.add('hidden');
+
+        const [ownersList, summariesList] = await Promise.all([
+          typeof loadSummaryOwnersPublic === 'function' ? loadSummaryOwnersPublic() : Promise.resolve([]),
+          typeof loadResources === 'function' ? loadResources('summaries') : Promise.resolve([])
+        ]);
+        summaryOwnersPublicCache = ownersList || [];
+        _summariesCache = summariesList || [];
+
+        const realSummaries = (summariesList || []).filter(r => r.title !== '__folder__');
+        const norm = s => String(s || '').trim().toLowerCase();
+        const wantedTitle = norm(meta.title);
+        const wantedFolder = norm(meta.folder);
+
+        let targetRes = null;
+        if (meta.resId) {
+          targetRes = realSummaries.find(r => Number(r.id) === Number(meta.resId));
+        }
+        if (!targetRes && meta.url) {
+          targetRes = realSummaries.find(r => String(r.url || '').trim() === String(meta.url).trim());
+        }
+        if (!targetRes && wantedTitle) {
+          targetRes = realSummaries.find(r => norm(r.title) === wantedTitle && (!wantedFolder || norm(r.subject) === wantedFolder))
+            || realSummaries.find(r => norm(r.title) === wantedTitle)
+            || realSummaries.find(r => norm(r.title).includes(wantedTitle) || wantedTitle.includes(norm(r.title)));
+        }
+
+        const resolvedOwnerId = meta.ownerId || targetRes?.owner_id || null;
+        let ownerObj = null;
+        if (resolvedOwnerId) {
+          ownerObj = summaryOwnersPublicCache.find(o => Number(o.id) === Number(resolvedOwnerId));
+        }
+        if (!ownerObj && meta.ownerName) {
+          ownerObj = summaryOwnersPublicCache.find(o => norm(o.name) === norm(meta.ownerName));
+        }
+
+        if (!targetRes && !ownerObj && summaryOwnersPublicCache.length > 0 && (wantedTitle || wantedFolder)) {
+          for (const candidateOwner of summaryOwnersPublicCache) {
+            const oItems = realSummaries.filter(r => Number(r.owner_id) === Number(candidateOwner.id));
+            const matchInOwner = oItems.find(r =>
+              (wantedTitle && (norm(r.title) === wantedTitle || norm(r.title).includes(wantedTitle))) ||
+              (wantedFolder && norm(r.subject) === wantedFolder && !wantedTitle)
+            );
+            if (matchInOwner) {
+              targetRes = matchInOwner;
+              ownerObj = candidateOwner;
+              break;
+            }
+          }
+        }
+
+        if (ownerObj || resolvedOwnerId) {
+          const finalOwnerId = ownerObj ? ownerObj.id : resolvedOwnerId;
+          const finalOwnerName = ownerObj ? ownerObj.name : (meta.ownerName || 'Owner');
+          if (typeof openPublicOwner === 'function') {
+            await openPublicOwner(finalOwnerId, finalOwnerName);
+          }
+          _highlightAndFocusResourceCard('#summaries-list', targetRes, meta.title, meta.url);
+          toast(`📄 تم فتح ملخص "${targetRes?.title || meta.title || finalOwnerName}"`);
+          return;
+        }
+
+        // General Subject Summary
+        const targetFolder = targetRes?.subject || meta.folder || '';
+        if (typeof renderSummaries === 'function') {
+          renderSummaries(summariesList);
+        }
+        if (targetFolder && typeof summariesOpenFolders !== 'undefined') {
+          Object.keys(summariesOpenFolders).forEach(k => { summariesOpenFolders[k] = false; });
+          summariesOpenFolders[targetFolder] = true;
+          if (typeof _renderSummariesUI === 'function') _renderSummariesUI();
+        }
+        _highlightAndFocusResourceCard('#summaries-list', targetRes, meta.title, meta.url);
+        toast(`📄 تم فتح ملخص "${targetRes?.title || meta.title || targetFolder}"`);
+        return;
+      } catch (e) {
+        console.warn('Summary deep-link error:', e);
+        if (typeof openSection === 'function') openSection('summaries');
+        return;
+      }
+    }
+
+    if (typeof openSection === 'function' && meta.sec) {
+      openSection(meta.sec);
+    }
+  };
+
+  try { openNotificationTarget = _smartOpenNotificationTarget; } catch (e) {}
+  window.openNotificationTarget = _smartOpenNotificationTarget;
+
+  // ── Hook 1: saveResource (Owner Lectures, General Lectures, Owner Summaries, General Summaries) ──
+  window.saveResource = async function () {
+    const secMap = { 'owner-summary': 'summaries', 'owner-lecture': 'lectures' };
+    const targetSec = secMap[addingResourceType] || addingResourceType || 'summaries';
+    if (typeof window.checkAdminPermission === 'function' && !window.checkAdminPermission('add', targetSec)) {
+      return toast('⛔ ليس لديك صلاحية إضافة هذا المورد!', 'error');
+    }
+
+    const subject = document.getElementById('resource-subject').value.trim();
+    const title = document.getElementById('resource-title').value.trim();
+    const url = document.getElementById('resource-url').value.trim();
+    const file_type = document.getElementById('resource-file-type').value;
+    const isOwnerSummary = addingResourceType === 'owner-summary';
+    const isOwnerLecture = addingResourceType === 'owner-lecture';
+    const author_name = (isOwnerSummary || isOwnerLecture)
+      ? null
+      : (document.getElementById('resource-author')?.value.trim() || null);
+
+    if ((!isOwnerSummary && !isOwnerLecture && !subject) || !url) {
+      return toast('اسم المادة والرابط مطلوبان!', 'error');
+    }
+    if ((isOwnerSummary || isOwnerLecture) && !title) {
+      return toast(isOwnerLecture ? 'اكتب عنوان المحاضرة!' : 'اكتب اسم الملخص أو المادة!', 'error');
+    }
+
+    try {
+      const payload = {
+        subject: isOwnerSummary ? (subject || adminCurrentOwner.name) : (isOwnerLecture ? (subject || adminCurrentLectureOwner.name) : subject),
+        title,
+        url,
+        file_type,
+        type: isOwnerSummary ? 'summaries' : (isOwnerLecture ? 'lectures' : addingResourceType),
+        author_name
+      };
+      if (isOwnerSummary && adminCurrentOwner) payload.owner_id = adminCurrentOwner.id;
+      if (isOwnerLecture && adminCurrentLectureOwner) payload.owner_id = adminCurrentLectureOwner.id;
+
+      await createResource(payload);
+      closeModal('resource-modal');
+      toast('تم إضافة المورد ✅');
+
+      if (typeof window.refreshOwnerCardsLiveCounts === 'function') {
+        window.refreshOwnerCardsLiveCounts(true);
+      }
+
+      if (isOwnerSummary) {
+        if (typeof loadOwnerSummaries === 'function') loadOwnerSummaries();
+      } else if (isOwnerLecture) {
+        if (typeof loadLectureOwnerLectures === 'function') loadLectureOwnerLectures();
+      } else if (addingResourceType === 'summaries' && adminSummariesCurrentSubject) {
+        loadResources('summaries').then(all => {
+          const items = all.filter(r => (r.subject || 'عام') === adminSummariesCurrentSubject && !r.owner_id);
+          if (typeof renderAdminSummaries === 'function') renderAdminSummaries(items);
+        });
+      } else if (addingResourceType === 'summaries') {
+        loadResources('summaries').then(rpZEAWYtiB6bJ16NuLbGCc6CZ6jJdKfb63);
+      } else {
+        loadResources(addingResourceType).then(rpZEAWYtiB6bJ16NuLbGCc6CZ6jJdKfb63);
+      }
+
+      const termNum = Number((typeof currentTerm !== 'undefined' && currentTerm) ? currentTerm : 1);
+      const termName = (typeof TERM_NAMES !== 'undefined' && TERM_NAMES[termNum]) ? TERM_NAMES[termNum] : `الترم ${termNum}`;
+      const isLec = isOwnerLecture || addingResourceType === 'lectures';
+      const ownerId = isOwnerLecture ? adminCurrentLectureOwner?.id : (isOwnerSummary ? adminCurrentOwner?.id : null);
+      const ownerName = isOwnerLecture ? (adminCurrentLectureOwner?.name || '') : (isOwnerSummary ? (adminCurrentOwner?.name || '') : '');
+      const folderName = payload.subject || '';
+      const itemTitle = title || folderName;
+
+      if (typeof logAdminActivity === 'function') {
+        logAdminActivity(
+          isLec ? 'إضافة محاضرة' : 'إضافة ملخص',
+          addingResourceType,
+          `${itemTitle}${folderName ? ' — ' + folderName : ''}${ownerName ? ' (' + ownerName + ')' : ''}`
+        );
+      }
+
+      if (title !== '__folder__') {
+        const notifTitle = isLec
+          ? `🎥 محاضرة جديدة: ${itemTitle}`
+          : `📄 ملخص جديد: ${itemTitle}`;
+        const notifBody = isLec
+          ? `تم رفع محاضرة "${itemTitle}"${folderName && folderName !== ownerName ? ` في مادة (${folderName})` : ''}${ownerName ? ` — قسم ${ownerName}` : ''} • ${termName}`
+          : `تم رفع ملخص "${itemTitle}"${folderName && folderName !== ownerName ? ` في مادة (${folderName})` : ''}${ownerName ? ` — قسم ${ownerName}` : ''} • ${termName}`;
+
+        await window.createContentNotification(
+          notifTitle,
+          notifBody,
+          addingResourceType,
+          folderName,
+          termNum,
+          {
+            sec: isLec ? 'lectures' : 'summaries',
+            kind: addingResourceType,
+            ownerId,
+            ownerName,
+            folder: folderName,
+            title: itemTitle,
+            url,
+            term: termNum
+          }
+        );
+      }
+    } catch (e) {
+      if (e.message === 'no-grade') toast('اختار القسم أولاً!', 'error');
+      else if (e.message === 'no-term') toast('اختار الترم أولاً!', 'error');
+      else if (e.message?.startsWith('db:')) toast('خطأ في قاعدة البيانات: ' + e.message.slice(3), 'error');
+      else toast('خطأ في الاتصال بقاعدة البيانات!', 'error');
+    }
+  };
+  try { saveResource = window.saveResource; } catch (e) {}
+
+  // ── Hook 2: saveLecture (Regular Subject Lecture added via #lecture-modal) ──
+  window.saveLecture = async function () {
+    if (typeof window.checkAdminPermission === 'function' && !window.checkAdminPermission('add', 'lectures')) {
+      return toast('⛔ ليس لديك صلاحية إضافة محاضرة!', 'error');
+    }
+    const title = document.getElementById('lecture-title-input')?.value.trim() || '';
+    const url = document.getElementById('lecture-url-input')?.value.trim() || '';
+    const file_type = document.getElementById('lecture-file-type-input')?.value || 'video';
+    if (!title) return toast('اكتب عنوان المحاضرة!', 'error');
+    if (!url) return toast('أضف رابط المحاضرة!', 'error');
+
+    const subjectFolder = (typeof adminLecturesCurrentSubject !== 'undefined' && adminLecturesCurrentSubject) ? adminLecturesCurrentSubject : 'عام';
+    try {
+      await createResource({
+        subject: subjectFolder,
+        title,
+        url,
+        file_type,
+        type: 'lectures'
+      });
+      closeModal('lecture-modal');
+      toast('✅ تم إضافة المحاضرة');
+
+      if (typeof window.refreshOwnerCardsLiveCounts === 'function') {
+        window.refreshOwnerCardsLiveCounts(true);
+      }
+
+      loadResources('lectures').then(all => {
+        const items = all.filter(r => (r.subject || 'عام') === subjectFolder);
+        if (typeof renderAdminLecturesInside === 'function') renderAdminLecturesInside(items);
+      });
+
+      const termNum = Number((typeof currentTerm !== 'undefined' && currentTerm) ? currentTerm : 1);
+      const termName = (typeof TERM_NAMES !== 'undefined' && TERM_NAMES[termNum]) ? TERM_NAMES[termNum] : `الترم ${termNum}`;
+
+      if (typeof logAdminActivity === 'function') {
+        logAdminActivity('إضافة محاضرة', 'lectures', `${title} — ${subjectFolder}`);
+      }
+
+      if (title !== '__folder__') {
+        await window.createContentNotification(
+          `🎥 محاضرة جديدة: ${title}`,
+          `تم رفع محاضرة "${title}" في مادة (${subjectFolder}) • ${termName}`,
+          'lectures',
+          subjectFolder,
+          termNum,
+          {
+            sec: 'lectures',
+            kind: 'lecture',
+            folder: subjectFolder,
+            title,
+            url,
+            term: termNum
+          }
+        );
+      }
+    } catch (e) {
+      if (e.message === 'no-grade') toast('اختار القسم أولاً!', 'error');
+      else if (e.message === 'no-term') toast('اختار الترم أولاً!', 'error');
+      else if (e.message?.startsWith('db:')) toast('❌ ' + e.message.slice(3), 'error');
+      else toast('خطأ في الاتصال!', 'error');
+    }
+  };
+  try { saveLecture = window.saveLecture; } catch (e) {}
+
+  // ── Hook 3: saveQuizModal (Creating or Editing an Exam or Lecture Quiz) ──
+  window.saveQuizModal = async function () {
+    const permAction = editingQuizId ? 'edit' : 'add';
+    if (typeof window.checkAdminPermission === 'function' && !window.checkAdminPermission(permAction, adminCurrentSection || 'exams')) {
+      return toast('⛔ ليس لديك صلاحية لحفظ هذا الاختبار!', 'error');
+    }
+
+    const title = document.getElementById('quiz-title-input').value.trim();
+    if (!title) return toast('اكتب عنوان الامتحان!', 'error');
+
+    const timeLimit = Number(document.getElementById('quiz-time-limit-input')?.value || 0);
+    const maxAttempts = Number(document.getElementById('quiz-max-attempts-input')?.value || 0);
+    const questionLimit = Number(document.getElementById('quiz-question-limit-input')?.value || 0);
+    const shuffleQ = Boolean(document.getElementById('quiz-shuffle-q-input')?.checked);
+    const shuffleOpt = Boolean(document.getElementById('quiz-shuffle-opt-input')?.checked);
+
+    try {
+      const isLq = adminCurrentSection === 'lecture-quizzes';
+      const folderName = isLq ? (adminLqCurrentFolder || '') : '';
+
+      if (editingQuizId) {
+        const res = await api(`quizzes?id=eq.${editingQuizId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            title,
+            time_limit_minutes: timeLimit,
+            max_attempts: maxAttempts,
+            question_limit: questionLimit,
+            shuffle_questions: shuffleQ,
+            shuffle_options: shuffleOpt
+          })
+        });
+        if (!res.ok) {
+          await updateQuiz(editingQuizId, { title });
+        }
+        const localQuiz = (quizzes || []).find(q => q.id === editingQuizId);
+        if (localQuiz) {
+          localQuiz.title = title;
+          localQuiz.time_limit_minutes = timeLimit;
+          localQuiz.max_attempts = maxAttempts;
+          localQuiz.question_limit = questionLimit;
+          localQuiz.shuffle_questions = shuffleQ;
+          localQuiz.shuffle_options = shuffleOpt;
+        }
+        toast('تم تعديل إعدادات الامتحان ✅');
+        if (typeof logAdminActivity === 'function') logAdminActivity('تعديل اختبار', 'quiz', title);
+      } else {
+        await createQuiz(title, adminCurrentSection || 'exams', isLq ? adminLqCurrentFolder : null);
+        toast('تم إنشاء الامتحان ✅');
+        if (typeof logAdminActivity === 'function') {
+          logAdminActivity(isLq ? 'إنشاء امتحان محاضرة' : 'إنشاء امتحان جديد', isLq ? 'lecture-quizzes' : 'exams', title);
+        }
+      }
+
+      const wasCreatingNew = !editingQuizId;
+      closeModal('quiz-modal');
+      await loadAllQuizzesForAdmin();
+
+      if (wasCreatingNew) {
+        const sec = isLq ? 'lecture-quizzes' : 'exams';
+        const candidates = (quizzes || []).filter(q =>
+          (q.title || '').trim() === title &&
+          (q.section || 'exams') === sec
+        );
+        const createdQuiz = candidates.sort((a, b) => Number(b.id) - Number(a.id))[0] || null;
+        if (createdQuiz && createdQuiz.id) {
+          window._recentlyNotifiedQuizIds.add(String(createdQuiz.id));
+        }
+
+        const termNum = Number((typeof currentTerm !== 'undefined' && currentTerm) ? currentTerm : 1);
+        const termName = (typeof TERM_NAMES !== 'undefined' && TERM_NAMES[termNum]) ? TERM_NAMES[termNum] : `الترم ${termNum}`;
+
+        const notifTitle = isLq
+          ? `❓ امتحان محاضرة جديد: ${title}`
+          : `📝 امتحان جديد: ${title}`;
+        const notifBody = isLq
+          ? `تم إضافة أسئلة محاضرة "${title}"${folderName ? ` في مادة (${folderName})` : ''} • ${termName} — اضغط لفتح الاختبار مباشرة`
+          : `تم إضافة امتحان "${title}" • ${termName} — اضغط لفتح الامتحان مباشرة`;
+
+        await window.createContentNotification(
+          notifTitle,
+          notifBody,
+          sec,
+          folderName,
+          termNum,
+          {
+            sec,
+            kind: isLq ? 'lecture-quiz' : 'exam',
+            quizId: createdQuiz?.id || null,
+            folder: folderName,
+            title,
+            term: termNum
+          }
+        );
+      }
+    } catch (e) {
+      if (e.message === 'no-grade') toast('اختار القسم أولاً!', 'error');
+      else if (e.message === 'no-term') toast('اختار الترم أولاً!', 'error');
+      else toast('خطأ في الاتصال بقاعدة البيانات!', 'error');
+    }
+  };
+  try { saveQuizModal = window.saveQuizModal; } catch (e) {}
+
+  // ── Hook 4: togglePublish (Send notification with exact quizId when publishing a quiz that wasn't notified yet) ──
+  window.togglePublish = async function (id) {
+    const quiz = (quizzes || []).find(q => Number(q.id) === Number(id));
+    if (!quiz) return;
+    const sec = quiz.section || adminCurrentSection || 'exams';
+    if (typeof window.checkAdminPermission === 'function' && !window.checkAdminPermission('publish', sec)) {
+      return toast('⛔ ليس لديك صلاحية نشر أو إخفاء هذا الاختبار!', 'error');
+    }
+
+    const newVal = !quiz.published;
+    try {
+      await updateQuiz(id, { published: newVal });
+      quiz.published = newVal;
+      if (typeof renderAdminQuizzes === 'function') renderAdminQuizzes();
+      toast(newVal ? 'تم عرض الامتحان للطلاب ✅' : 'تم إخفاء الامتحان');
+
+      if (typeof logAdminActivity === 'function') {
+        logAdminActivity(newVal ? 'نشر اختبار للطلاب' : 'إخفاء اختبار', sec, quiz.title);
+      }
+
+      if (newVal) {
+        const allNotifs = (typeof notificationsList !== 'undefined' && Array.isArray(notificationsList))
+          ? notificationsList
+          : (window.notificationsList || []);
+        const alreadyNotified = window._recentlyNotifiedQuizIds.has(String(quiz.id)) ||
+          allNotifs.some(n => {
+            const m = window.parseNotificationDeepMeta(n);
+            return (m.quizId && Number(m.quizId) === Number(quiz.id)) ||
+              (m.title && m.title.toLowerCase() === String(quiz.title || '').trim().toLowerCase() && Number(m.term) === Number(quiz.term || currentTerm || 1));
+          });
+
+        if (!alreadyNotified) {
+          window._recentlyNotifiedQuizIds.add(String(quiz.id));
+          const isLq = sec === 'lecture-quizzes';
+          const folderName = isLq ? (quiz.lq_folder || adminLqCurrentFolder || '') : '';
+          const termNum = Number(quiz.term || (typeof currentTerm !== 'undefined' && currentTerm ? currentTerm : 1));
+          const termName = (typeof TERM_NAMES !== 'undefined' && TERM_NAMES[termNum]) ? TERM_NAMES[termNum] : `الترم ${termNum}`;
+          const qCount = (quiz.questions || []).filter(q => !q.hidden).length;
+
+          const notifTitle = isLq
+            ? `❓ امتحان محاضرة جديد: ${quiz.title}`
+            : `📝 امتحان جديد: ${quiz.title}`;
+          const notifBody = isLq
+            ? `تم نشر أسئلة محاضرة "${quiz.title}"${folderName ? ` في مادة (${folderName})` : ''}${qCount ? ` (${qCount} سؤال)` : ''} • ${termName}`
+            : `تم نشر امتحان "${quiz.title}"${qCount ? ` (${qCount} سؤال)` : ''} • ${termName}`;
+
+          await window.createContentNotification(
+            notifTitle,
+            notifBody,
+            sec,
+            folderName,
+            termNum,
+            {
+              sec,
+              kind: isLq ? 'lecture-quiz' : 'exam',
+              quizId: quiz.id,
+              folder: folderName,
+              title: quiz.title,
+              term: termNum
+            }
+          );
+        }
+      }
+    } catch {
+      toast('خطأ في الاتصال!', 'error');
+    }
+  };
+  try { togglePublish = window.togglePublish; } catch (e) {}
 
 })();
 
